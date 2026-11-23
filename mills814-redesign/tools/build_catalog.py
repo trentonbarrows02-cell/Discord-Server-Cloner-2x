@@ -1,0 +1,164 @@
+#!/usr/bin/env python3
+"""Build assets/catalog.js from the live Shopify catalog.
+
+Usage:
+    python3 tools/build_catalog.py                  # fetch from the store
+    python3 tools/build_catalog.py products.json    # use a saved copy
+
+Shopify serves every published product at /products.json. This script
+trims that down to what the storefront needs, cleans up the long
+marketplace-style titles, and sorts each product into a division.
+"""
+import html
+import json
+import re
+import sys
+import urllib.request
+from pathlib import Path
+
+STORE = "https://mills814store.com"
+OUT = Path(__file__).resolve().parent.parent / "assets" / "catalog.js"
+MAX_IMAGES = 5
+
+# vendor -> division
+DIVISION_BY_VENDOR = {
+    "Blackline Car Care": "car",
+    "EasyOptionXY": "outdoor",
+    "Nature's Generator": "outdoor",
+}
+
+VENDOR_LABEL = {"Patriot And Company": "Patriot & Co."}
+
+# (division, matcher) -> category label. First match wins.
+CATEGORY_RULES = [
+    ("grooming", r"bundle|set|pack|stuffer", "Sets"),
+    ("grooming", r"beard (oil|balm|butter)", "Beard"),
+    ("grooming", r"deodorant", "Deodorant"),
+    ("grooming", r"soap", "Soap"),
+    ("grooming", r".", "Skin"),
+    ("car", r"reset|leather|pet hair", "Interior"),
+    ("car", r"towel|mitt|brush|cloth|cannon", "Tools"),
+    ("car", r"gloss|dressing", "Finish"),
+    ("car", r".", "Wash"),
+    ("outdoor", r"tent", "Tents"),
+    ("outdoor", r".", "Solar"),
+]
+
+
+def load(argv):
+    if len(argv) > 1:
+        return json.loads(Path(argv[1]).read_text(encoding="utf-8"))
+    req = urllib.request.Request(
+        f"{STORE}/products.json?limit=250", headers={"User-Agent": "catalog-builder"}
+    )
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.load(r)
+
+
+def store_img(src):
+    """Serve images through the store domain (supports ?width= resizing)."""
+    return re.sub(r"^https?://cdn\.shopify\.com/s/files/[\d/]+/files/", f"{STORE}/cdn/shop/files/", src)
+
+
+def title_case(s):
+    small = {"and", "or", "of", "the"}
+    words = s.lower().split()
+    out = []
+    for i, w in enumerate(words):
+        if w in small and i:
+            out.append(w)
+        elif w == "n'":
+            out.append("N’")
+        else:
+            out.append("-".join(x[:1].upper() + x[1:] for x in w.split("-")))
+    return " ".join(out).replace("Apc", "APC")
+
+
+def clean_title(p):
+    t = re.sub(r"\s+", " ", p["title"]).strip()
+    t = re.sub(r"^Roll over image to zoom in\s*", "", t, flags=re.I)
+    brand, spec = None, None
+    if t.upper().startswith("BLACKLINE"):
+        brand = "Blackline®"
+        t = title_case(re.sub(r"^BLACKLINE®?\s*", "", t, flags=re.I))
+    m = re.match(r"(.+?Rooftop Tent)\s+Hardshell", t)
+    if m:
+        t, spec = m.group(1), "Hardshell · Side awning · AC outlet"
+    vendor = VENDOR_LABEL.get(p["vendor"], p["vendor"])
+    if t.lower().startswith(vendor.lower() + " "):
+        t = t[len(vendor) + 1:]
+    t = re.sub(r"(\d)OZ\b", r"\1oz", t)
+    if " | " in t:
+        t, spec = [x.strip() for x in t.split(" | ", 1)]
+    return t, brand or vendor, spec
+
+
+def plain(body, limit=320):
+    body = re.sub(r"<(h\d|li|p|br)[^>]*>", " ", body or "")
+    text = html.unescape(re.sub(r"<[^>]+>", "", body))
+    text = re.sub(r"\s+", " ", text).strip()
+    if len(text) <= limit:
+        return text
+    cut = text[:limit].rsplit(" ", 1)[0]
+    return cut.rstrip(",.;:") + "…"
+
+
+def money(v):
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return f if f > 0 else None
+
+
+def build(products):
+    out = []
+    for p in products:
+        division = DIVISION_BY_VENDOR.get(p["vendor"], "grooming")
+        name, brand, spec = clean_title(p)
+        hay = (p["title"] + " " + (p.get("product_type") or "")).lower()
+        category = next(
+            label for div, pat, label in CATEGORY_RULES if div == division and re.search(pat, hay)
+        )
+        options = [o["name"] for o in p["options"] if o["name"] != "Title"]
+        variants = []
+        for v in p["variants"]:
+            img = (v.get("featured_image") or {}).get("src")
+            variants.append({
+                "id": v["id"],
+                "t": v["title"],
+                "o": [x for x in (v.get("option1"), v.get("option2"), v.get("option3")) if x],
+                "p": money(v["price"]),
+                "c": money(v.get("compare_at_price")),
+                "a": bool(v.get("available")),
+                **({"img": store_img(img)} if img else {}),
+            })
+        out.append({
+            "h": p["handle"],
+            "n": name,
+            "b": brand,
+            "s": spec,
+            "d": division,
+            "c": category,
+            "desc": plain(p.get("body_html")),
+            "img": [store_img(i["src"]) for i in p["images"][:MAX_IMAGES]],
+            "opts": options,
+            "v": variants,
+        })
+    return out
+
+
+def main():
+    data = build(load(sys.argv)["products"])
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    OUT.write_text(
+        "/* Generated by tools/build_catalog.py — do not edit by hand. */\n"
+        f"window.STORE_URL = {json.dumps(STORE)};\n"
+        f"window.CATALOG = {json.dumps(data, ensure_ascii=False, separators=(',', ':'))};\n",
+        encoding="utf-8",
+    )
+    print(f"wrote {len(data)} products to {OUT}")
+
+
+if __name__ == "__main__":
+    main()
