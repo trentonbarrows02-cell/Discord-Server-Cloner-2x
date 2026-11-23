@@ -169,6 +169,21 @@ namespace PlayShift.Grass.Dev
             yield return GameWait(0.8f);
             yield return Shot("05_fresh_cut_lawn_closeup");
 
+            // Real gift path (receiver -> router -> HUD): two "Ice Cream Cone" (remove 15k) from the same viewer stack
+            // into one "-30,000 / DEC282" popup under the counter.
+            var receiver = FindAnyObjectByType<TikTokGiftReceiver>();
+            if (receiver != null)
+            {
+                _input.Look = new Vector2(0f, 8f); // look up a little so the popup is over the sky/meadow
+                yield return null;
+                _input.Look = Vector2.zero;
+                receiver.EnqueueGift("DEC282", "Ice Cream Cone");
+                yield return GameWait(0.5f);
+                receiver.EnqueueGift("DEC282", "Ice Cream Cone");
+                yield return GameWait(0.4f);
+                yield return Shot("06_gift_popup");
+            }
+
             // Gift burst stress test (TikTok spam): 30 frames, every frame a remove-25k, add-25k and taller gift.
             if (fieldRenderer != null)
             {
@@ -191,7 +206,7 @@ namespace PlayShift.Grass.Dev
                 _report.AppendLine($"Gift burst ({burstFrames} frames of remove 25k + add 25k + taller): gift logic avg {giftSumMs / burstFrames:F2} ms, " +
                                    $"max {giftMaxMs:F2} ms; uploads max {burstMaxTiles} tiles/frame ({burstMaxTiles * 8} KB, cap 128); " +
                                    $"grass CPU max {burstMaxCpu:F3} ms; backlog after burst {backlog} tiles");
-                yield return Shot("06_after_gift_burst");
+                yield return Shot("07_after_gift_burst");
             }
 
             _report.AppendLine("Errors/exceptions logged during capture: " + _errors);

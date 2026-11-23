@@ -40,6 +40,18 @@ namespace PlayShift.Grass
         private float _counterPunch;
         private Color _counterFlashColor = Ink;
 
+        // Gift popup (under the counter)
+        [SerializeField] private float giftPopupSeconds = 2.6f;
+        [Tooltip("Also list gifts as small text lines bottom-left (off: the popup under the counter is enough).")]
+        [SerializeField] private bool showGiftFeed;
+        private RectTransform _giftPopup;
+        private CanvasGroup _giftPopupGroup;
+        private TextMeshProUGUI _giftPopupAmount, _giftPopupUser;
+        private float _giftPopupShownAt = -100f;
+        private string _giftPopupKey;
+        private double _giftPopupTotal;
+        private static readonly Color GiftAddColor = new Color(1f, 0.45f, 0.3f, 1f);
+
         // Gift feed
         private RectTransform _giftFeed;
         private readonly List<(TextMeshProUGUI text, float until)> _toasts = new List<(TextMeshProUGUI, float)>();
@@ -144,11 +156,55 @@ namespace PlayShift.Grass
             if (!gift.WasApplied) return;
             Color c = gift.Action == GiftActionType.AddGrass ? GiftAdd
                     : gift.Action == GiftActionType.RemoveGrass ? GiftRemove : GiftTaller;
-            ShowToast(gift.Describe(), c);
+            // The big popup under the counter replaces the old text feed (keeps the stream clean, like TikTok games).
+            if (showGiftFeed) ShowToast(gift.Describe(), c);
+            ShowGiftPopup(gift);
             _counterFlashColor = c;
             _counterPunch = 1f;
             if (gift.Action == GiftActionType.IncreaseHeight && _manager != null && _manager.Field != null)
                 _heightLabel.text = "Grass " + GrassUiFactory.FormatHeightRange(_manager.Field.CurrentMinHeightCm, _manager.Field.CurrentMaxHeightCm);
+        }
+
+        /// <summary>Big "-25,000 / username" popup under the counter. Same viewer + same effect while visible = add up.</summary>
+        private void ShowGiftPopup(GiftApplication gift)
+        {
+            string user = gift.Gift.UserName ?? string.Empty;
+            string key = user + "|" + gift.Action;
+            bool visible = Time.unscaledTime - _giftPopupShownAt < giftPopupSeconds;
+            _giftPopupTotal = visible && key == _giftPopupKey ? _giftPopupTotal + gift.Applied : gift.Applied;
+            _giftPopupKey = key;
+
+            string text;
+            Color color;
+            switch (gift.Action)
+            {
+                case GiftActionType.RemoveGrass: text = "-" + ((long)_giftPopupTotal).ToString("N0"); color = CounterGreen; break;
+                case GiftActionType.AddGrass: text = "+" + ((long)_giftPopupTotal).ToString("N0"); color = GiftAddColor; break;
+                case GiftActionType.IncreaseHeight: text = $"+{_giftPopupTotal:0.#} CM TALLER"; color = GiftTaller; break;
+                case GiftActionType.SpeedBoost: text = "SPEED BOOST"; color = Gold; break;
+                case GiftActionType.RadiusBoost: text = "WIDER CUT"; color = Gold; break;
+                case GiftActionType.SlowTrimmer: text = "SLOWED DOWN"; color = GiftAddColor; break;
+                default: text = $"+{(int)_giftPopupTotal} BLADE{(_giftPopupTotal > 1 ? "S" : "")}"; color = Gold; break;
+            }
+            _giftPopupAmount.text = text;
+            _giftPopupAmount.color = color;
+            _giftPopupUser.text = user;
+            _giftPopupShownAt = Time.unscaledTime;
+        }
+
+        private void AnimateGiftPopup()
+        {
+            float age = Time.unscaledTime - _giftPopupShownAt;
+            const float popIn = 0.18f, fadeOut = 0.35f;
+            if (age > giftPopupSeconds + fadeOut)
+            {
+                if (_giftPopupGroup.alpha != 0f) _giftPopupGroup.alpha = 0f;
+                return;
+            }
+            float k = Mathf.Clamp01(age / popIn);
+            float s = Mathf.Lerp(1.35f, 1f, 1f - (1f - k) * (1f - k)); // ease-out punch
+            _giftPopup.localScale = new Vector3(s, s, 1f);
+            _giftPopupGroup.alpha = age < giftPopupSeconds ? 1f : 1f - (age - giftPopupSeconds) / fadeOut;
         }
 
         public void ShowToast(string message, Color color)
@@ -170,6 +226,7 @@ namespace PlayShift.Grass
             AnimateOverlay(_cleared);
             AnimateOverlay(_victory);
             UpdateToasts();
+            AnimateGiftPopup();
 
             if (_counterPunch > 0f)
             {
@@ -222,24 +279,26 @@ namespace PlayShift.Grass
         {
             // Clean TikTok-LIVE style: no boxes, no progress bar; just GRASS LEFT and a huge bold outlined number.
             var counter = GrassUiFactory.Rect("GrassLeft", _root);
-            _counterPanel = GrassUiFactory.Place(counter, new Vector2(0.5f, 1f), new Vector2(0f, -10f), new Vector2(1500f, 330f));
-            // Chunky game font (HudFontBuilder.SourceFontPath, currently Luckiest Guy): white heading and huge flat lime
-            // numbers, both with a thick dark-indigo outline and a solid indigo "3D" shadow (readable on any stream).
-            var font = CounterFont;
-            var labelStyle = font != null ? FontStyles.Normal : FontStyles.Bold; // the HUD font is already heavy; no fake bold
-            var label = GrassUiFactory.Text("GrassLeftLabel", _counterPanel, "GRASS LEFT", 84f, Ink, TextAlignmentOptions.Center, labelStyle);
-            if (font != null) label.font = font;
-            GrassUiFactory.Place(label.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, 0f), new Vector2(1100f, 96f));
-            label.characterSpacing = 1f;
-            var labelMat = Resources.Load<Material>("PlayShiftFonts/HudFont SDF - Label");
-            if (font != null && labelMat != null) label.fontSharedMaterial = labelMat; // outline + shadow baked in
-            else { Outline(label, 0.28f); AddShadow(label, 5f); }
-            _grassLeftValue = GrassUiFactory.Text("GrassLeftValue", _counterPanel, "1,000,000", 240f, CounterGreen, TextAlignmentOptions.Center, labelStyle);
-            if (font != null) _grassLeftValue.font = font;
-            GrassUiFactory.Place(_grassLeftValue.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -100f), new Vector2(1500f, 250f));
-            var counterMat = Resources.Load<Material>("PlayShiftFonts/HudFont SDF - Counter");
-            if (font != null && counterMat != null) _grassLeftValue.fontSharedMaterial = counterMat;
-            else { Outline(_grassLeftValue, 0.26f, CounterOutline); AddShadow(_grassLeftValue, 10f); }
+            _counterPanel = GrassUiFactory.Place(counter, new Vector2(0.5f, 1f), new Vector2(0f, -12f), new Vector2(1100f, 240f));
+            // Chunky game font (HudFontBuilder.SourceFontPath): white heading and big flat lime numbers, both with a
+            // thick dark-indigo outline and a solid indigo "3D" shadow (readable on any stream). Character spacing is
+            // more than twice the outline, so every letter keeps its own outline instead of fusing with the next.
+            var label = HudText("GrassLeftLabel", _counterPanel, "GRASS LEFT", 60f, Ink, LabelMaterial, 14f);
+            GrassUiFactory.Place(label.rectTransform, new Vector2(0.5f, 1f), Vector2.zero, new Vector2(900f, 72f));
+            _grassLeftValue = HudText("GrassLeftValue", _counterPanel, "1,000,000", 165f, CounterGreen, CounterMaterial, 12f);
+            GrassUiFactory.Place(_grassLeftValue.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -64f), new Vector2(1100f, 180f));
+
+            // Gift popup under the counter: "-25,000" (+ the gifter's name), same style. Stacks repeat gifts from the
+            // same viewer while it is up; punches in, holds, fades. Only rebuilt when a gift arrives.
+            _giftPopup = GrassUiFactory.Place(GrassUiFactory.Rect("GiftPopup", _root), new Vector2(0.5f, 1f), new Vector2(0f, -250f), new Vector2(1000f, 180f));
+            _giftPopupGroup = _giftPopup.gameObject.AddComponent<CanvasGroup>();
+            _giftPopupGroup.alpha = 0f;
+            _giftPopupGroup.blocksRaycasts = false;
+            _giftPopupGroup.interactable = false;
+            _giftPopupAmount = HudText("GiftAmount", _giftPopup, string.Empty, 96f, CounterGreen, CounterMaterial, 10f);
+            GrassUiFactory.Place(_giftPopupAmount.rectTransform, new Vector2(0.5f, 1f), Vector2.zero, new Vector2(1000f, 110f));
+            _giftPopupUser = HudText("GiftUser", _giftPopup, string.Empty, 50f, Ink, LabelMaterial, 10f);
+            GrassUiFactory.Place(_giftPopupUser.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -104f), new Vector2(1000f, 64f));
 
             // Level / height / timer, top left, no box.
             var info = GrassUiFactory.Rect("LevelInfo", _root);
@@ -263,6 +322,27 @@ namespace PlayShift.Grass
             t.outlineWidth = width;
             t.outlineColor = color;
         }
+
+        /// <summary>HUD text in the chunky HUD font with a shared outline+shadow material (falls back to TMP's default font).</summary>
+        private static TextMeshProUGUI HudText(string name, Transform parent, string text, float size, Color color, Material preset, float spacing)
+        {
+            var font = CounterFont;
+            var t = GrassUiFactory.Text(name, parent, text, size, color, TextAlignmentOptions.Center, font != null ? FontStyles.Normal : FontStyles.Bold);
+            t.characterSpacing = spacing;
+            if (font != null && preset != null)
+            {
+                t.font = font;
+                t.fontSharedMaterial = preset; // outline + shadow baked in, shared: no per-text material instances
+            }
+            else { Outline(t, 0.26f, CounterOutline); AddShadow(t, size * 0.05f); }
+            return t;
+        }
+
+        private static Material s_labelMaterial, s_counterMaterial;
+        private static Material LabelMaterial =>
+            s_labelMaterial != null ? s_labelMaterial : (s_labelMaterial = Resources.Load<Material>("PlayShiftFonts/HudFont SDF - Label"));
+        private static Material CounterMaterial =>
+            s_counterMaterial != null ? s_counterMaterial : (s_counterMaterial = Resources.Load<Material>("PlayShiftFonts/HudFont SDF - Counter"));
 
         private static TMP_FontAsset s_counterFont;
 

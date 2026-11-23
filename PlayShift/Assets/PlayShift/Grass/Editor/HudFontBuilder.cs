@@ -19,12 +19,18 @@ namespace PlayShift.Grass.Editor
         public const string SourceFontPath = "Assets/PlayShift/Fonts/LuckiestGuy-Regular.ttf";
         public const string AssetPath = "Assets/PlayShift/Grass/Resources/PlayShiftFonts/HudFont SDF.asset";
 
+        private static string s_sourceOverride;
+
         [MenuItem("PlayShift/Grass/Rebuild HUD Font", priority = 30)]
         public static void RebuildFromMenu() => Ensure(force: true);
 
         /// <summary>Command line: Unity.exe -batchmode -quit -projectPath PlayShift -executeMethod PlayShift.Grass.Editor.HudFontBuilder.BuildForBatch</summary>
         public static void BuildForBatch()
         {
+            // Optional: -hudFont Assets/PlayShift/Fonts/Other.ttf to try another font without editing code.
+            var args = System.Environment.GetCommandLineArgs();
+            for (int i = 0; i < args.Length - 1; i++)
+                if (args[i] == "-hudFont") s_sourceOverride = args[i + 1];
             bool ok = Ensure(force: true) != null;
             Debug.Log(ok ? "[PlayShift Grass] HUD FONT OK" : "[PlayShift Grass] HUD FONT FAILED");
             if (Application.isBatchMode) EditorApplication.Exit(ok ? 0 : 1);
@@ -35,10 +41,11 @@ namespace PlayShift.Grass.Editor
             var existing = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(AssetPath);
             if (existing != null && !force) return existing;
 
-            var font = AssetDatabase.LoadAssetAtPath<Font>(SourceFontPath);
+            string source = s_sourceOverride ?? SourceFontPath;
+            var font = AssetDatabase.LoadAssetAtPath<Font>(source);
             if (font == null)
             {
-                Debug.LogError("[PlayShift Grass] HUD font source missing: " + SourceFontPath);
+                Debug.LogError("[PlayShift Grass] HUD font source missing: " + source);
                 return null;
             }
             if (existing != null) AssetDatabase.DeleteAsset(AssetPath);
