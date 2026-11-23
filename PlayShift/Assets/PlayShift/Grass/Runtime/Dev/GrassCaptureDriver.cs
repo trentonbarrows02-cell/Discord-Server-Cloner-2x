@@ -34,9 +34,9 @@ namespace PlayShift.Grass.Dev
         private readonly StringBuilder _report = new StringBuilder();
         private int _errors;
 
-        private Camera _cam;
+        private Camera _cam, _uiCam;
         private TMPro.TMP_Text[] _texts = new TMPro.TMP_Text[0];
-        private RenderTexture _rt;
+        private RenderTexture _rt, _out; // _rt: MSAA game render; _out: resolved copy with the HUD drawn on top
         private Texture2D _frame, _clipFrame, _probe;
         private bool _grabRequested, _grabDone, _measureRequested;
         private float _probeMs;
@@ -166,6 +166,9 @@ namespace PlayShift.Grass.Dev
             _cam = cam;
             _rt = new RenderTexture(Width, Height, 24, RenderTextureFormat.ARGB32) { antiAliasing = 4, name = "CaptureRT" };
             _cam.targetTexture = _rt;
+            // A second camera drawing onto an MSAA target crashes D3D12 (Camera::ResolveLastTargetToCurrentTarget),
+            // so the HUD camera draws onto a plain resolved copy instead.
+            _out = new RenderTexture(Width, Height, 24, RenderTextureFormat.ARGB32) { name = "CaptureOut" };
             _frame = new Texture2D(Width, Height, TextureFormat.RGBA32, false);
             _clipFrame = new Texture2D(ClipWidth, ClipHeight, TextureFormat.RGBA32, false);
             _probe = new Texture2D(1, 1, TextureFormat.RGBA32, false);
@@ -174,10 +177,25 @@ namespace PlayShift.Grass.Dev
             {
                 if (!canvas.gameObject.scene.IsValid() || !canvas.isRootCanvas || canvas.renderMode != RenderMode.ScreenSpaceOverlay) continue;
                 canvas.renderMode = RenderMode.ScreenSpaceCamera;
-                canvas.worldCamera = _cam;
-                canvas.planeDistance = _cam.nearClipPlane + 0.02f;
+                canvas.worldCamera = UiCamera();
+                canvas.planeDistance = 1f; // a normal distance: TMP SDF text breaks down a few cm from the camera
                 _texts = canvas.GetComponentsInChildren<TMPro.TMP_Text>(true);
             }
+        }
+
+        /// <summary>HUD-only camera layered over the game image in the same render target.</summary>
+        private Camera UiCamera()
+        {
+            if (_uiCam != null) return _uiCam;
+            _uiCam = new GameObject("CaptureUICamera").AddComponent<Camera>();
+            _uiCam.transform.SetParent(transform, false);
+            _uiCam.clearFlags = CameraClearFlags.Depth;
+            _uiCam.cullingMask = 1 << 5; // UI layer
+            _uiCam.nearClipPlane = 0.1f;
+            _uiCam.farClipPlane = 10f;
+            _uiCam.targetTexture = _out;
+            _uiCam.enabled = false; // rendered manually after the game camera
+            return _uiCam;
         }
 
         private void LateUpdate()
@@ -187,7 +205,7 @@ namespace PlayShift.Grass.Dev
             {
                 RenderNow();
                 var prev = RenderTexture.active;
-                RenderTexture.active = _rt;
+                RenderTexture.active = _out;
                 _frame.ReadPixels(new Rect(0, 0, Width, Height), 0, 0);
                 _frame.Apply();
                 RenderTexture.active = prev;
@@ -211,13 +229,15 @@ namespace PlayShift.Grass.Dev
             foreach (var t in _texts) if (t != null && t.isActiveAndEnabled) t.ForceMeshUpdate();
             Canvas.ForceUpdateCanvases();
             _cam.Render();
+            Graphics.Blit(_rt, _out); // resolve MSAA
+            if (_uiCam != null) _uiCam.Render(); // HUD drawn on top by its own camera
         }
 
         /// <summary>1-pixel readback: waits for the GPU to finish the frame so the timing is real.</summary>
         private void Sync()
         {
             var prev = RenderTexture.active;
-            RenderTexture.active = _rt;
+            RenderTexture.active = _out;
             _probe.ReadPixels(new Rect(0, 0, 1, 1), 0, 0);
             _probe.Apply();
             RenderTexture.active = prev;
@@ -233,7 +253,7 @@ namespace PlayShift.Grass.Dev
         private Texture2D ToClipFrame()
         {
             var small = RenderTexture.GetTemporary(ClipWidth, ClipHeight, 0, RenderTextureFormat.ARGB32);
-            Graphics.Blit(_rt, small);
+            Graphics.Blit(_out, small);
             var prev = RenderTexture.active;
             RenderTexture.active = small;
             _clipFrame.ReadPixels(new Rect(0, 0, ClipWidth, ClipHeight), 0, 0);

@@ -33,7 +33,8 @@ namespace PlayShift.Grass
         [SerializeField] private float shaftPitch = 17f;
         [Tooltip("Swings the handle end to the right so the shaft enters from the bottom-right of the screen.")]
         [SerializeField] private float handleSwing = 34f;
-        [SerializeField] private float headHeight = 0.02f;
+        [Tooltip("Gap between the lowest point of the cutting head (blades included) and the ground. Keeps the blades from clipping into the lawn, even while vibrating.")]
+        [SerializeField] private float headHeight = 0.035f;
 
         [Header("Motion")]
         [SerializeField] private float sweepDegrees = 24f;
@@ -53,6 +54,7 @@ namespace PlayShift.Grass
         private float _yaw, _sweepPhase, _sweep, _walkPhase;
         private int _extraCount = -1;
         private Vector3 _prevHead;
+        private float _headLift; // distance from the head pivot down to the lowest blade/head vertex
 
         /// <summary>World position of the main cutting head (on the ground).</summary>
         public Vector3 HeadPosition => _mainHeadRoot != null ? _mainHeadRoot.position : transform.position;
@@ -91,6 +93,7 @@ namespace PlayShift.Grass
                     _mainSpinner.localPosition = Vector3.zero;
                     _mainSpinner.localRotation = Quaternion.identity;
                     _mainSpinner.localScale = Vector3.one * modelScale;
+                    _headLift = LowestPointBelowPivot(_mainHeadRoot);
                 }
                 else Debug.LogWarning($"[PlayShift Grass] Trimmer model has no '{cutterHeadName}' child; the head will not spin separately.", this);
             }
@@ -133,7 +136,8 @@ namespace PlayShift.Grass
             _rig.position = transform.position;
             _rig.rotation = Quaternion.Euler(0f, _yaw + _sweep, 0f);
             float groundY = m != null ? m.FieldTransform.position.y - transform.position.y : 0f;
-            var headLocal = new Vector3(headOffset.x + sway + jx, groundY + headHeight + jy, headOffset.y + pull);
+            // Vibration only lifts the head (never pushes it down) so the blades stay above the lawn.
+            var headLocal = new Vector3(headOffset.x + sway + jx, groundY + _headLift + headHeight + Mathf.Abs(jy), headOffset.y + pull);
             _bodyPivot.localPosition = headLocal;
             _bodyPivot.localRotation = Quaternion.Euler(shaftPitch, -handleSwing, 0f);
             _mainHeadRoot.localPosition = headLocal;
@@ -148,6 +152,19 @@ namespace PlayShift.Grass
 
             HeadVelocity = (HeadPosition - _prevHead) / Mathf.Max(dt, 1e-4f);
             _prevHead = HeadPosition;
+        }
+
+        /// <summary>
+        /// How far the head's meshes reach below its pivot (the blades can hang below the hub). Measured once, while
+        /// the head is still level, from the renderers' world bounds; the head only spins about its vertical axis, so
+        /// this holds at every blade angle. Tilt from vibration is tiny and covered by <see cref="headHeight"/>.
+        /// </summary>
+        private static float LowestPointBelowPivot(Transform head)
+        {
+            float minY = 0f;
+            foreach (var r in head.GetComponentsInChildren<Renderer>())
+                minY = Mathf.Min(minY, r.bounds.min.y - head.position.y);
+            return -minY;
         }
 
         private void ApplyHeads(int extra)

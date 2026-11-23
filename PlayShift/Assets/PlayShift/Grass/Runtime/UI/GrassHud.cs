@@ -34,7 +34,6 @@ namespace PlayShift.Grass
         private TextMeshProUGUI _levelLabel;
         private TextMeshProUGUI _heightLabel;
         private TextMeshProUGUI _timerLabel;
-        private RectTransform _progressFill;
         private RectTransform _counterPanel;
         private long _shownRemaining = -1;
         private float _counterPunch;
@@ -194,9 +193,6 @@ namespace PlayShift.Grass
             {
                 _shownRemaining = next;
                 SetText(_grassLeftValue, _shownRemaining.ToString("N0"));
-                long scale = System.Math.Max(field.InitialUnits, field.InitialUnits + field.AddedByGifts);
-                float frac = scale > 0 ? Mathf.Clamp01((float)((double)_shownRemaining / scale)) : 0f;
-                _progressFill.anchorMax = new Vector2(frac, 1f);
             }
             _timerLabel.text = "TIME  " + GrassUiFactory.FormatTime(p.ElapsedSeconds);
         }
@@ -223,7 +219,7 @@ namespace PlayShift.Grass
 
         private void BuildPlayingHud()
         {
-            // Clean TikTok-LIVE style: no boxes, a huge bold outlined number, a thin progress bar.
+            // Clean TikTok-LIVE style: no boxes, no progress bar; just GRASS LEFT and a huge bold outlined number.
             var counter = GrassUiFactory.Rect("GrassLeft", _root);
             _counterPanel = GrassUiFactory.Place(counter, new Vector2(0.5f, 1f), new Vector2(0f, -10f), new Vector2(1100f, 250f));
             // White heading, big vibrant-green numbers, thick black outlines and a drop shadow (readable on any stream).
@@ -236,19 +232,6 @@ namespace PlayShift.Grass
             GrassUiFactory.Place(_grassLeftValue.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -58f), new Vector2(1100f, 170f));
             Outline(_grassLeftValue, 0.32f);
             AddShadow(_grassLeftValue, 9f);
-
-            var border = GrassUiFactory.Panel("ProgressBorder", _counterPanel, new Color(1f, 1f, 1f, 0.9f));
-            GrassUiFactory.Place(border.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, -14f), new Vector2(566f, 20f));
-            border.color = Color.black;
-            var track = GrassUiFactory.Panel("ProgressTrack", border.rectTransform, new Color(0f, 0f, 0f, 0.55f));
-            GrassUiFactory.Stretch(track.rectTransform, 3f);
-            var fill = GrassUiFactory.Panel("ProgressFill", track.rectTransform, Grass);
-            _progressFill = fill.rectTransform;
-            _progressFill.anchorMin = Vector2.zero;
-            _progressFill.anchorMax = Vector2.one;
-            _progressFill.pivot = new Vector2(0f, 0.5f);
-            _progressFill.offsetMin = Vector2.zero;
-            _progressFill.offsetMax = Vector2.zero;
 
             // Level / height / timer, top left, no box.
             var info = GrassUiFactory.Rect("LevelInfo", _root);
