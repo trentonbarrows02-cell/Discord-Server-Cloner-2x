@@ -37,7 +37,7 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _MainTex:
-        m_Texture: {fileID: 1397999860511288146, guid: ed34965e751599245bd6be04661a58a6, type: 2}
+        m_Texture: {fileID: 136007528701943818, guid: ed34965e751599245bd6be04661a58a6, type: 2}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _OutlineTex:
@@ -74,9 +74,9 @@ Material:
     - _OutlineWidth: 0.17
     - _PerspectiveFilter: 0.875
     - _Reflectivity: 10
-    - _ScaleRatioA: 0.95238096
-    - _ScaleRatioB: 0.6119048
-    - _ScaleRatioC: 0.6119048
+    - _ScaleRatioA: 1
+    - _ScaleRatioB: 1
+    - _ScaleRatioC: 1
     - _ScaleX: 1
     - _ScaleY: 1
     - _ShaderFlags: 0

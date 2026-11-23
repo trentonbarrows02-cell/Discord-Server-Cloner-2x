@@ -65,6 +65,7 @@ namespace PlayShift.Grass.Editor
             var hud = BuildFontAsset(s_sourceOverride ?? SourceFontPath, AssetPath);
             var numbers = BuildFontAsset(s_numberOverride ?? NumberSourcePath, NumberAssetPath);
             if (hud == null || numbers == null) return null;
+            MakeTabularDigits(numbers);
 
             // Material presets: outline + drop shadow (underlay) baked in. Shared by the texts that use them, so no
             // per-text material instances and no duplicate shadow text objects. Widths are in SDF units (relative to
@@ -79,6 +80,42 @@ namespace PlayShift.Grass.Editor
                          shadowDilate: 0.12f);
             AssetDatabase.SaveAssets();
             return hud;
+        }
+
+        /// <summary>
+        /// Gives the ten digits one shared advance width (tabular figures), each glyph centred in it. The counter is
+        /// centred, so with proportional digits (a "1" is narrower than a "0") the whole number slid sideways every
+        /// time a digit changed while cutting. Done once in the font asset: no runtime cost.
+        /// </summary>
+        private static void MakeTabularDigits(TMP_FontAsset fa)
+        {
+            fa.ReadFontAssetDefinition(); // builds characterLookupTable for a freshly loaded asset
+            float widest = 0f;
+            for (char c = '0'; c <= '9'; c++)
+                if (fa.characterLookupTable.TryGetValue(c, out var ch)) widest = Mathf.Max(widest, ch.glyph.metrics.horizontalAdvance);
+            if (widest <= 0f) return;
+            for (char c = '0'; c <= '9'; c++)
+            {
+                if (!fa.characterLookupTable.TryGetValue(c, out var ch)) continue;
+                var m = ch.glyph.metrics;
+                m.horizontalBearingX += (widest - m.horizontalAdvance) * 0.5f;
+                m.horizontalAdvance = widest;
+                ch.glyph.metrics = m;
+            }
+            // Kerning pairs between digits would undo the equal widths.
+            var table = fa.fontFeatureTable;
+            if (table != null && table.glyphPairAdjustmentRecords != null)
+            {
+                var digitGlyphs = new System.Collections.Generic.HashSet<uint>();
+                for (char c = '0'; c <= '9'; c++)
+                    if (fa.characterLookupTable.TryGetValue(c, out var ch)) digitGlyphs.Add(ch.glyphIndex);
+                table.glyphPairAdjustmentRecords.RemoveAll(r =>
+                    digitGlyphs.Contains(r.firstAdjustmentRecord.glyphIndex) || digitGlyphs.Contains(r.secondAdjustmentRecord.glyphIndex));
+            }
+            fa.ReadFontAssetDefinition();
+            EditorUtility.SetDirty(fa);
+            AssetDatabase.SaveAssets();
+            Debug.Log($"[PlayShift Grass] {fa.name}: digits set to one width ({widest:F1}).");
         }
 
         private static TMP_FontAsset BuildFontAsset(string source, string path)

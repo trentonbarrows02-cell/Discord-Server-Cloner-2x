@@ -1,6 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!21 &-8982105684065479210
+--- !u!21 &-285736452342548282
 Material:
   serializedVersion: 8
   m_ObjectHideFlags: 0
@@ -24,7 +24,7 @@ Material:
     serializedVersion: 3
     m_TexEnvs:
     - _MainTex:
-        m_Texture: {fileID: 1397999860511288146}
+        m_Texture: {fileID: 136007528701943818}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     m_Ints: []
@@ -38,9 +38,9 @@ Material:
     - _OutlineSoftness: 0
     - _OutlineWidth: 0
     - _PerspectiveFilter: 0.875
-    - _ScaleRatioA: 0.95238096
+    - _ScaleRatioA: 1
     - _ScaleRatioB: 1
-    - _ScaleRatioC: 0.77380955
+    - _ScaleRatioC: 1
     - _ScaleX: 1
     - _ScaleY: 1
     - _ShaderFlags: 0
@@ -102,7 +102,7 @@ MonoBehaviour:
     m_StrikethroughOffset: 22.4
     m_StrikethroughThickness: 1.5625
     m_TabWidth: 16
-  m_Material: {fileID: -8982105684065479210}
+  m_Material: {fileID: -285736452342548282}
   m_SourceFontFileGUID: 93b2822674eb4524da09f4b8436105cf
   m_CreationSettings:
     sourceFontFileName: 
@@ -1935,7 +1935,7 @@ MonoBehaviour:
     m_GlyphIndex: 113
     m_Scale: 1
   m_AtlasTextures:
-  - {fileID: 1397999860511288146}
+  - {fileID: 136007528701943818}
   m_AtlasTextureIndex: 0
   m_IsMultiAtlasTexturesEnabled: 0
   m_GetFontFeatures: 1
@@ -2737,7 +2737,7 @@ MonoBehaviour:
     kerningPairs: []
   fallbackFontAssets: []
   atlas: {fileID: 0}
---- !u!28 &1397999860511288146
+--- !u!28 &136007528701943818
 Texture2D:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}

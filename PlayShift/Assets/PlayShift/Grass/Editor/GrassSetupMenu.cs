@@ -93,30 +93,30 @@ namespace PlayShift.Grass.Editor
             QualitySettings.shadowDistance = Mathf.Max(QualitySettings.shadowDistance, 40f);
         }
 
-        /// <summary>First-person player: camera + floating trimmer (no body or hands), clippings, audio. Shared by the scenes.</summary>
+        /// <summary>
+        /// First-person player: an instance of the reusable PlayShift first-person prefab (camera, controller, tool
+        /// anchor; no body or hands) plus the Cut the Grass parts: floating trimmer, cutter, clippings, audio.
+        /// </summary>
         private static GameObject CreatePlayer(Vector3 position, float yaw, Material clipMat, float farClip)
         {
             foreach (var cam in SceneComponents<Camera>())
                 if (cam.CompareTag("MainCamera")) { Undo.RecordObject(cam.gameObject, "Disable camera"); cam.gameObject.SetActive(false); }
 
-            var player = new GameObject("Player");
+            var prefab = PlayShift.FirstPerson.Editor.PlayShiftFirstPersonBuilder.EnsurePrefab();
+            var player = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+            player.name = "Player";
             Undo.RegisterCreatedObjectUndo(player, "Create Player");
             player.transform.SetPositionAndRotation(position, Quaternion.Euler(0f, yaw, 0f));
-            var cc = player.AddComponent<CharacterController>();
-            cc.height = 1.8f; cc.radius = 0.3f; cc.center = new Vector3(0f, 0.9f, 0f);
-            var camGo = new GameObject("PlayerCamera", typeof(Camera), typeof(AudioListener));
-            camGo.tag = "MainCamera";
-            camGo.transform.SetParent(player.transform, false);
-            var camera = camGo.GetComponent<Camera>();
-            camera.nearClipPlane = 0.03f;
+            var rig = player.GetComponent<PlayShift.FirstPerson.PlayShiftFirstPersonRig>();
+            var camera = rig.Camera;
             camera.farClipPlane = farClip;
-            camera.fieldOfView = 68f;
 
             var blades = player.AddComponent<TrimmerBlades>();
             var cutter = player.AddComponent<GrassCutter>();
             var fp = player.AddComponent<FirstPersonController>();
             var vm = player.AddComponent<TrimmerViewmodel>();
             Set(cutter, "blades", blades);
+            Set(fp, "rig", rig);
             Set(fp, "playerCamera", camera);
             Set(fp, "cutter", cutter);
             Set(fp, "blades", blades);

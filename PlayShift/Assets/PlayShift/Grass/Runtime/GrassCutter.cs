@@ -56,6 +56,12 @@ namespace PlayShift.Grass
         public event Action<Vector3, Vector3, long, float, float> GrassCut;
 
         public float BaseRadius { get => cutRadius; set => cutRadius = Mathf.Max(0.05f, value); }
+
+        /// <summary>
+        /// Height of a head's pivot above the bottom of its blades (set by the viewmodel). A head only cuts while the
+        /// blades are inside the grass: pivot height above the lawn minus this must not exceed the grass height.
+        /// </summary>
+        public float HeadClearance { get; set; }
         public float CutRadius => cutRadius * (Manager != null ? Manager.Modifiers.RadiusMultiplier : 1f);
 
         /// <summary>Smoothed 0..1 "how hard the blades are working" (thick, tall grass = high). Drives vibration, resistance and motor strain.</summary>
@@ -97,7 +103,9 @@ namespace PlayShift.Grass
                 ResetSweep();
             }
 
-            bool cutting = spin >= minSpinToCut;
+            // Cuts only while the trimmer is on (left mouse held / toggled): it starts cutting as the blades start
+            // spinning and stops the moment it is released (the blades still coast down visually).
+            bool cutting = blades != null ? blades.On && spin > 0.08f : spin >= minSpinToCut;
             var field = m.Field;
             float dt = Mathf.Max(Time.deltaTime, 1e-4f);
             long totalCut = 0;
@@ -110,7 +118,9 @@ namespace PlayShift.Grass
                 Vector3 world = h.position;
                 Vector3 local = m.FieldTransform.InverseTransformPoint(world);
                 var now = new Vector2(local.x, local.z);
-                bool onLawn = maxHeightAboveLawn <= 0f || local.y <= maxHeightAboveLawn;
+                // Blades must actually reach into the grass (a lifted head cuts nothing).
+                bool onLawn = (maxHeightAboveLawn <= 0f || local.y <= maxHeightAboveLawn) &&
+                              local.y - HeadClearance <= Mathf.Max(0.05f, grassHeightM);
 
                 long cut = 0;
                 if (cutting && onLawn)

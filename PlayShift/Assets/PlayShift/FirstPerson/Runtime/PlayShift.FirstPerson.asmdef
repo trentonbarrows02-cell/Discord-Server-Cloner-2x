@@ -1,0 +1,14 @@
+{
+    "name": "PlayShift.FirstPerson",
+    "rootNamespace": "PlayShift.FirstPerson",
+    "references": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

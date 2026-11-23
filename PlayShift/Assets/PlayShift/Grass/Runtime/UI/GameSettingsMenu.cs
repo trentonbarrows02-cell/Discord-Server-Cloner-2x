@@ -7,7 +7,8 @@ using UnityEngine.UI;
 namespace PlayShift.Grass
 {
     /// <summary>
-    /// Settings page (Esc): resolution, display mode, VSync, field of view (60-120), grass quality. Built in code on
+    /// Settings page (Esc): resolution, display mode, VSync, field of view (50-100, vertical on 16:9), mouse
+    /// sensitivity, grass quality. Built in code on
     /// the HUD canvas, so no prefabs or scene changes are needed. While closed the panel is inactive (zero cost);
     /// while open the player's movement/look is paused (the level keeps running so gifts still land on stream).
     /// </summary>
@@ -24,9 +25,9 @@ namespace PlayShift.Grass
         private static readonly Color OffColor = new Color(0.55f, 0.18f, 0.2f, 1f);
 
         private GameObject _root;
-        private TextMeshProUGUI _resolutionValue, _modeValue, _vsyncLabel, _fovValue, _qualityValue;
+        private TextMeshProUGUI _resolutionValue, _modeValue, _vsyncLabel, _fovValue, _mouseValue, _qualityValue;
         private Image _vsyncButton;
-        private Slider _fovSlider;
+        private Slider _fovSlider, _mouseSlider;
         private List<Vector2Int> _resolutions;
         private int _resolutionIndex;
 
@@ -44,13 +45,16 @@ namespace PlayShift.Grass
             var dim = GrassUiFactory.Panel("SettingsMenu", canvasRoot, new Color(0f, 0f, 0f, 0.55f), rounded: false, raycast: true);
             GrassUiFactory.Stretch(dim.rectTransform);
             _root = dim.gameObject;
-            // Game-style card: soft drop shadow, thick violet rim, big rounded corners.
-            var cardSize = new Vector2(960f, 1120f);
-            var shadow = GrassUiFactory.Panel("CardShadow", dim.rectTransform, new Color(0f, 0f, 0f, 0.45f));
+            // Game-style card: soft drop shadow, thick violet rim, big rounded corners. Everything sits in one container
+            // that is scaled down to fit short (landscape) screens.
+            var cardSize = new Vector2(960f, 1250f);
+            _cardHeight = cardSize.y + 60f;
+            _content = GrassUiFactory.Place(GrassUiFactory.Rect("Content", dim.rectTransform), new Vector2(0.5f, 0.5f), Vector2.zero, cardSize + new Vector2(60f, 60f));
+            var shadow = GrassUiFactory.Panel("CardShadow", _content, new Color(0f, 0f, 0f, 0.45f));
             GrassUiFactory.Place(shadow.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, -18f), cardSize + new Vector2(28f, 28f));
-            var rim = GrassUiFactory.Panel("CardRim", dim.rectTransform, RimColor);
+            var rim = GrassUiFactory.Panel("CardRim", _content, RimColor);
             GrassUiFactory.Place(rim.rectTransform, new Vector2(0.5f, 0.5f), Vector2.zero, cardSize + new Vector2(28f, 28f));
-            var cardImage = GrassUiFactory.Panel("Card", dim.rectTransform, CardColor);
+            var cardImage = GrassUiFactory.Panel("Card", _content, CardColor);
             var card = cardImage.rectTransform;
             GrassUiFactory.Place(card, new Vector2(0.5f, 0.5f), Vector2.zero, cardSize);
             // The rounded sprite has 20 px corners; < 1 enlarges them (about 55-60 px here).
@@ -61,12 +65,15 @@ namespace PlayShift.Grass
             var title = GrassHud.HudText("Title", card, "SETTINGS", 84f, Color.white, GrassHud.LabelMaterial, 8f);
             GrassUiFactory.Place(title.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -40f), new Vector2(900f, 100f));
 
-            float y = -190f;
-            const float step = 150f;
+            float y = -180f;
+            const float step = 140f;
             _resolutionValue = Stepper(card, "RESOLUTION", y, () => StepResolution(-1), () => StepResolution(1)); y -= step;
             _modeValue = Stepper(card, "DISPLAY", y, () => StepMode(-1), () => StepMode(1)); y -= step;
             BuildVSync(card, y); y -= step;
-            BuildFov(card, y); y -= step;
+            _fovSlider = BuildSlider(card, "FOV", y, GameSettings.MinFov, GameSettings.MaxFov, true, out _fovValue,
+                v => { GameSettings.SetFov(v); _fovValue.text = $"{GameSettings.Fov:0}"; }); y -= step;
+            _mouseSlider = BuildSlider(card, "MOUSE", y, GameSettings.MinMouse, GameSettings.MaxMouse, false, out _mouseValue,
+                v => { GameSettings.SetMouseSensitivity(v); _mouseValue.text = $"{GameSettings.MouseSensitivity:0.00}"; }); y -= step;
             _qualityValue = Stepper(card, "GRASS QUALITY", y, () => StepQuality(-1), () => StepQuality(1));
 
             var close = GrassUiFactory.Button("Close", card, "CLOSE", OnColor, out var closeLabel);
@@ -117,10 +124,20 @@ namespace PlayShift.Grass
             }
         }
 
+        private RectTransform _content;
+        private float _cardHeight;
+
         private void Update()
         {
             // Esc toggles settings during play; on the title screen it only closes settings (menu buttons handle the rest).
             if (EscapePressed() && (IsOpen || !MainMenu.IsOpen)) SetOpen(!IsOpen);
+            if (IsOpen && _content != null)
+            {
+                // Fit the card to the screen height (wide/short windows), never enlarge it.
+                float available = ((RectTransform)_root.transform).rect.height;
+                float s = available > 1f ? Mathf.Min(1f, available * 0.96f / _cardHeight) : 1f;
+                if (!Mathf.Approximately(_content.localScale.x, s)) _content.localScale = new Vector3(s, s, 1f);
+            }
         }
 
         private RectTransform _closeButton, _menuButton;
@@ -193,8 +210,10 @@ namespace PlayShift.Grass
             _modeValue.text = ModeNames[m < 0 ? 0 : m];
             _vsyncLabel.text = GameSettings.VSync ? "ON" : "OFF";
             _vsyncButton.color = GameSettings.VSync ? OnColor : OffColor;
-            _fovSlider.SetValueWithoutNotify(GameSettings.FovHorizontal);
-            _fovValue.text = $"{GameSettings.FovHorizontal:0}";
+            _fovSlider.SetValueWithoutNotify(GameSettings.Fov);
+            _fovValue.text = $"{GameSettings.Fov:0}";
+            _mouseSlider.SetValueWithoutNotify(GameSettings.MouseSensitivity);
+            _mouseValue.text = $"{GameSettings.MouseSensitivity:0.00}";
             _qualityValue.text = QualityNames[Mathf.Clamp((int)GameSettings.GrassQuality, 0, QualityNames.Length - 1)];
         }
 
@@ -247,10 +266,12 @@ namespace PlayShift.Grass
             b.onClick.AddListener(() => { GameSettings.SetVSync(!GameSettings.VSync); RefreshLabels(); });
         }
 
-        private void BuildFov(RectTransform card, float y)
+        /// <summary>Label, slider track, value text on the right. The caller formats the value text in onChange.</summary>
+        private static Slider BuildSlider(RectTransform card, string label, float y, float min, float max, bool wholeNumbers,
+                                          out TextMeshProUGUI valueText, UnityEngine.Events.UnityAction<float> onChange)
         {
-            RowLabel(card, "FOV", y);
-            var track = GrassUiFactory.Panel("FovSlider", card, new Color(0f, 0f, 0f, 0.45f), rounded: true, raycast: true);
+            RowLabel(card, label, y);
+            var track = GrassUiFactory.Panel(label + "Slider", card, new Color(0f, 0f, 0f, 0.45f), rounded: true, raycast: true);
             GrassUiFactory.Place(track.rectTransform, new Vector2(0f, 1f), new Vector2(440f, y - 34f), new Vector2(360f, 32f));
             var fillArea = GrassUiFactory.Stretch(GrassUiFactory.Rect("FillArea", track.rectTransform), 4f);
             var fill = GrassUiFactory.Panel("Fill", fillArea, OnColor);
@@ -262,18 +283,19 @@ namespace PlayShift.Grass
             handle.rectTransform.anchorMax = new Vector2(0f, 1f);
             handle.rectTransform.sizeDelta = new Vector2(36f, 28f);
 
-            _fovSlider = track.gameObject.AddComponent<Slider>();
-            _fovSlider.fillRect = fill.rectTransform;
-            _fovSlider.handleRect = handle.rectTransform;
-            _fovSlider.targetGraphic = handle;
-            _fovSlider.direction = Slider.Direction.LeftToRight;
-            _fovSlider.minValue = GameSettings.MinFov;
-            _fovSlider.maxValue = GameSettings.MaxFov;
-            _fovSlider.wholeNumbers = true;
-            _fovSlider.onValueChanged.AddListener(v => { GameSettings.SetFov(v); _fovValue.text = $"{GameSettings.FovHorizontal:0}"; });
+            var slider = track.gameObject.AddComponent<Slider>();
+            slider.fillRect = fill.rectTransform;
+            slider.handleRect = handle.rectTransform;
+            slider.targetGraphic = handle;
+            slider.direction = Slider.Direction.LeftToRight;
+            slider.minValue = min;
+            slider.maxValue = max;
+            slider.wholeNumbers = wholeNumbers;
 
-            _fovValue = GrassUiFactory.Text("FovValue", card, "90", 40f, Color.white, TextAlignmentOptions.Center, FontStyles.Bold);
-            GrassUiFactory.Place(_fovValue.rectTransform, new Vector2(0f, 1f), new Vector2(810f, y), new Vector2(100f, 100f));
+            valueText = GrassUiFactory.Text(label + "Value", card, "", 40f, Color.white, TextAlignmentOptions.Center, FontStyles.Bold);
+            GrassUiFactory.Place(valueText.rectTransform, new Vector2(0f, 1f), new Vector2(810f, y), new Vector2(100f, 100f));
+            slider.onValueChanged.AddListener(onChange);
+            return slider;
         }
 
         private static void StyleButtonLabel(TextMeshProUGUI t, float size)

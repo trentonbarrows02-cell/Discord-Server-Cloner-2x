@@ -11,14 +11,20 @@ namespace PlayShift.Grass
     {
         private const string Key = "PlayShift.Settings.";
 
-        public const float MinFov = 60f, MaxFov = 120f, DefaultFov = 90f;
+        // FOV is set as the vertical FOV of a 16:9 (landscape) screen; other aspect ratios keep the same horizontal view,
+        // so a vertical (TikTok) window shows more above and below instead of zooming in.
+        public const float MinFov = 50f, MaxFov = 100f, DefaultFov = 65f;
+        public const float MinMouse = 0.2f, MaxMouse = 3f, DefaultMouse = 1f;
+        private const float ReferenceAspect = 16f / 9f;
 
         public static int Width { get; private set; }
         public static int Height { get; private set; }
         public static FullScreenMode Mode { get; private set; } = FullScreenMode.Windowed;
         public static bool VSync { get; private set; } = true;
-        /// <summary>Horizontal field of view in degrees (same feel on vertical and horizontal screens).</summary>
-        public static float FovHorizontal { get; private set; } = DefaultFov;
+        /// <summary>Field of view setting: vertical degrees on a 16:9 screen (65 by default).</summary>
+        public static float Fov { get; private set; } = DefaultFov;
+        /// <summary>Mouse look speed multiplier (1 = default).</summary>
+        public static float MouseSensitivity { get; private set; } = DefaultMouse;
         public static GrassQuality GrassQuality { get; private set; } = GrassQuality.High;
         /// <summary>True once the player has picked a grass quality (otherwise the scene's own setting is kept).</summary>
         public static bool HasGrassQuality { get; private set; }
@@ -45,7 +51,9 @@ namespace PlayShift.Grass
             Height = PlayerPrefs.GetInt(Key + "Height", Screen.height);
             Mode = (FullScreenMode)PlayerPrefs.GetInt(Key + "Mode", (int)Screen.fullScreenMode);
             VSync = PlayerPrefs.GetInt(Key + "VSync", 1) == 1;
-            FovHorizontal = Mathf.Clamp(PlayerPrefs.GetFloat(Key + "Fov", DefaultFov), MinFov, MaxFov);
+            // "FovV": the earlier "Fov" key stored a horizontal angle; it is not reused.
+            Fov = Mathf.Clamp(PlayerPrefs.GetFloat(Key + "FovV", DefaultFov), MinFov, MaxFov);
+            MouseSensitivity = Mathf.Clamp(PlayerPrefs.GetFloat(Key + "Mouse", DefaultMouse), MinMouse, MaxMouse);
             HasGrassQuality = PlayerPrefs.HasKey(Key + "GrassQuality");
             GrassQuality = (GrassQuality)PlayerPrefs.GetInt(Key + "GrassQuality", (int)GrassQuality.High);
         }
@@ -72,10 +80,16 @@ namespace PlayShift.Grass
             ApplyVSync();
         }
 
-        public static void SetFov(float horizontalDegrees)
+        public static void SetFov(float verticalDegrees)
         {
-            FovHorizontal = Mathf.Clamp(Mathf.Round(horizontalDegrees), MinFov, MaxFov);
-            PlayerPrefs.SetFloat(Key + "Fov", FovHorizontal);
+            Fov = Mathf.Clamp(Mathf.Round(verticalDegrees), MinFov, MaxFov);
+            PlayerPrefs.SetFloat(Key + "FovV", Fov);
+        }
+
+        public static void SetMouseSensitivity(float value)
+        {
+            MouseSensitivity = Mathf.Clamp(Mathf.Round(value * 20f) / 20f, MinMouse, MaxMouse);
+            PlayerPrefs.SetFloat(Key + "Mouse", MouseSensitivity);
         }
 
         public static void SetGrassQuality(GrassQuality quality)
@@ -126,10 +140,11 @@ namespace PlayShift.Grass
             return list;
         }
 
-        /// <summary>Vertical FOV (what Unity's camera uses) for the chosen horizontal FOV at this aspect ratio.</summary>
+        /// <summary>Vertical FOV (what Unity's camera uses) for this aspect ratio: exactly the setting on 16:9, the same
+        /// horizontal view on other shapes.</summary>
         public static float VerticalFov(float aspect, float maxVertical = 130f)
         {
-            float halfH = FovHorizontal * 0.5f * Mathf.Deg2Rad;
+            float halfH = Mathf.Atan(Mathf.Tan(Fov * 0.5f * Mathf.Deg2Rad) * ReferenceAspect);
             return Mathf.Min(maxVertical, 2f * Mathf.Atan(Mathf.Tan(halfH) / Mathf.Max(0.1f, aspect)) * Mathf.Rad2Deg);
         }
     }

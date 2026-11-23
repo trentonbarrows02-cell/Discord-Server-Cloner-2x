@@ -258,7 +258,7 @@ namespace PlayShift.Grass
             _scaler.matchWidthOrHeight = portrait ? 0f : 0.5f; // portrait: fit the width
             _hudScale = portrait ? portraitHudScale : 1f;
             _counterPanel.localScale = new Vector3(_hudScale, _hudScale, 1f);
-            _giftPopup.anchoredPosition = new Vector2(0f, -12f - 238f * _hudScale); // keep it just under the counter
+            _giftPopup.anchoredPosition = new Vector2(0f, -12f - 205f * _hudScale); // keep it just under the counter
             // The counter spans the width in portrait: level / time move to the bottom-left corner out of its way.
             if (portrait) GrassUiFactory.Place(_levelInfo, new Vector2(0f, 0f), new Vector2(36f, 40f), _levelInfo.sizeDelta);
             else GrassUiFactory.Place(_levelInfo, new Vector2(0f, 1f), new Vector2(36f, -28f), _levelInfo.sizeDelta);
@@ -342,14 +342,14 @@ namespace PlayShift.Grass
         {
             // Clean TikTok-LIVE style: no boxes, no progress bar; just GRASS LEFT and a huge bold outlined number.
             var counter = GrassUiFactory.Rect("GrassLeft", _root);
-            _counterPanel = GrassUiFactory.Place(counter, new Vector2(0.5f, 1f), new Vector2(0f, -12f), new Vector2(1100f, 240f));
+            _counterPanel = GrassUiFactory.Place(counter, new Vector2(0.5f, 1f), new Vector2(0f, -12f), new Vector2(1100f, 205f));
             // Chunky game font (HudFontBuilder.SourceFontPath): white heading and big flat lime numbers, both with a
             // thick dark-indigo outline and a solid indigo "3D" shadow (readable on any stream). Character spacing is
             // more than twice the outline, so every letter keeps its own outline instead of fusing with the next.
             var label = HudText("GrassLeftLabel", _counterPanel, "GRASS LEFT", 60f, Ink, LabelMaterial, 14f);
             GrassUiFactory.Place(label.rectTransform, new Vector2(0.5f, 1f), Vector2.zero, new Vector2(900f, 72f));
-            _grassLeftValue = HudText("GrassLeftValue", _counterPanel, "1,000,000", 165f, CounterGreen, CounterMaterial, 12f);
-            GrassUiFactory.Place(_grassLeftValue.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -64f), new Vector2(1100f, 180f));
+            _grassLeftValue = HudText("GrassLeftValue", _counterPanel, "1,000,000", 130f, CounterGreen, CounterMaterial, 10f);
+            GrassUiFactory.Place(_grassLeftValue.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -64f), new Vector2(1100f, 145f));
 
             // Gift popup under the counter: "-25,000" (+ the gifter's name), same style. Stacks repeat gifts from the
             // same viewer while it is up; punches in, holds, fades. Only rebuilt when a gift arrives.
@@ -358,10 +358,10 @@ namespace PlayShift.Grass
             _giftPopupGroup.alpha = 0f;
             _giftPopupGroup.blocksRaycasts = false;
             _giftPopupGroup.interactable = false;
-            _giftPopupAmount = HudText("GiftAmount", _giftPopup, string.Empty, 96f, CounterGreen, CounterMaterial, 10f);
-            GrassUiFactory.Place(_giftPopupAmount.rectTransform, new Vector2(0.5f, 1f), Vector2.zero, new Vector2(1000f, 110f));
+            _giftPopupAmount = HudText("GiftAmount", _giftPopup, string.Empty, 80f, CounterGreen, CounterMaterial, 8f);
+            GrassUiFactory.Place(_giftPopupAmount.rectTransform, new Vector2(0.5f, 1f), Vector2.zero, new Vector2(1000f, 95f));
             _giftPopupUser = HudText("GiftUser", _giftPopup, string.Empty, 50f, Ink, LabelMaterial, 10f);
-            GrassUiFactory.Place(_giftPopupUser.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -126f), new Vector2(1000f, 64f)); // below the amount and its drop shadow
+            GrassUiFactory.Place(_giftPopupUser.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -108f), new Vector2(1000f, 64f)); // below the amount and its drop shadow
 
             // Level / height / timer, top left, no box.
             var info = GrassUiFactory.Rect("LevelInfo", _root);
