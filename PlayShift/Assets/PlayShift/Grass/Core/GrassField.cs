@@ -17,7 +17,6 @@ namespace PlayShift.Grass
         private readonly int[] _units;
         private readonly float[] _heightsCm;
         private readonly float[] _cutTime;
-        private readonly int[] _permutation;
         private static int[] s_patchOffsetsX;
         private static int[] s_patchOffsetsZ;
 
@@ -35,6 +34,16 @@ namespace PlayShift.Grass
         private readonly int[] _dirtyQueue;
         private int _dirtyHead, _dirtyCount;
 
+        // Per-tile bookkeeping for gifts: how many cells of each tile are cut, how many cells the tile has (edge tiles
+        // are partial) and a shuffled tile order. Gifts find cut / grown cells through these in O(tiles + tile size)
+        // instead of scanning every cell, so a gift costs the same on a 1M or 2M lawn (a few KB, not 4 B per target).
+        private readonly int[] _tileCut;
+        private readonly int[] _tileCells;
+        private readonly int[] _tileOrder;
+
+        /// <summary>Patches tried before a gift falls back to whole tiles (keeps the cost bounded with scattered cuts).</summary>
+        private const int MaxPatchRounds = 8;
+
         /// <summary>Tiles are TileSize x TileSize cells (32 x 32 = 1.6 m at 5 cm cells).</summary>
         public const int TileShift = 5;
         public const int TileSize = 1 << TileShift;
@@ -49,11 +58,20 @@ namespace PlayShift.Grass
             _units = new int[n];
             _heightsCm = new float[n];
             _cutTime = new float[n];
-            _permutation = new int[n];
             TilesX = (layout.CellsX + TileSize - 1) >> TileShift;
             TilesZ = (layout.CellsZ + TileSize - 1) >> TileShift;
-            _tileDirty = new bool[TilesX * TilesZ];
-            _dirtyQueue = new int[TilesX * TilesZ];
+            int tiles = TilesX * TilesZ;
+            _tileDirty = new bool[tiles];
+            _dirtyQueue = new int[tiles];
+            _tileCut = new int[tiles];
+            _tileCells = new int[tiles];
+            _tileOrder = new int[tiles];
+            for (int t = 0; t < tiles; t++)
+            {
+                int w = Math.Min(TileSize, layout.CellsX - ((t % TilesX) << TileShift));
+                int h = Math.Min(TileSize, layout.CellsZ - ((t / TilesX) << TileShift));
+                _tileCells[t] = w * h;
+            }
             EnsurePatchOffsets();
         }
 
@@ -129,11 +147,12 @@ namespace PlayShift.Grass
             _rng = new GrassRandom(seed);
 
             int n = _units.Length;
-            for (int i = 0; i < n; i++) _permutation[i] = i;
-            for (int i = n - 1; i > 0; i--)
+            int tiles = _tileOrder.Length;
+            for (int t = 0; t < tiles; t++) _tileOrder[t] = t;
+            for (int t = tiles - 1; t > 0; t--)
             {
-                int j = _rng.NextInt(i + 1);
-                int t = _permutation[i]; _permutation[i] = _permutation[j]; _permutation[j] = t;
+                int j = _rng.NextInt(t + 1);
+                int s = _tileOrder[t]; _tileOrder[t] = _tileOrder[j]; _tileOrder[j] = s;
             }
 
             long baseUnits = level.StartingUnits / n;
@@ -143,8 +162,13 @@ namespace PlayShift.Grass
             _maxUnitsPerCell = (int)Math.Max(_baseUnitsPerCell + 1L, (long)_baseUnitsPerCell * _layout.MaxUnitsPerCellMultiplier);
 
             for (int i = 0; i < n; i++) _units[i] = (int)baseUnits;
-            // Spread the remainder over random cells so the total is exact: e.g. 1,000,000 over 333x333 cells.
-            for (int k = 0; k < remainder; k++) _units[_permutation[k]] += 1;
+            // Spread the remainder over scattered distinct cells so the total is exact: e.g. 1,000,000 over 333x333
+            // cells. k -> (k * step + offset) mod n visits distinct cells when step and n share no factor.
+            long step = 1_000_003L;
+            while (Gcd(step, n) != 1) step += 2;
+            long start = _rng.NextInt(n);
+            for (long k = 0; k < remainder; k++) _units[(int)((k * step + start) % n)] += 1;
+            RecountTiles();
 
             HeightBonusCm = 0f;
             for (int i = 0; i < n; i++) _heightsCm[i] = SampleHeightCm(i % _layout.CellsX, i / _layout.CellsX);
@@ -213,6 +237,7 @@ namespace PlayShift.Grass
                     _units[i] = 0;
                     _cutTime[i] = Clock;
                     removed += u;
+                    _tileCut[(cz >> TileShift) * TilesX + (cx >> TileShift)]++;
                     MarkCellDirty(cx, cz);
                 }
             }
@@ -235,34 +260,22 @@ namespace PlayShift.Grass
             if (IsCleared || _level == null || amount <= 0) return 0;
             long left = amount;
 
-            int centre = FindRandomCell(cutCells: true);
-            if (centre >= 0)
+            // Regrow cut cells as round patches around random cut cells (then whole tiles if cuts are scattered).
+            left = Spend(left, cutCells: true, (cell, budget) =>
             {
-                left = VisitPatch(centre, left, (cell, budget) =>
-                {
-                    if (_units[cell] != 0) return 0;
-                    int add = (int)Math.Min(budget, _baseUnitsPerCell);
-                    _units[cell] = add;
-                    _heightsCm[cell] = SampleHeightCm(cell % _layout.CellsX, cell / _layout.CellsX);
-                    return add;
-                });
-                // Patch exhausted but cut cells remain elsewhere: scan the rest of the lawn.
-                left = VisitAll(left, (cell, budget) =>
-                {
-                    if (_units[cell] != 0) return 0;
-                    int add = (int)Math.Min(budget, _baseUnitsPerCell);
-                    _units[cell] = add;
-                    _heightsCm[cell] = SampleHeightCm(cell % _layout.CellsX, cell / _layout.CellsX);
-                    return add;
-                });
-            }
+                if (_units[cell] != 0) return 0;
+                int add = (int)Math.Min(budget, _baseUnitsPerCell);
+                _units[cell] = add;
+                _heightsCm[cell] = SampleHeightCm(cell % _layout.CellsX, cell / _layout.CellsX);
+                _tileCut[TileOf(cell)]--;
+                return add;
+            });
 
-            // Whole lawn grown: make it denser, one base-sized layer per pass so it thickens evenly,
-            // never beyond the cap.
+            // Whole lawn grown: make it denser, one base-sized layer per pass, never beyond the cap.
             while (left > 0)
             {
                 long before = left;
-                left = VisitAll(left, (cell, budget) =>
+                left = VisitTiles(left, cutCells: false, (cell, budget) =>
                 {
                     int room = _maxUnitsPerCell - _units[cell];
                     if (room <= 0) return 0;
@@ -295,16 +308,11 @@ namespace PlayShift.Grass
                 if (u == 0) return 0;
                 int t = (int)Math.Min(budget, u);
                 _units[cell] = u - t;
-                if (u - t == 0) _cutTime[cell] = Clock;
+                if (u - t == 0) { _cutTime[cell] = Clock; _tileCut[TileOf(cell)]++; }
                 return t;
             };
 
-            int centre = FindRandomCell(cutCells: false);
-            if (centre >= 0)
-            {
-                left = VisitPatch(centre, left, take);
-                left = VisitAll(left, take);
-            }
+            left = Spend(left, cutCells: false, take);
 
             long removed = amount - left;
             if (removed == 0) return 0;
@@ -401,6 +409,108 @@ namespace PlayShift.Grass
                 destination[i] = _units[i] > 0 ? GetHeightCm(i) * 0.01f : 0f;
         }
 
+        // ------------------------------------------------------------------ save / load
+
+        private const uint SaveMagic = 0x53534750; // "PGSS"
+        private const int SaveVersion = 1;
+
+        /// <summary>
+        /// Writes which grass is left: per-cell units run-length encoded (cut areas are contiguous, so a mowed
+        /// million-target lawn is typically tens of KB), plus the counters and gift height bonus. Heights are not
+        /// stored: <see cref="Reset"/> regenerates them exactly from the level and seed.
+        /// </summary>
+        public void WriteState(System.IO.Stream stream)
+        {
+            if (_level == null) throw new InvalidOperationException("No level in progress.");
+            var w = new System.IO.BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+            w.Write(SaveMagic);
+            w.Write(SaveVersion);
+            w.Write(_layout.CellsX); w.Write(_layout.CellsZ);
+            w.Write(_level.DisplayName ?? string.Empty);
+            w.Write(_level.StartingUnits);
+            w.Write(_seed);
+            w.Write(InitialUnits); w.Write(Remaining);
+            w.Write(CutByMower); w.Write(RemovedByGifts); w.Write(AddedByGifts);
+            w.Write(HeightBonusCm);
+            int n = _units.Length, i = 0;
+            while (i < n)
+            {
+                int v = _units[i], run = 1;
+                while (i + run < n && _units[i + run] == v) run++;
+                Write7Bit(w, (uint)v);
+                Write7Bit(w, (uint)run);
+                i += run;
+            }
+            w.Flush();
+        }
+
+        /// <summary>
+        /// Restores a <see cref="WriteState"/> snapshot onto this field. Call after <see cref="Reset"/> with the same
+        /// level and seed (so heights match). Returns false, leaving the field untouched, if the snapshot is for another
+        /// layout, level or seed, or is damaged. GRASS LEFT is recomputed from the cells, so it is always exact.
+        /// </summary>
+        public bool TryReadState(System.IO.Stream stream)
+        {
+            if (_level == null) return false;
+            try
+            {
+                var r = new System.IO.BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+                if (r.ReadUInt32() != SaveMagic || r.ReadInt32() != SaveVersion) return false;
+                if (r.ReadInt32() != _layout.CellsX || r.ReadInt32() != _layout.CellsZ) return false;
+                if (r.ReadString() != (_level.DisplayName ?? string.Empty) || r.ReadInt64() != _level.StartingUnits) return false;
+                if (r.ReadInt32() != _seed) return false;
+                long initial = r.ReadInt64(); r.ReadInt64(); // stored Remaining: recomputed below instead
+                long cut = r.ReadInt64(), removed = r.ReadInt64(), added = r.ReadInt64();
+                float bonus = r.ReadSingle();
+
+                int n = _units.Length;
+                var units = new int[n];
+                int i = 0;
+                long total = 0;
+                while (i < n)
+                {
+                    int v = (int)Read7Bit(r), run = (int)Read7Bit(r);
+                    if (run <= 0 || i + run > n || v < 0) return false;
+                    for (int k = 0; k < run; k++) units[i + k] = v;
+                    total += (long)v * run;
+                    i += run;
+                }
+
+                Array.Copy(units, _units, n);
+                for (int c = 0; c < n; c++) _cutTime[c] = _units[c] == 0 ? -1000f : -1f; // cut long ago: no animation
+                RecountTiles();
+                InitialUnits = initial;
+                Remaining = total;
+                CutByMower = cut; RemovedByGifts = removed; AddedByGifts = added;
+                HeightBonusCm = bonus;
+                IsCleared = Remaining == 0;
+                ResetCount++; // renderer re-uploads everything
+                MarkAllDirty();
+                RemainingChanged?.Invoke(Remaining);
+                return true;
+            }
+            catch (System.IO.EndOfStreamException) { return false; }
+            catch (System.IO.IOException) { return false; }
+        }
+
+        private static void Write7Bit(System.IO.BinaryWriter w, uint v)
+        {
+            while (v >= 0x80) { w.Write((byte)(v | 0x80)); v >>= 7; }
+            w.Write((byte)v);
+        }
+
+        private static uint Read7Bit(System.IO.BinaryReader r)
+        {
+            uint v = 0;
+            for (int shift = 0; shift < 35; shift += 7)
+            {
+                byte b = r.ReadByte();
+                v |= (uint)(b & 0x7F) << shift;
+                if ((b & 0x80) == 0) return v;
+            }
+            throw new System.IO.IOException("Bad varint");
+        }
+
         // ------------------------------------------------------------------ internals
 
         private void ApplyRemoval(long removed)
@@ -428,14 +538,60 @@ namespace PlayShift.Grass
             return min + (max - min) * t;
         }
 
+        private int TileOf(int cell)
+        {
+            int cx = cell % _layout.CellsX, cz = cell / _layout.CellsX;
+            return (cz >> TileShift) * TilesX + (cx >> TileShift);
+        }
+
+        /// <summary>Cells of the tile that are cut (cutCells) or still grown.</summary>
+        private int TileMatches(int tile, bool cutCells) => cutCells ? _tileCut[tile] : _tileCells[tile] - _tileCut[tile];
+
+        private void RecountTiles()
+        {
+            Array.Clear(_tileCut, 0, _tileCut.Length);
+            int cellsX = _layout.CellsX, n = _units.Length;
+            for (int i = 0; i < n; i++)
+                if (_units[i] == 0) _tileCut[((i / cellsX) >> TileShift) * TilesX + ((i % cellsX) >> TileShift)]++;
+        }
+
+        private static long Gcd(long a, long b) { while (b != 0) { long t = a % b; a = b; b = t; } return a; }
+
+        /// <summary>
+        /// Spends a gift's budget as round patches around random matching cells, up to <see cref="MaxPatchRounds"/>
+        /// patches, then whole tiles. Cost is bounded by patches + tiles, never by the number of cells on the lawn.
+        /// </summary>
+        private long Spend(long budget, bool cutCells, Func<int, long, int> visit)
+        {
+            for (int round = 0; round < MaxPatchRounds && budget > 0; round++)
+            {
+                int centre = FindRandomCell(cutCells);
+                if (centre < 0) return budget;
+                budget = VisitPatch(centre, budget, visit);
+            }
+            return VisitTiles(budget, cutCells, visit);
+        }
+
+        /// <summary>A random cut (or grown) cell, found via the per-tile counts: O(tiles + tile size). -1 if none.</summary>
         private int FindRandomCell(bool cutCells)
         {
-            int n = _permutation.Length;
-            int offset = _rng.NextInt(n);
-            for (int k = 0; k < n; k++)
+            int nt = _tileOrder.Length;
+            int offset = _rng.NextInt(nt);
+            for (int k = 0; k < nt; k++)
             {
-                int cell = _permutation[(offset + k) % n];
-                if ((_units[cell] == 0) == cutCells) return cell;
+                int idx = offset + k; if (idx >= nt) idx -= nt;
+                int tile = _tileOrder[idx];
+                if (TileMatches(tile, cutCells) == 0) continue;
+                int cx0 = (tile % TilesX) << TileShift, cz0 = (tile / TilesX) << TileShift;
+                int lo = _rng.NextInt(TileCellCount);
+                for (int j = 0; j < TileCellCount; j++)
+                {
+                    int local = (lo + j) & (TileCellCount - 1);
+                    int cx = cx0 + (local & (TileSize - 1)), cz = cz0 + (local >> TileShift);
+                    if (cx >= _layout.CellsX || cz >= _layout.CellsZ) continue;
+                    int cell = cz * _layout.CellsX + cx;
+                    if ((_units[cell] == 0) == cutCells) return cell;
+                }
             }
             return -1;
         }
@@ -454,16 +610,29 @@ namespace PlayShift.Grass
             return budget;
         }
 
-        private long VisitAll(long budget, Func<int, long, int> visit)
+        /// <summary>
+        /// Visits cells tile by tile (random tile order, skipping tiles with no matching cells) until the budget is
+        /// spent. Returns budget left.
+        /// </summary>
+        private long VisitTiles(long budget, bool cutCells, Func<int, long, int> visit)
         {
             if (budget <= 0) return budget;
-            int n = _permutation.Length;
-            int offset = _rng.NextInt(n);
-            for (int k = 0; k < n && budget > 0; k++)
+            int nt = _tileOrder.Length;
+            int offset = _rng.NextInt(nt);
+            int cellsX = _layout.CellsX, cellsZ = _layout.CellsZ;
+            for (int k = 0; k < nt && budget > 0; k++)
             {
-                int cell = _permutation[(offset + k) % n];
-                int got = visit(cell, budget);
-                if (got != 0) { budget -= got; MarkCellDirty(cell % _layout.CellsX, cell / _layout.CellsX); }
+                int idx = offset + k; if (idx >= nt) idx -= nt;
+                int tile = _tileOrder[idx];
+                if (TileMatches(tile, cutCells) == 0) continue;
+                int cx0 = (tile % TilesX) << TileShift, cz0 = (tile / TilesX) << TileShift;
+                int cx1 = Math.Min(cx0 + TileSize, cellsX), cz1 = Math.Min(cz0 + TileSize, cellsZ);
+                for (int cz = cz0; cz < cz1 && budget > 0; cz++)
+                    for (int cx = cx0; cx < cx1 && budget > 0; cx++)
+                    {
+                        int got = visit(cz * cellsX + cx, budget);
+                        if (got != 0) { budget -= got; MarkCellDirty(cx, cz); }
+                    }
             }
             return budget;
         }

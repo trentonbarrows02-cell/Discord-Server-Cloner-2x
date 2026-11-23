@@ -13,7 +13,7 @@ namespace PlayShift.Grass.Editor
     ///    audio, sky, sun with shadows, perimeter trees) to tune the cutting feel before the full game.
     ///  - Create Level Setup: just the grass system, for an existing scene.
     /// </summary>
-    public static class GrassSetupMenu
+    public static partial class GrassSetupMenu
     {
         private const string AssetFolder = "Assets/PlayShift/Grass/Generated";
         private const string TrimmerModelPath = "Assets/PlayShift/Models/Trimmer.glb";
@@ -40,7 +40,33 @@ namespace PlayShift.Grass.Editor
             Undo.IncrementCurrentGroup();
             int group = Undo.GetCurrentGroup();
 
-            // Lighting: bright daytime sun with soft shadows, cloud sky, light haze.
+            SetUpLighting(sky, fogStart: 60f, fogEnd: 260f);
+
+            // Grass system.
+            var root = new GameObject("GrassTestArea");
+            Undo.RegisterCreatedObjectUndo(root, "Create Grass Test Area");
+            var renderer = root.AddComponent<GrassFieldRenderer>();
+            var manager = root.AddComponent<GrassLevelManager>();
+            root.AddComponent<TikTokGiftReceiver>();
+            var env = new GameObject("Environment").AddComponent<TestAreaEnvironment>();
+            env.transform.SetParent(root.transform, false);
+            Set(manager, "settings", settings);
+            Set(manager, "fieldRenderer", renderer);
+            SetInt(manager, "startLevel", 3);
+            Set(renderer, "grassMaterial", grassMat);
+            Set(env, "manager", manager);
+
+            CreatePlayer(new Vector3(12f, 0f, -1.75f), 0f, clipMat, farClip: 900f);
+
+            Undo.CollapseUndoOperations(group);
+            Selection.activeGameObject = root;
+            Debug.Log("[PlayShift Grass] Test area created. Press Play: hold Left Mouse (or press Space) to run the trimmer, WASD to walk, mouse to look. " +
+                      "Change the level on GrassTestArea > GrassLevelManager > Start Level; quality on GrassFieldRenderer > Quality.", root);
+        }
+
+        /// <summary>Bright daytime sun with soft shadows, cloud sky, linear haze.</summary>
+        private static void SetUpLighting(Material sky, float fogStart, float fogEnd)
+        {
             var sun = SceneComponents<Light>().FirstOrDefault(l => l.type == LightType.Directional);
             if (sun == null)
             {
@@ -61,32 +87,21 @@ namespace PlayShift.Grass.Editor
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;
             RenderSettings.fogColor = new Color(0.81f, 0.88f, 0.94f);
-            RenderSettings.fogStartDistance = 60f;
-            RenderSettings.fogEndDistance = 260f;
+            RenderSettings.fogStartDistance = fogStart;
+            RenderSettings.fogEndDistance = fogEnd;
             DynamicGI.UpdateEnvironment();
             QualitySettings.shadowDistance = Mathf.Max(QualitySettings.shadowDistance, 40f);
+        }
 
-            // Grass system.
-            var root = new GameObject("GrassTestArea");
-            Undo.RegisterCreatedObjectUndo(root, "Create Grass Test Area");
-            var renderer = root.AddComponent<GrassFieldRenderer>();
-            var manager = root.AddComponent<GrassLevelManager>();
-            root.AddComponent<TikTokGiftReceiver>();
-            var env = new GameObject("Environment").AddComponent<TestAreaEnvironment>();
-            env.transform.SetParent(root.transform, false);
-            Set(manager, "settings", settings);
-            Set(manager, "fieldRenderer", renderer);
-            SetInt(manager, "startLevel", 3);
-            Set(renderer, "grassMaterial", grassMat);
-            Set(env, "manager", manager);
-
-            // First-person player: camera + floating trimmer, no body or hands.
+        /// <summary>First-person player: camera + floating trimmer (no body or hands), clippings, audio. Shared by the scenes.</summary>
+        private static GameObject CreatePlayer(Vector3 position, float yaw, Material clipMat, float farClip)
+        {
             foreach (var cam in SceneComponents<Camera>())
                 if (cam.CompareTag("MainCamera")) { Undo.RecordObject(cam.gameObject, "Disable camera"); cam.gameObject.SetActive(false); }
 
             var player = new GameObject("Player");
             Undo.RegisterCreatedObjectUndo(player, "Create Player");
-            player.transform.position = new Vector3(12f, 0f, -1.75f);
+            player.transform.SetPositionAndRotation(position, Quaternion.Euler(0f, yaw, 0f));
             var cc = player.AddComponent<CharacterController>();
             cc.height = 1.8f; cc.radius = 0.3f; cc.center = new Vector3(0f, 0.9f, 0f);
             var camGo = new GameObject("PlayerCamera", typeof(Camera), typeof(AudioListener));
@@ -94,7 +109,7 @@ namespace PlayShift.Grass.Editor
             camGo.transform.SetParent(player.transform, false);
             var camera = camGo.GetComponent<Camera>();
             camera.nearClipPlane = 0.03f;
-            camera.farClipPlane = 900f;
+            camera.farClipPlane = farClip;
             camera.fieldOfView = 68f;
 
             var blades = player.AddComponent<TrimmerBlades>();
@@ -124,11 +139,7 @@ namespace PlayShift.Grass.Editor
             var audio = audioGo.AddComponent<TrimmerAudio>();
             Set(audio, "blades", blades);
             Set(audio, "cutter", cutter);
-
-            Undo.CollapseUndoOperations(group);
-            Selection.activeGameObject = root;
-            Debug.Log("[PlayShift Grass] Test area created. Press Play: hold Left Mouse (or press Space) to run the trimmer, WASD to walk, mouse to look. " +
-                      "Change the level on GrassTestArea > GrassLevelManager > Start Level; quality on GrassFieldRenderer > Quality.", root);
+            return player;
         }
 
         [MenuItem("PlayShift/Grass/Create Level Setup (existing scene)", priority = 1)]

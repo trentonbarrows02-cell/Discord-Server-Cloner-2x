@@ -33,8 +33,12 @@ namespace PlayShift.Grass.Editor
             if (EditorApplication.isPlaying) { new GameObject("CaptureDriver").AddComponent<PlayShift.Grass.Dev.GrassCaptureDriver>(); return; }
             EditorApplication.delayCall += () =>
             {
-                if (EditorSceneManager.GetActiveScene().path != FirstOpenSetup.ScenePath)
-                    EditorSceneManager.OpenScene(FirstOpenSetup.ScenePath);
+                // -captureScene Assets/.../Other.unity to capture/profile another scene (default: the test area).
+                string scenePath = FirstOpenSetup.ScenePath;
+                var args = System.Environment.GetCommandLineArgs();
+                for (int i = 0; i < args.Length - 1; i++) if (args[i] == "-captureScene") scenePath = args[i + 1];
+                if (EditorSceneManager.GetActiveScene().path != scenePath)
+                    EditorSceneManager.OpenScene(scenePath);
                 var gameViewType = typeof(EditorWindow).Assembly.GetType("UnityEditor.GameView");
                 if (gameViewType != null && !Application.isBatchMode)
                 {

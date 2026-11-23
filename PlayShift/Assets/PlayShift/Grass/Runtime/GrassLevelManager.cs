@@ -24,6 +24,12 @@ namespace PlayShift.Grass
         [Min(1)] [SerializeField] private int startLevel = 1;
         [SerializeField] private bool autoStart = true;
 
+        [Header("Save")]
+        [Tooltip("Save which grass has been cut (and the level/timer), and restore it on the next start.")]
+        [SerializeField] private bool saveProgress = true;
+        [Tooltip("Autosave interval in seconds (only when something changed). Also saved on quit.")]
+        [Min(5f)] [SerializeField] private float autosaveSeconds = 20f;
+
         [Header("Events")]
         public LevelStartedEvent onLevelStarted = new LevelStartedEvent();
         public LevelClearedEvent onLevelCleared = new LevelClearedEvent();
@@ -73,8 +79,94 @@ namespace PlayShift.Grass
         {
             fieldRenderer.Bind(Progression.Field);
             hud.Bind(this);
-            if (autoStart) StartLevel(startLevel);
+            if (autoStart && !TryLoadProgress()) StartLevel(startLevel);
         }
+
+        // ------------------------------------------------------------------ save / load
+
+        private const uint SaveMagic = 0x564C5350; // "PSLV"
+        private int _savedVersion = -1;
+        private float _nextAutosave;
+
+        /// <summary>Main-thread ms spent encoding the last save, and its size (profiling).</summary>
+        public float LastSaveMs { get; private set; }
+        public int LastSaveBytes { get; private set; }
+
+        /// <summary>Batch-mode (captures/tests) and disabled saving never touch the save file.</summary>
+        private bool SavingEnabled => saveProgress && !Application.isBatchMode;
+
+        public string SavePath => System.IO.Path.Combine(Application.persistentDataPath, "PlayShiftGrass",
+            "progress_" + UnityEngine.SceneManagement.SceneManager.GetActiveScene().name + ".bin");
+
+        /// <summary>Saves the current level, timer and every cell's state. Encoding is on this thread (a few ms for
+        /// 1M targets); the file write happens on a worker thread so it never stalls a frame.</summary>
+        public void SaveProgress()
+        {
+            if (!SavingEnabled || Progression == null || Progression.State != ProgressionState.Playing || Field.IsCleared) return;
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            var ms = new System.IO.MemoryStream(64 * 1024);
+            using (var w = new System.IO.BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+            {
+                w.Write(SaveMagic);
+                w.Write(Progression.CurrentLevelIndex);
+                w.Write(Progression.ElapsedSeconds);
+            }
+            Field.WriteState(ms);
+            byte[] bytes = ms.ToArray();
+            LastSaveMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
+            LastSaveBytes = bytes.Length;
+            _savedVersion = Field.Version;
+            string path = SavePath;
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try
+                {
+                    System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path));
+                    string tmp = path + ".tmp";
+                    System.IO.File.WriteAllBytes(tmp, bytes);
+                    if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+                    System.IO.File.Move(tmp, path); // never leaves a half-written save
+                }
+                catch (System.Exception e) { Debug.LogWarning("[PlayShift Grass] Could not save progress: " + e.Message); }
+            });
+        }
+
+        /// <summary>Restores saved progress for this scene, if any and if it matches the levels/layout. False = start fresh.</summary>
+        private bool TryLoadProgress()
+        {
+            if (!SavingEnabled || !System.IO.File.Exists(SavePath)) return false;
+            try
+            {
+                using (var fs = System.IO.File.OpenRead(SavePath))
+                using (var r = new System.IO.BinaryReader(fs, System.Text.Encoding.UTF8, leaveOpen: true))
+                {
+                    if (r.ReadUInt32() != SaveMagic) return false;
+                    int level = r.ReadInt32();
+                    double elapsed = r.ReadDouble();
+                    if (level < 0 || level >= Progression.LevelCount) return false;
+                    Progression.StartLevel(level);
+                    if (!Field.TryReadState(fs)) { Debug.LogWarning("[PlayShift Grass] Saved progress does not match this field; starting fresh."); return false; }
+                    Progression.RestoreElapsed(elapsed);
+                    _savedVersion = Field.Version;
+                    Debug.Log($"[PlayShift Grass] Progress restored: level {level + 1}, {Field.Remaining:N0} grass left.");
+                    return true;
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning("[PlayShift Grass] Could not load progress (" + e.Message + "); starting fresh.");
+                return false;
+            }
+        }
+
+        private void LateUpdate()
+        {
+            if (!SavingEnabled || Progression == null || Time.unscaledTime < _nextAutosave) return;
+            _nextAutosave = Time.unscaledTime + autosaveSeconds;
+            if (Field != null && Field.Version != _savedVersion) SaveProgress();
+        }
+
+        private void OnApplicationQuit() => SaveProgress();
 
         private void OnDestroy()
         {

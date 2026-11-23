@@ -45,10 +45,12 @@ namespace PlayShift.Grass
 
         [Header("Quality")]
         [SerializeField] private GrassQuality quality = GrassQuality.High;
-        [SerializeField] private QualityPreset low = new QualityPreset { bladesPerSquareMeter = 380, fullDetailDistance = 9f, midDetailDistance = 22f, maxDrawDistance = 90f, shadowCastDistance = 0f };
-        [SerializeField] private QualityPreset medium = new QualityPreset { bladesPerSquareMeter = 600, fullDetailDistance = 12f, midDetailDistance = 30f, maxDrawDistance = 120f, shadowCastDistance = 7f };
-        [SerializeField] private QualityPreset high = new QualityPreset { bladesPerSquareMeter = 950, fullDetailDistance = 16f, midDetailDistance = 40f, maxDrawDistance = 160f, shadowCastDistance = 12f };
-        [SerializeField] private QualityPreset ultra = new QualityPreset { bladesPerSquareMeter = 1500, fullDetailDistance = 24f, midDetailDistance = 55f, maxDrawDistance = 200f, shadowCastDistance = 20f };
+        // Blades are drawn only near the camera; beyond maxDrawDistance they fade into the ground shader
+        // (PlayShift/GrassGround), which shows grown/cut grass from the same cell data at almost no cost.
+        [SerializeField] private QualityPreset low = new QualityPreset { bladesPerSquareMeter = 380, fullDetailDistance = 8f, midDetailDistance = 18f, maxDrawDistance = 32f, shadowCastDistance = 0f };
+        [SerializeField] private QualityPreset medium = new QualityPreset { bladesPerSquareMeter = 600, fullDetailDistance = 10f, midDetailDistance = 22f, maxDrawDistance = 42f, shadowCastDistance = 6f };
+        [SerializeField] private QualityPreset high = new QualityPreset { bladesPerSquareMeter = 950, fullDetailDistance = 13f, midDetailDistance = 28f, maxDrawDistance = 55f, shadowCastDistance = 10f };
+        [SerializeField] private QualityPreset ultra = new QualityPreset { bladesPerSquareMeter = 1500, fullDetailDistance = 18f, midDetailDistance = 38f, maxDrawDistance = 75f, shadowCastDistance = 16f };
         [Range(0.05f, 1f)] [SerializeField] private float midDetailFraction = 0.45f;
         [Range(0.02f, 1f)] [SerializeField] private float farDetailFraction = 0.2f;
 
@@ -77,6 +79,7 @@ namespace PlayShift.Grass
         private int _builtCellsX, _builtCellsZ, _builtBladesPerM2 = -1;
         private float _builtSizeX, _builtSizeZ, _builtChunkMeters;
         private int _seenResetCount = -1;
+        private int _chunksX, _chunksZ;
         private long _totalBlades;
         private bool _ownsMaterial;
 
@@ -101,6 +104,9 @@ namespace PlayShift.Grass
         private static readonly int CuttersId = Shader.PropertyToID("_Cutters");
         private static readonly int CutterCountId = Shader.PropertyToID("_CutterCount");
         private static readonly int SpinId = Shader.PropertyToID("_Spin");
+        private static readonly int FieldSizeId = Shader.PropertyToID("_FieldSize");
+        private static readonly int WorldToFieldId = Shader.PropertyToID("_WorldToField");
+        private static readonly int GrassFadeId = Shader.PropertyToID("_GrassFade");
 
         public GrassField Field => _field;
         /// <summary>Blades the whole field has at full detail for the current quality (before the level's density).</summary>
@@ -186,9 +192,15 @@ namespace PlayShift.Grass
             _builtCellsX = layout.CellsX;
             _builtCellsZ = layout.CellsZ;
 
+            var grid = new Vector4(layout.CellsX, layout.CellsZ, 1f / layout.CellSizeX, 1f / layout.CellSizeZ);
             grassMaterial.SetBuffer(CellsId, _cellBuffer);
-            grassMaterial.SetVector(CellGridId, new Vector4(layout.CellsX, layout.CellsZ, 1f / layout.CellSizeX, 1f / layout.CellSizeZ));
+            grassMaterial.SetVector(CellGridId, grid);
             grassMaterial.SetFloat(TilesXId, _field.TilesX);
+            // Also global, for the ground shader (PlayShift/GrassGround) that shades distant/cut grass from the same data.
+            Shader.SetGlobalBuffer(CellsId, _cellBuffer);
+            Shader.SetGlobalVector(CellGridId, grid);
+            Shader.SetGlobalFloat(TilesXId, _field.TilesX);
+            Shader.SetGlobalVector(FieldSizeId, new Vector4(layout.SizeX, layout.SizeZ, 0f, 0f));
         }
 
         /// <summary>Chunk rectangles + blade counts. Tiny CPU-side table; rebuilt when size, chunking or quality change.</summary>
@@ -205,6 +217,8 @@ namespace PlayShift.Grass
             int chunksX = Mathf.CeilToInt(sizeX / chunkMeters);
             int chunksZ = Mathf.CeilToInt(sizeZ / chunkMeters);
             _chunks = new Chunk[chunksX * chunksZ];
+            _chunksX = chunksX;
+            _chunksZ = chunksZ;
             _totalBlades = 0;
             for (int kz = 0; kz < chunksZ; kz++)
                 for (int kx = 0; kx < chunksX; kx++)
@@ -282,6 +296,11 @@ namespace PlayShift.Grass
             grassMaterial.SetVector(HeightClampId, new Vector4(minM, maxM, 0f, 0f));
             grassMaterial.SetFloat(HeightBonusId, _field.HeightBonusCm * 0.01f);
             grassMaterial.SetFloat(GrassTimeId, _field.Clock);
+            // Globals for the ground shader + the blade distance fade (blades sink into the ground-shaded grass).
+            var q = Q;
+            Shader.SetGlobalFloat(GrassTimeId, _field.Clock);
+            Shader.SetGlobalMatrix(WorldToFieldId, transform.worldToLocalMatrix);
+            Shader.SetGlobalVector(GrassFadeId, new Vector4(q.maxDrawDistance * 0.72f, q.maxDrawDistance, 0f, 0f));
 
             // Cutting heads bend the grass around them (GPU only; no per-blade physics).
             int n = 0;
@@ -316,9 +335,23 @@ namespace PlayShift.Grass
             int layer = gameObject.layer;
             int drawn = 0, calls = 0;
 
-            for (int i = 0; i < _chunks.Length; i++)
+            // Only the chunks within draw distance of the camera are visited (O(visible), not O(field)): on a big
+            // map most of the field is drawn by the ground shader, not by blades.
+            int x0 = 0, z0 = 0, x1 = _chunksX - 1, z1 = _chunksZ - 1;
+            if (cull)
             {
-                ref Chunk c = ref _chunks[i];
+                Vector3 local = transform.InverseTransformPoint(camPos);
+                float reach = q.maxDrawDistance + tallest;
+                x0 = Mathf.Max(0, Mathf.FloorToInt((local.x - reach) / chunkMeters));
+                x1 = Mathf.Min(_chunksX - 1, Mathf.FloorToInt((local.x + reach) / chunkMeters));
+                z0 = Mathf.Max(0, Mathf.FloorToInt((local.z - reach) / chunkMeters));
+                z1 = Mathf.Min(_chunksZ - 1, Mathf.FloorToInt((local.z + reach) / chunkMeters));
+            }
+
+            for (int kz = z0; kz <= z1; kz++)
+            for (int kx = x0; kx <= x1; kx++)
+            {
+                ref Chunk c = ref _chunks[kz * _chunksX + kx];
 
                 var localBounds = new Bounds();
                 localBounds.SetMinMax(c.LocalMin - new Vector3(tallest, 0f, tallest), c.LocalMax + new Vector3(tallest, tallest, tallest));

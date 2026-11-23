@@ -35,6 +35,37 @@ namespace PlayShift.Grass.Tests
         }
 
         [Fact]
+        public void AddGrass_ScatteredCuts_AllRegrownThroughTileFallback()
+        {
+            var p = Playing();
+            var f = p.Field;
+            // Many small cuts all over the lawn: patches alone cannot reach them all (more than MaxPatchRounds).
+            for (int i = 0; i < 60; i++) f.CutCircle(2f + (i * 7.3f) % 46f, 2f + (i * 3.1f) % 46f, 0.4f);
+            long missing = f.InitialUnits - f.Remaining;
+            Assert.True(missing > 0);
+
+            long added = p.AddGrass(missing);
+            Assert.Equal(missing, added);
+            Assert.Equal(f.InitialUnits, f.Remaining);
+            Assert.Equal(f.Remaining, SumUnits(f));
+            for (int i = 0; i < f.CellCount; i++) Assert.False(f.IsCellCut(i));
+        }
+
+        [Fact]
+        public void RemoveThenAdd_Repeatedly_CounterStaysExact()
+        {
+            var p = Playing();
+            var f = p.Field;
+            for (int round = 0; round < 20; round++)
+            {
+                p.RemoveGrass(25_000);
+                f.CutCapsule(5f, 5f + round, 40f, 5f + round, 0.65f);
+                p.AddGrass(25_000);
+                Assert.Equal(f.Remaining, SumUnits(f));
+            }
+        }
+
+        [Fact]
         public void AddGrass_OnUncutLawn_ThickensUpToCap()
         {
             var p = Playing();

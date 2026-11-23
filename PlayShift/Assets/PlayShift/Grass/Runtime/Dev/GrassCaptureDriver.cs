@@ -125,6 +125,38 @@ namespace PlayShift.Grass.Dev
                 Step("frame times measured");
             }
 
+            // Big-map numbers: targets, logic memory, cutting cost, save cost.
+            {
+                var layout = field.Layout;
+                long cells = (long)layout.CellsX * layout.CellsZ;
+                _report.AppendLine($"Field {layout.SizeX:0} x {layout.SizeZ:0} m, {layout.CellsX} x {layout.CellsZ} cells = {cells:N0} targets " +
+                                   $"({cells / (layout.SizeX * layout.SizeZ):0} per m2, cell {layout.CellSizeX * 100f:0.#} cm); " +
+                                   $"logic memory {cells * 12 / 1048576.0:F1} MB (units, height, cut time: 12 B/target); " +
+                                   $"{field.TileCount:N0} data tiles of {GrassField.TileSize}x{GrassField.TileSize} cells");
+                // Cutting cost: 2000 swept-capsule cuts (trimmer radius, one frame of walking) at random places, on a
+                // separate copy of the field (same layout/level/seed) so the live lawn in the screenshots is untouched.
+                var bench = new GrassField(layout);
+                bench.Reset(field.Level, manager.Settings.seed);
+                var rng = new System.Random(5);
+                long remainingBefore = bench.Remaining, cutUnits = 0;
+                var sw = Stopwatch.StartNew();
+                for (int i = 0; i < 2000; i++)
+                {
+                    float x = (float)rng.NextDouble() * layout.SizeX, z = (float)rng.NextDouble() * layout.SizeZ;
+                    cutUnits += bench.CutCapsule(x, z, x + 0.04f, z + 0.03f, 0.65f);
+                }
+                double perCutUs = sw.Elapsed.TotalMilliseconds * 1000.0 / 2000;
+                _report.AppendLine($"Cutting: {perCutUs:F1} us per trimmer sweep (r 0.65 m), {cutUnits:N0} targets cut by 2000 sweeps, " +
+                                   $"counter exact: {(remainingBefore - bench.Remaining == cutUnits ? "yes" : "NO")}");
+                bench = null;
+                // Save: encode the whole field state (what autosave does on the main thread; the disk write is async).
+                sw.Restart();
+                byte[] save;
+                using (var ms = new MemoryStream()) { field.WriteState(ms); save = ms.ToArray(); }
+                _report.AppendLine($"Save: {sw.Elapsed.TotalMilliseconds:F1} ms to encode, {save.Length / 1024.0:F0} KB");
+                yield return null;
+            }
+
             long before = field.Remaining;
             _report.AppendLine("Remaining before walk: " + before.ToString("N0"));
 
@@ -237,6 +269,24 @@ namespace PlayShift.Grass.Dev
                                    $"max {giftMaxMs:F2} ms; uploads max {burstMaxTiles} tiles/frame ({burstMaxTiles * 8} KB, cap 128); " +
                                    $"grass CPU max {burstMaxCpu:F3} ms; backlog after burst {backlog} tiles");
                 yield return Shot("07_after_gift_burst");
+            }
+
+            // Aerial overview of the whole map (distant grass is ground-shaded from the same cell data).
+            {
+                var layout = field.Layout;
+                var over = new GameObject("OverviewCam").AddComponent<Camera>();
+                over.CopyFrom(fp.Camera);
+                over.targetTexture = _rt;
+                over.fieldOfView = 55f;
+                Vector3 centre = manager.FieldTransform.position + new Vector3(layout.SizeX * 0.5f, 0f, layout.SizeZ * 0.5f);
+                float span = Mathf.Max(layout.SizeX, layout.SizeZ);
+                over.transform.position = centre + new Vector3(-span * 0.55f, span * 0.75f, -span * 0.75f);
+                over.transform.LookAt(centre);
+                var playerCam = _cam;
+                _cam = over;
+                yield return Shot("12_overview");
+                _cam = playerCam;
+                Destroy(over.gameObject);
             }
 
             _report.AppendLine("Errors/exceptions logged during capture: " + _errors);

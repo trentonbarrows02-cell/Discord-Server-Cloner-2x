@@ -28,6 +28,8 @@ float _ChunkSeed;
 
 float4x4 _FieldToWorld;
 float _LodWidthScale;
+float4 _GrassFade;                  // global: x = blade fade start, y = blade draw end (m from camera); the ground
+                                    // shader (GrassGround) shows grown grass beyond, from the same cell data
 float4 _HeightClamp;                // x = min, y = max (metres)
 float _GrassTime;                   // same clock the logic stamps cut times with
 float _CutAnim;                     // seconds for a cut blade to shorten
@@ -111,6 +113,9 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
     float ease = 1.0 - pow(1.0 - k, 3.0);
     float stub = _StubbleHeight * (0.65 + 0.7 * r5);
     float h = lerp(full, stub, ease);
+    // Distance fade: blades sink smoothly into the ground-shaded grass before the draw distance (no hard edge).
+    if (_GrassFade.y > 0.0)
+        h *= 1.0 - smoothstep(_GrassFade.x, _GrassFade.y, distance(root.xz, _WorldSpaceCameraPos.xz));
 
     float tall = smoothstep(0.12, 1.5, full) * (1.0 - ease);
     float facing = r2 * 6.2831853;

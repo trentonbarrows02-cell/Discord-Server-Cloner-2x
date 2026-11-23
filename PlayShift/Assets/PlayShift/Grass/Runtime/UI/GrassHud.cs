@@ -353,7 +353,7 @@ namespace PlayShift.Grass
 
             // Gift popup under the counter: "-25,000" (+ the gifter's name), same style. Stacks repeat gifts from the
             // same viewer while it is up; punches in, holds, fades. Only rebuilt when a gift arrives.
-            _giftPopup = GrassUiFactory.Place(GrassUiFactory.Rect("GiftPopup", _root), new Vector2(0.5f, 1f), new Vector2(0f, -250f), new Vector2(1000f, 180f));
+            _giftPopup = GrassUiFactory.Place(GrassUiFactory.Rect("GiftPopup", _root), new Vector2(0.5f, 1f), new Vector2(0f, -250f), new Vector2(1000f, 200f));
             _giftPopupGroup = _giftPopup.gameObject.AddComponent<CanvasGroup>();
             _giftPopupGroup.alpha = 0f;
             _giftPopupGroup.blocksRaycasts = false;
@@ -361,7 +361,7 @@ namespace PlayShift.Grass
             _giftPopupAmount = HudText("GiftAmount", _giftPopup, string.Empty, 96f, CounterGreen, CounterMaterial, 10f);
             GrassUiFactory.Place(_giftPopupAmount.rectTransform, new Vector2(0.5f, 1f), Vector2.zero, new Vector2(1000f, 110f));
             _giftPopupUser = HudText("GiftUser", _giftPopup, string.Empty, 50f, Ink, LabelMaterial, 10f);
-            GrassUiFactory.Place(_giftPopupUser.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -104f), new Vector2(1000f, 64f));
+            GrassUiFactory.Place(_giftPopupUser.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -126f), new Vector2(1000f, 64f)); // below the amount and its drop shadow
 
             // Level / height / timer, top left, no box.
             var info = GrassUiFactory.Rect("LevelInfo", _root);
@@ -387,10 +387,13 @@ namespace PlayShift.Grass
             t.outlineColor = color;
         }
 
-        /// <summary>HUD text in the chunky HUD font with a shared outline+shadow material (falls back to TMP's default font).</summary>
+        /// <summary>
+        /// HUD text with a shared outline+shadow material (falls back to TMP's default font). The Counter preset uses the
+        /// number font (counter, gift amounts); every other preset uses the HUD font (GRASS LEFT, titles, names).
+        /// </summary>
         internal static TextMeshProUGUI HudText(string name, Transform parent, string text, float size, Color color, Material preset, float spacing)
         {
-            var font = CounterFont;
+            var font = preset != null && preset == CounterMaterial ? NumberFont : CounterFont;
             var t = GrassUiFactory.Text(name, parent, text, size, color, TextAlignmentOptions.Center, font != null ? FontStyles.Normal : FontStyles.Bold);
             t.characterSpacing = spacing;
             if (font != null && preset != null)
@@ -402,13 +405,22 @@ namespace PlayShift.Grass
             return t;
         }
 
-        private static Material s_labelMaterial, s_counterMaterial;
+        private static Material s_labelMaterial, s_counterMaterial, s_greenMaterial;
         internal static Material LabelMaterial =>
             s_labelMaterial != null ? s_labelMaterial : (s_labelMaterial = Resources.Load<Material>("PlayShiftFonts/HudFont SDF - Label"));
+        /// <summary>Green-on-green numbers style on the number font (counter, gift amounts).</summary>
         internal static Material CounterMaterial =>
-            s_counterMaterial != null ? s_counterMaterial : (s_counterMaterial = Resources.Load<Material>("PlayShiftFonts/HudFont SDF - Counter"));
+            s_counterMaterial != null ? s_counterMaterial : (s_counterMaterial = Resources.Load<Material>("PlayShiftFonts/NumberFont SDF - Counter"));
+        /// <summary>Same green style on the HUD font (the GRASS title).</summary>
+        internal static Material GreenMaterial =>
+            s_greenMaterial != null ? s_greenMaterial : (s_greenMaterial = Resources.Load<Material>("PlayShiftFonts/HudFont SDF - Green"));
 
-        private static TMP_FontAsset s_counterFont;
+        private static TMP_FontAsset s_counterFont, s_numberFont;
+
+        /// <summary>Number font (SDF) for the counter and gift amounts; falls back to the HUD font.</summary>
+        internal static TMP_FontAsset NumberFont =>
+            s_numberFont != null ? s_numberFont
+                : (s_numberFont = Resources.Load<TMP_FontAsset>("PlayShiftFonts/NumberFont SDF")) != null ? s_numberFont : CounterFont;
 
         /// <summary>HUD font (SDF), built by PlayShift > Grass > Rebuild HUD Font. Null falls back to TMP's default font.</summary>
         private static TMP_FontAsset CounterFont =>

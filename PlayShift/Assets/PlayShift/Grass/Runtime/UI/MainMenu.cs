@@ -129,7 +129,7 @@ namespace PlayShift.Grass
             // Title: CUT THE / GRASS, stacked, chunky HUD font.
             var top = GrassHud.HudText("TitleTop", rt, "CUT THE", 120f, Color.white, GrassHud.LabelMaterial, 10f);
             GrassUiFactory.Place(top.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 560f), new Vector2(1000f, 150f));
-            var big = GrassHud.HudText("TitleGrass", rt, "GRASS", 230f, GrassHud.CounterGreen, GrassHud.CounterMaterial, 14f);
+            var big = GrassHud.HudText("TitleGrass", rt, "GRASS", 230f, GrassHud.CounterGreen, GrassHud.GreenMaterial, 14f);
             GrassUiFactory.Place(big.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 380f), new Vector2(1000f, 260f));
 
             _playLabel = MenuButton(rt, "PLAY", PlayColor, 80f, new Vector2(0f, 60f), new Vector2(560f, 170f), Play);

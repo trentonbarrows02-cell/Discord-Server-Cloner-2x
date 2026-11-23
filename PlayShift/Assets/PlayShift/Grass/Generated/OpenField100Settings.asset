@@ -1,0 +1,108 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5afe69ab2b61b6f468f77f8d8c6dc0d5, type: 3}
+  m_Name: OpenField100Settings
+  m_EditorClassIdentifier: Assembly-CSharp::PlayShift.Grass.GrassProgressionSettings
+  levels:
+  - displayName: Level 1
+    minHeightCm: 15
+    maxHeightCm: 25
+    startingUnits: 1000000
+    bladeDensity: 0.62
+  - displayName: Level 2
+    minHeightCm: 35
+    maxHeightCm: 50
+    startingUnits: 1000000
+    bladeDensity: 0.72
+  - displayName: Level 3
+    minHeightCm: 60
+    maxHeightCm: 80
+    startingUnits: 1000000
+    bladeDensity: 0.82
+  - displayName: Level 4
+    minHeightCm: 90
+    maxHeightCm: 110
+    startingUnits: 1000000
+    bladeDensity: 0.92
+  - displayName: Level 5
+    minHeightCm: 120
+    maxHeightCm: 150
+    startingUnits: 1000000
+    bladeDensity: 1
+  fieldSizeMeters: {x: 100, y: 100}
+  cellCount: {x: 1000, y: 1000}
+  absoluteMaxHeightCm: 220
+  maxUnitsPerCellMultiplier: 4
+  heightNoiseCells: 40
+  seed: 1234
+  ignoreStreakInProgress: 1
+  giftRules:
+  - giftName: Rose
+    action: 0
+    amount: 2500
+    scaleByRepeatCount: 1
+    durationSeconds: 10
+  - giftName: Finger Heart
+    action: 0
+    amount: 10000
+    scaleByRepeatCount: 1
+    durationSeconds: 10
+  - giftName: Doughnut
+    action: 0
+    amount: 50000
+    scaleByRepeatCount: 1
+    durationSeconds: 10
+  - giftName: TikTok
+    action: 1
+    amount: 5000
+    scaleByRepeatCount: 1
+    durationSeconds: 10
+  - giftName: GG
+    action: 1
+    amount: 5000
+    scaleByRepeatCount: 1
+    durationSeconds: 10
+  - giftName: Ice Cream Cone
+    action: 1
+    amount: 15000
+    scaleByRepeatCount: 1
+    durationSeconds: 10
+  - giftName: Perfume
+    action: 2
+    amount: 5
+    scaleByRepeatCount: 1
+    durationSeconds: 10
+  - giftName: Galaxy
+    action: 2
+    amount: 20
+    scaleByRepeatCount: 1
+    durationSeconds: 10
+  - giftName: Hand Hearts
+    action: 3
+    amount: 0.5
+    scaleByRepeatCount: 1
+    durationSeconds: 15
+  - giftName: Sunglasses
+    action: 4
+    amount: 0.6
+    scaleByRepeatCount: 1
+    durationSeconds: 15
+  - giftName: Snail
+    action: 5
+    amount: 0.4
+    scaleByRepeatCount: 1
+    durationSeconds: 10
+  - giftName: Corgi
+    action: 6
+    amount: 1
+    scaleByRepeatCount: 1
+    durationSeconds: 20

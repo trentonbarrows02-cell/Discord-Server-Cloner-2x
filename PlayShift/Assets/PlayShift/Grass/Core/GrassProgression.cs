@@ -103,6 +103,12 @@ namespace PlayShift.Grass
 
         public void RestartCampaign() => StartLevel(0);
 
+        /// <summary>Restores the level timer after loading saved progress.</summary>
+        public void RestoreElapsed(double seconds)
+        {
+            if (State == ProgressionState.Playing) ElapsedSeconds = Math.Max(0, seconds);
+        }
+
         public void Tick(double deltaSeconds)
         {
             if (State == ProgressionState.Playing && deltaSeconds > 0) ElapsedSeconds += deltaSeconds;
