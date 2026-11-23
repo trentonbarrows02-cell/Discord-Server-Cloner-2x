@@ -41,6 +41,24 @@ namespace PlayShift.Grass.Editor
             BuildTestScene(askToSave: false);
         }
 
+        /// <summary>
+        /// For command-line setup: Unity.exe -batchmode -quit -projectPath PlayShift
+        ///   -executeMethod PlayShift.Grass.Editor.FirstOpenSetup.BuildForBatch -logFile setup.log
+        /// Builds and saves the test scene; exits with code 1 (and logs why) if the trimmer model or shaders are missing.
+        /// </summary>
+        public static void BuildForBatch()
+        {
+            bool ok = true;
+            if (AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PlayShift/Models/Trimmer.glb") == null)
+            { Debug.LogError("[PlayShift Grass] Trimmer.glb did not import (is glTFast installed?)."); ok = false; }
+            foreach (var name in new[] { GrassFieldRenderer.DefaultShaderName, "PlayShift/SkyClouds" })
+                if (Shader.Find(name) == null) { Debug.LogError($"[PlayShift Grass] Shader '{name}' missing or failed to compile."); ok = false; }
+            BuildTestScene(askToSave: false);
+            if (!File.Exists(ScenePath)) { Debug.LogError("[PlayShift Grass] Test scene was not saved."); ok = false; }
+            Debug.Log(ok ? "[PlayShift Grass] BATCH SETUP OK" : "[PlayShift Grass] BATCH SETUP FAILED");
+            if (Application.isBatchMode) EditorApplication.Exit(ok ? 0 : 1);
+        }
+
         [MenuItem("PlayShift/Grass/Rebuild Test Scene", priority = 10)]
         public static void RebuildFromMenu() => BuildTestScene(askToSave: true);
 
