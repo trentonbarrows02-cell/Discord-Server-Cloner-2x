@@ -15,3 +15,8 @@ Tests~/**/obj/
 *.slnx
 .vsconfig
 .vs/
+# Progress screenshots / clips from PlayShift > Grass > Capture
+/[Cc]aptures/
+# Unity crash-recovery scene backups
+/[Aa]ssets/_Recovery/
+/[Aa]ssets/_Recovery.meta

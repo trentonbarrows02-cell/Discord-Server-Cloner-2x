@@ -33,11 +33,14 @@ namespace PlayShift.Grass
 
         private AudioSource _out;
         private AudioSource _motorLoop, _cutLight, _cutThick, _oneShots;
+        private GameObject _clipHost;
         private bool _wasOn;
         private float _clipCooldown;
 
         // Audio-thread state (written on the main thread, read in OnAudioFilterRead).
         private volatile float _rpm, _load, _cutRate;
+        // UnityEngine.Object comparisons (clip == null) are main-thread only in Unity 6, so resolve these in Update.
+        private volatile bool _synthMotorActive, _synthCutActive;
         private double _phase;
         private float _noiseLp, _noiseBp, _cutEnv, _motorEnv;
         private uint _rng = 22222u;
@@ -48,6 +51,7 @@ namespace PlayShift.Grass
             if (blades == null) blades = GetComponentInParent<TrimmerBlades>();
             if (cutter == null) cutter = GetComponentInParent<GrassCutter>();
             _sampleRate = AudioSettings.outputSampleRate;
+            UpdateSynthFlags();
             _out = GetComponent<AudioSource>();
             _out.playOnAwake = true;
             _out.loop = true;
@@ -57,10 +61,14 @@ namespace PlayShift.Grass
             if (_out.clip == null) _out.clip = AudioClip.Create("TrimmerSynth", _sampleRate, 1, _sampleRate, false);
             _out.Play();
 
+            // Extra sources live on a child: a GameObject with OnAudioFilterRead may only have one AudioSource.
+            _clipHost = new GameObject("TrimmerAudioClips");
+            _clipHost.transform.SetParent(transform, false);
             _motorLoop = MakeLoop(motorLoopClip);
             _cutLight = MakeLoop(cutLightLoopClip);
             _cutThick = MakeLoop(cutThickLoopClip);
-            _oneShots = gameObject.AddComponent<AudioSource>();
+            _oneShots = _clipHost.AddComponent<AudioSource>();
+            _oneShots.spatialBlend = 0f;
             _oneShots.playOnAwake = false;
             if (cutter != null) cutter.GrassCut += OnCut;
         }
@@ -73,7 +81,7 @@ namespace PlayShift.Grass
         private AudioSource MakeLoop(AudioClip clip)
         {
             if (clip == null) return null;
-            var s = gameObject.AddComponent<AudioSource>();
+            var s = _clipHost.AddComponent<AudioSource>();
             s.clip = clip; s.loop = true; s.playOnAwake = false; s.volume = 0f; s.Play();
             return s;
         }
@@ -91,6 +99,7 @@ namespace PlayShift.Grass
             _cutAccum = 0f;
 
             _rpm = rpm; _load = load; _cutRate = Mathf.Lerp(_cutRate, rate, 1f - Mathf.Exp(-12f * dt));
+            UpdateSynthFlags();
 
             if (on != _wasOn)
             {
@@ -114,6 +123,12 @@ namespace PlayShift.Grass
             }
         }
 
+        private void UpdateSynthFlags()
+        {
+            _synthMotorActive = synthesizeMotor && motorLoopClip == null;
+            _synthCutActive = synthesizeCutting && cutLightLoopClip == null && cutThickLoopClip == null;
+        }
+
         private float Noise()
         {
             _rng ^= _rng << 13; _rng ^= _rng >> 17; _rng ^= _rng << 5;
@@ -122,8 +137,8 @@ namespace PlayShift.Grass
 
         private void OnAudioFilterRead(float[] data, int channels)
         {
-            bool motor = synthesizeMotor && motorLoopClip == null;
-            bool cutting = synthesizeCutting && cutLightLoopClip == null && cutThickLoopClip == null;
+            bool motor = _synthMotorActive;
+            bool cutting = _synthCutActive;
             if (!motor && !cutting) return;
 
             float rpm = _rpm, load = _load, cutRate = _cutRate;

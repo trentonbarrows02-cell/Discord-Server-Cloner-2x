@@ -72,7 +72,8 @@ namespace PlayShift.Grass
                 }
             var terrain = new Mesh { name = "Meadow", indexFormat = UnityEngine.Rendering.IndexFormat.UInt32, vertices = verts, uv = uvs, triangles = tris };
             terrain.RecalculateNormals();
-            AddMesh("Meadow", terrain, PipelineMaterials.CreateLit("Meadow", Color.white, meadowTex), Vector3.zero);
+            // The meadow mesh also spans the lawn and paths, so it is the walkable ground for the player.
+            AddMesh("Meadow", terrain, PipelineMaterials.CreateLit("Meadow", Color.white, meadowTex), Vector3.zero, collider: true);
 
             // Short green lawn under the grass (cut grass reveals lawn, never dirt).
             var lawn = GameObject.CreatePrimitive(PrimitiveType.Plane);
@@ -115,7 +116,7 @@ namespace PlayShift.Grass
             AddMesh("GravelPath", ring, gm, Vector3.zero);
         }
 
-        private void AddMesh(string name, Mesh mesh, Material mat, Vector3 pos)
+        private void AddMesh(string name, Mesh mesh, Material mat, Vector3 pos, bool collider = false)
         {
             var go = new GameObject(name);
             go.transform.SetParent(transform, false);
@@ -124,6 +125,7 @@ namespace PlayShift.Grass
             var mr = go.AddComponent<MeshRenderer>();
             mr.sharedMaterial = mat;
             mr.receiveShadows = true;
+            if (collider) go.AddComponent<MeshCollider>().sharedMesh = mesh;
         }
 
         private void BuildVegetation(Vector3 centre, float lawnSize)
