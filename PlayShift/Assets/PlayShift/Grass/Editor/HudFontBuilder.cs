@@ -7,15 +7,17 @@ using UnityEngine.TextCore.LowLevel;
 namespace PlayShift.Grass.Editor
 {
     /// <summary>
-    /// Builds the TextMeshPro font asset for the HUD counter from Lilita One (SIL OFL 1.1, see
-    /// Assets/PlayShift/Fonts/LilitaOne-OFL.txt). Printable ASCII is baked into a static atlas, so the HUD never
+    /// Builds the TextMeshPro font asset for the HUD counter from <see cref="SourceFontPath"/> (licences next to the fonts in
+    /// Assets/PlayShift/Fonts). Printable ASCII is baked into a static atlas, so the HUD never
     /// rasterises glyphs at runtime (no CPU spikes while the counter changes every frame). Generous SDF padding
     /// leaves room for the thick outline.
     /// </summary>
     public static class HudFontBuilder
     {
-        public const string SourceFontPath = "Assets/PlayShift/Fonts/LilitaOne-Regular.ttf";
-        public const string AssetPath = "Assets/PlayShift/Grass/Resources/PlayShiftFonts/LilitaOne SDF.asset";
+        // Change this one path to swap the HUD font (then PlayShift > Grass > Rebuild HUD Font). Fonts in Assets/PlayShift/Fonts:
+        //   LuckiestGuy-Regular.ttf (Apache 2.0, current), LilitaOne-Regular.ttf (SIL OFL 1.1)
+        public const string SourceFontPath = "Assets/PlayShift/Fonts/LuckiestGuy-Regular.ttf";
+        public const string AssetPath = "Assets/PlayShift/Grass/Resources/PlayShiftFonts/HudFont SDF.asset";
 
         [MenuItem("PlayShift/Grass/Rebuild HUD Font", priority = 30)]
         public static void RebuildFromMenu() => Ensure(force: true);
@@ -71,8 +73,8 @@ namespace PlayShift.Grass.Editor
             return fa;
         }
 
-        public const string LabelMaterialPath = "Assets/PlayShift/Grass/Resources/PlayShiftFonts/LilitaOne SDF - Label.mat";
-        public const string CounterMaterialPath = "Assets/PlayShift/Grass/Resources/PlayShiftFonts/LilitaOne SDF - Counter.mat";
+        public const string LabelMaterialPath = "Assets/PlayShift/Grass/Resources/PlayShiftFonts/HudFont SDF - Label.mat";
+        public const string CounterMaterialPath = "Assets/PlayShift/Grass/Resources/PlayShiftFonts/HudFont SDF - Counter.mat";
 
         private static void CreatePreset(TMP_FontAsset fa, string path, Color outline, float outlineWidth, Color shadow, float shadowOffsetY)
         {
