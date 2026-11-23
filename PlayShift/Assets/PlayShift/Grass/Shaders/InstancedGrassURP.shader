@@ -20,7 +20,7 @@ Shader "PlayShift/InstancedGrassURP"
         _BladeWidth ("Blade width (m)", Float) = 0.0062
         _WidthGrowth ("Width growth with height", Range(0, 1)) = 0.45
         _LeanAmount ("Natural lean", Range(0, 2)) = 1
-        _StubbleHeight ("Cut lawn height (m)", Float) = 0.04
+        _StubbleHeight ("Cut stubble height (m), 0 = cut grass vanishes", Float) = 0
         _CutAnim ("Cut animation (s)", Range(0.05, 0.5)) = 0.18
 
         [Header(Wind)]

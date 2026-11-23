@@ -2,8 +2,9 @@
 // One instance = one blade, read from _Blades. Its height and cut state come from the logical cell it
 // belongs to (_Cells: x = grown height in metres, y = time the cell was cut, or -1 while grown).
 //
-//  * Cut animation: when a cell is cut, its blades shorten to stubble over _CutAnim seconds with a small
-//    kick away from the cutting head, leaving short, bright-green lawn (never bare ground).
+//  * Cut animation: when a cell is cut, its blades shorten over _CutAnim seconds with a small kick away
+//    from the cutting head. With _StubbleHeight 0 (default) they vanish and the green lawn ground shows
+//    (never bare dirt); a positive _StubbleHeight leaves short stubble instead.
 //  * Interaction: uncut blades near a cutting head lean away from it (more for tall grass and while the
 //    blades spin). Roots never move: every blade is a constant-length arc rooted at its anchor.
 //  * Wind: rolling gusts; taller grass sways more.
@@ -121,6 +122,8 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
             * (1.0 + _WidthGrowth * (sqrt(max(full, 0.05) / 0.2) - 1.0))
             * lerp(1.0, 1.35, ease) * _LodWidthScale;
     w *= 1.0 - pow(t, 1.6) * 0.92;
+    // With no stubble (_StubbleHeight 0) a cut blade collapses completely: no sliver, no shadow, just lawn.
+    w *= lerp(1.0, step(1e-4, _StubbleHeight), ease);
 
     float3 wax = float3(wdir.x, 0.0, wdir.y);
     o.positionWS = root + float3(dir.x * along, up, dir.y * along) + wax * side * w;
