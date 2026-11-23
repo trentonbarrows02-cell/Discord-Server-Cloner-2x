@@ -62,7 +62,13 @@ namespace PlayShift.Grass
                 float s = r.height > r.width ? 1f : 0.68f;
                 if (!Mathf.Approximately(_content.localScale.x, s)) _content.localScale = new Vector3(s, s, 1f);
             }
-            if (IsOpen) Orbit(Time.unscaledDeltaTime);
+            if (IsOpen)
+            {
+                Orbit(Time.unscaledDeltaTime);
+                // Whatever locked the mouse (start-up order, focus changes), the title screen keeps it free and visible.
+                if (Cursor.lockState != CursorLockMode.None) Cursor.lockState = CursorLockMode.None;
+                if (!Cursor.visible) Cursor.visible = true;
+            }
         }
 
         /// <summary>Wide view of the whole map: a camera circling high above the lawn.</summary>

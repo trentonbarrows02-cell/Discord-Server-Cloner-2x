@@ -74,7 +74,8 @@ namespace PlayShift.Grass
             if (playerCamera != null) playerCamera.transform.localPosition = new Vector3(0f, eyeHeight, 0f);
         }
 
-        private void OnEnable() => SetCursor(lockCursor);
+        // Never grab the mouse while a menu is up: the title screen / settings page need a free cursor to click.
+        private void OnEnable() => SetCursor(lockCursor && !MainMenu.IsOpen && !GameSettingsMenu.IsOpen);
 
         private void Update()
         {
