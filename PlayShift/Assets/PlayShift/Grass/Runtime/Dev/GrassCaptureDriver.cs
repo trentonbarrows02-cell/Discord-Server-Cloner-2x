@@ -95,9 +95,11 @@ namespace PlayShift.Grass.Dev
                     _measureRequested = true;
                     while (_measureRequested) yield return null;
                     _report.AppendLine($"Quality {q}: {_probeMs:F2} ms per 1080p frame (~{1000f / _probeMs:F0} FPS render-bound), " +
-                                       $"{fieldRenderer.LastDrawnBlades:N0} blades drawn");
+                                       $"{fieldRenderer.LastDrawnBlades:N0} blades drawn in {fieldRenderer.LastDrawCalls} draws, " +
+                                       $"grass CPU {fieldRenderer.LastCpuMs:F3} ms, field total {fieldRenderer.TotalBlades:N0} blades");
                 }
                 fieldRenderer.Quality = GrassQuality.High;
+                _report.AppendLine($"Grass GPU memory: {fieldRenderer.GpuBytes / 1048576.0:F2} MB (cells only; blades are procedural)");
                 Step("frame times measured");
             }
 
@@ -105,6 +107,8 @@ namespace PlayShift.Grass.Dev
             _report.AppendLine("Remaining before walk: " + before.ToString("N0"));
 
             // Clip: walk forward through the grass with a gentle side-to-side look, fixed 30 fps game time.
+            int maxTiles = 0;
+            float maxGrassCpu = 0f, sumGrassCpu = 0f;
             Time.captureFramerate = ClipFps;
             var attrs = new VideoTrackAttributes
             {
@@ -123,9 +127,17 @@ namespace PlayShift.Grass.Dev
                     _input.Move = new Vector2(0f, 0.55f);
                     _input.Look = new Vector2(Mathf.Cos(t * Mathf.PI) * 14f * Mathf.PI / ClipFps, 0f);
                     yield return Grab();
+                    if (fieldRenderer != null)
+                    {
+                        maxTiles = Mathf.Max(maxTiles, fieldRenderer.LastTilesUploaded);
+                        maxGrassCpu = Mathf.Max(maxGrassCpu, fieldRenderer.LastCpuMs);
+                        sumGrassCpu += fieldRenderer.LastCpuMs;
+                    }
                     if (f == total / 2) File.WriteAllBytes(Path.Combine(_dir, "03_cutting.jpg"), _frame.EncodeToJPG(92));
                     encoder.AddFrame(ToClipFrame());
                 }
+                _report.AppendLine($"While cutting: max {maxTiles} tiles uploaded in a frame ({maxTiles * 8} KB), " +
+                                   $"grass CPU avg {sumGrassCpu / total:F3} ms, max {maxGrassCpu:F3} ms");
             }
             Time.captureFramerate = 0;
             _input.Look = Vector2.zero;
@@ -156,6 +168,31 @@ namespace PlayShift.Grass.Dev
             _input.Look = Vector2.zero;
             yield return GameWait(0.8f);
             yield return Shot("05_fresh_cut_lawn_closeup");
+
+            // Gift burst stress test (TikTok spam): 30 frames, every frame a remove-25k, add-25k and taller gift.
+            if (fieldRenderer != null)
+            {
+                int burstMaxTiles = 0, burstFrames = 30;
+                float burstMaxCpu = 0f, giftMaxMs = 0f, giftSumMs = 0f;
+                for (int i = 0; i < burstFrames; i++)
+                {
+                    long g0 = Stopwatch.GetTimestamp();
+                    manager.RemoveGrass(25_000);
+                    manager.AddGrass(25_000);
+                    manager.IncreaseHeight(0.5f);
+                    float giftMs = (float)((Stopwatch.GetTimestamp() - g0) * 1000.0 / Stopwatch.Frequency);
+                    giftMaxMs = Mathf.Max(giftMaxMs, giftMs);
+                    giftSumMs += giftMs;
+                    yield return null;
+                    burstMaxTiles = Mathf.Max(burstMaxTiles, fieldRenderer.LastTilesUploaded);
+                    burstMaxCpu = Mathf.Max(burstMaxCpu, fieldRenderer.LastCpuMs);
+                }
+                int backlog = field.DirtyTileCount;
+                _report.AppendLine($"Gift burst ({burstFrames} frames of remove 25k + add 25k + taller): gift logic avg {giftSumMs / burstFrames:F2} ms, " +
+                                   $"max {giftMaxMs:F2} ms; uploads max {burstMaxTiles} tiles/frame ({burstMaxTiles * 8} KB, cap 128); " +
+                                   $"grass CPU max {burstMaxCpu:F3} ms; backlog after burst {backlog} tiles");
+                yield return Shot("06_after_gift_burst");
+            }
 
             _report.AppendLine("Errors/exceptions logged during capture: " + _errors);
             Finish();

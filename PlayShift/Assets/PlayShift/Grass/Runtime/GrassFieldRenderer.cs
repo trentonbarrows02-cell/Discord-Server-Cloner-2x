@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -13,18 +12,19 @@ namespace PlayShift.Grass
     }
 
     /// <summary>
-    /// Draws the lawn with GPU procedural instancing. No GameObject or Mesh per blade/unit exists:
-    ///  - one static GPU buffer holds every blade (field position, owning cell, random seed);
-    ///  - one GPU buffer holds per cell (grown height, cut time); only the dirty slice is uploaded;
+    /// Draws the lawn with GPU procedural instancing. No GameObject, Mesh or stored data per blade exists:
+    ///  - blade positions are generated in the shader from (chunk seed, instance index), so there is no blade
+    ///    buffer at all: memory and load time do not grow with blade count or quality;
+    ///  - one GPU buffer holds per cell (grown height, cut time), laid out in 32 x 32-cell tiles; only tiles that
+    ///    changed are uploaded (one contiguous 8 KB copy each), capped per frame so gift bursts never stall a frame;
     ///  - the shader (GrassBlade.hlsl) builds, bends, sways and cut-animates each blade.
-    /// Blades are grouped into chunks for frustum/distance culling and LOD: a chunk's blades are shuffled,
-    /// so drawing the first N is a uniform subsample. Density per level and quality preset scale N.
-    /// The same buffers serve all five levels; a new level only re-uploads the cells.
+    /// Blades are drawn per chunk for frustum/distance culling and LOD: a chunk's procedural sequence is uniformly
+    /// random, so drawing its first N blades is a uniform subsample. Density per level and quality preset scale N.
+    /// The same cell buffer serves all five levels; a new level re-uploads every tile at once.
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class GrassFieldRenderer : MonoBehaviour
     {
-        private const int BladeStride = sizeof(float) * 4;
         private const int CellStride = sizeof(float) * 2;
         private const int MaxCutters = 4;
 
@@ -58,35 +58,43 @@ namespace PlayShift.Grass
         [SerializeField] private int bladeSeed = 777;
         [Range(3, 10)] [SerializeField] private int bladeSegments = 6;
 
+        [Header("Streaming")]
+        [Tooltip("Most changed 32x32-cell tiles uploaded per frame (8 KB each). Bursts beyond this spread over the next frames.")]
+        [Range(8, 1024)] [SerializeField] private int maxTileUploadsPerFrame = 128;
+
         [Header("Rendering")]
         [SerializeField] private Camera targetCamera;
 
         private GrassField _field;
         private Mesh _bladeMesh;
-        private GraphicsBuffer _bladeBuffer;
         private GraphicsBuffer _cellBuffer;
-        private float[] _cellScratch;
-        private Vector2[] _cellData;
+        private float[] _tileScratch;
+        private int[] _tileList;
         private Chunk[] _chunks;
         private MaterialPropertyBlock _mpb;
         private readonly Plane[] _frustum = new Plane[6];
         private readonly Vector4[] _cutterData = new Vector4[MaxCutters];
-        private int _builtCellsX, _builtCellsZ, _builtBladesPerCell;
-        private float _builtSizeX, _builtSizeZ;
+        private int _builtCellsX, _builtCellsZ, _builtBladesPerM2 = -1;
+        private float _builtSizeX, _builtSizeZ, _builtChunkMeters;
+        private int _seenResetCount = -1;
+        private long _totalBlades;
         private bool _ownsMaterial;
 
         private struct Chunk
         {
-            public int Offset;
-            public int Count;
+            public float Seed;   // < 2^24 so it survives the float shader property exactly
+            public int Count;    // blades at full detail
             public Vector3 LocalMin;
             public Vector3 LocalMax;
         }
 
-        private static readonly int BladesId = Shader.PropertyToID("_Blades");
         private static readonly int CellsId = Shader.PropertyToID("_Cells");
+        private static readonly int CellGridId = Shader.PropertyToID("_CellGrid");
+        private static readonly int TilesXId = Shader.PropertyToID("_TilesX");
+        private static readonly int ChunkRectId = Shader.PropertyToID("_ChunkRect");
+        private static readonly int ChunkSeedId = Shader.PropertyToID("_ChunkSeed");
+        private static readonly int HeightBonusId = Shader.PropertyToID("_HeightBonus");
         private static readonly int FieldToWorldId = Shader.PropertyToID("_FieldToWorld");
-        private static readonly int InstanceOffsetId = Shader.PropertyToID("_InstanceOffset");
         private static readonly int LodWidthScaleId = Shader.PropertyToID("_LodWidthScale");
         private static readonly int HeightClampId = Shader.PropertyToID("_HeightClamp");
         private static readonly int GrassTimeId = Shader.PropertyToID("_GrassTime");
@@ -95,8 +103,13 @@ namespace PlayShift.Grass
         private static readonly int SpinId = Shader.PropertyToID("_Spin");
 
         public GrassField Field => _field;
-        public int TotalBlades => _bladeBuffer != null ? _bladeBuffer.count : 0;
+        /// <summary>Blades the whole field has at full detail for the current quality (before the level's density).</summary>
+        public long TotalBlades => _totalBlades;
         public int LastDrawnBlades { get; private set; }
+        public int LastDrawCalls { get; private set; }
+        public int LastTilesUploaded { get; private set; }
+        /// <summary>GPU memory owned by the renderer (the tiled cell buffer; blades need none).</summary>
+        public long GpuBytes => _cellBuffer != null ? (long)_cellBuffer.count * CellStride : 0;
 
         public GrassQuality Quality
         {
@@ -105,7 +118,7 @@ namespace PlayShift.Grass
             {
                 if (quality == value) return;
                 quality = value;
-                if (_field != null) { RebuildIfLayoutChanged(); UploadAllCells(); }
+                RebuildChunksIfNeeded(); // procedural blades: changing quality is free (no buffers to rebuild)
             }
         }
 
@@ -134,8 +147,9 @@ namespace PlayShift.Grass
                 return;
             }
             EnsureMaterial();
-            RebuildIfLayoutChanged();
-            UploadAllCells();
+            EnsureCellBuffer();
+            RebuildChunksIfNeeded();
+            UploadAllTiles();
         }
 
         public static string DefaultShaderName =>
@@ -157,97 +171,104 @@ namespace PlayShift.Grass
             _ownsMaterial = true;
         }
 
-        private void RebuildIfLayoutChanged()
+        /// <summary>(Re)creates the tiled cell buffer when the field layout changes. Independent of quality.</summary>
+        private void EnsureCellBuffer()
         {
             if (_field == null || grassMaterial == null) return;
             var layout = _field.Layout;
-            int bpc = Q.bladesPerSquareMeter;
-            if (_bladeBuffer != null && _builtCellsX == layout.CellsX && _builtCellsZ == layout.CellsZ &&
-                _builtBladesPerCell == bpc && Mathf.Approximately(_builtSizeX, layout.SizeX) &&
-                Mathf.Approximately(_builtSizeZ, layout.SizeZ))
-                return;
+            if (_cellBuffer != null && _builtCellsX == layout.CellsX && _builtCellsZ == layout.CellsZ) return;
 
             ReleaseBuffers();
             if (_bladeMesh == null) _bladeMesh = GrassBladeMesh.Create(bladeSegments);
+            _cellBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, _field.TileCount * GrassField.TileCellCount, CellStride);
+            _tileScratch = new float[GrassField.TileCellCount * 2];
+            _tileList = new int[_field.TileCount];
+            _builtCellsX = layout.CellsX;
+            _builtCellsZ = layout.CellsZ;
 
-            int cellsX = layout.CellsX, cellsZ = layout.CellsZ;
+            grassMaterial.SetBuffer(CellsId, _cellBuffer);
+            grassMaterial.SetVector(CellGridId, new Vector4(layout.CellsX, layout.CellsZ, 1f / layout.CellSizeX, 1f / layout.CellSizeZ));
+            grassMaterial.SetFloat(TilesXId, _field.TilesX);
+        }
+
+        /// <summary>Chunk rectangles + blade counts. Tiny CPU-side table; rebuilt when size, chunking or quality change.</summary>
+        private void RebuildChunksIfNeeded()
+        {
+            if (_field == null) return;
+            var layout = _field.Layout;
+            int bpm = Q.bladesPerSquareMeter;
+            if (_chunks != null && _builtBladesPerM2 == bpm && Mathf.Approximately(_builtSizeX, layout.SizeX) &&
+                Mathf.Approximately(_builtSizeZ, layout.SizeZ) && Mathf.Approximately(_builtChunkMeters, chunkMeters))
+                return;
+
             float sizeX = layout.SizeX, sizeZ = layout.SizeZ;
             int chunksX = Mathf.CeilToInt(sizeX / chunkMeters);
             int chunksZ = Mathf.CeilToInt(sizeZ / chunkMeters);
-            float csx = layout.CellSizeX, csz = layout.CellSizeZ;
-
-            // Blades are scattered by area (not per cell); each one looks up the cutting cell under it.
-            long total = (long)Mathf.Ceil(sizeX * sizeZ * bpc * 1.02f) + chunksX * chunksZ;
-            var blades = new Vector4[total];
             _chunks = new Chunk[chunksX * chunksZ];
-            var rng = new GrassRandom(bladeSeed);
-            int write = 0;
+            _totalBlades = 0;
             for (int kz = 0; kz < chunksZ; kz++)
                 for (int kx = 0; kx < chunksX; kx++)
                 {
-                    int start = write;
                     float x0 = kx * chunkMeters, x1 = Mathf.Min(sizeX, x0 + chunkMeters);
                     float z0 = kz * chunkMeters, z1 = Mathf.Min(sizeZ, z0 + chunkMeters);
-                    int bladeCount = Mathf.Max(1, Mathf.RoundToInt((x1 - x0) * (z1 - z0) * bpc));
-                    bladeCount = Mathf.Min(bladeCount, blades.Length - write);
-                    for (int b = 0; b < bladeCount; b++)
+                    int i = kz * chunksX + kx;
+                    int count = Mathf.Max(1, Mathf.RoundToInt((x1 - x0) * (z1 - z0) * bpm));
+                    _chunks[i] = new Chunk
                     {
-                        float px = x0 + rng.NextFloat() * (x1 - x0), pz = z0 + rng.NextFloat() * (z1 - z0);
-                        int cx = Mathf.Min(cellsX - 1, (int)(px / csx)), cz = Mathf.Min(cellsZ - 1, (int)(pz / csz));
-                        blades[write++] = new Vector4(px, pz, cz * cellsX + cx, rng.NextFloat());
-                    }
-                    // Random order inside the chunk: drawing the first N instances is a uniform LOD subsample.
-                    for (int i = write - 1; i > start; i--)
-                    {
-                        int j = start + rng.NextInt(i - start + 1);
-                        var t = blades[i]; blades[i] = blades[j]; blades[j] = t;
-                    }
-                    _chunks[kz * chunksX + kx] = new Chunk
-                    {
-                        Offset = start,
-                        Count = write - start,
+                        Seed = (uint)(bladeSeed * 7919 + i * 104729) & 0xFFFFFF,
+                        Count = count,
                         LocalMin = new Vector3(x0, 0f, z0),
                         LocalMax = new Vector3(x1, 0f, z1),
                     };
+                    _totalBlades += count;
                 }
-            if (write < blades.Length) System.Array.Resize(ref blades, write);
-
-            _bladeBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, blades.Length, BladeStride);
-            _bladeBuffer.SetData(blades);
-            int n = cellsX * cellsZ;
-            _cellBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, n, CellStride);
-            _cellScratch = new float[n * 2];
-            _cellData = new Vector2[n];
-
-            grassMaterial.SetBuffer(BladesId, _bladeBuffer);
-            grassMaterial.SetBuffer(CellsId, _cellBuffer);
-
-            _builtCellsX = cellsX; _builtCellsZ = cellsZ; _builtBladesPerCell = bpc;
-            _builtSizeX = layout.SizeX; _builtSizeZ = layout.SizeZ;
+            _builtBladesPerM2 = bpm;
+            _builtSizeX = sizeX; _builtSizeZ = sizeZ; _builtChunkMeters = chunkMeters;
         }
 
-        private void UploadAllCells()
+        /// <summary>Uploads up to <paramref name="budget"/> changed tiles (one contiguous SetData each).</summary>
+        private void UploadTiles(int budget)
         {
             if (_field == null || _cellBuffer == null) return;
-            _field.TryConsumeDirtyRange(out _, out _);
-            UploadRange(0, _cellData.Length);
+            int n = _field.ConsumeDirtyTiles(_tileList, budget);
+            for (int k = 0; k < n; k++) UploadTile(_tileList[k]);
+            LastTilesUploaded = n;
         }
 
-        private void UploadRange(int start, int count)
+        /// <summary>Uploads every tile (new level or fresh buffer) and drops whatever was queued.</summary>
+        private void UploadAllTiles()
         {
-            _field.CopyRenderCells(_cellScratch, start, count);
-            for (int i = start, end = start + count; i < end; i++)
-                _cellData[i] = new Vector2(_cellScratch[2 * i], _cellScratch[2 * i + 1]);
-            _cellBuffer.SetData(_cellData, start, start, count);
+            if (_field == null || _cellBuffer == null) return;
+            while (_field.ConsumeDirtyTiles(_tileList, int.MaxValue) > 0) { }
+            for (int t = 0; t < _field.TileCount; t++) UploadTile(t);
+            LastTilesUploaded = _field.TileCount;
+            _seenResetCount = _field.ResetCount;
         }
+
+        private void UploadTile(int tile)
+        {
+            _field.CopyRenderTile(tile, _tileScratch);
+            // Indices/count are in floats (2 per cell); the tile is one contiguous block of the tile-major buffer.
+            _cellBuffer.SetData(_tileScratch, 0, tile * GrassField.TileCellCount * 2, _tileScratch.Length);
+        }
+
+        /// <summary>Main-thread milliseconds spent in this renderer last frame (uploads + culling + draw submission).</summary>
+        public float LastCpuMs { get; private set; }
 
         private void LateUpdate()
         {
-            if (_field == null || _field.Level == null || _bladeBuffer == null || grassMaterial == null) return;
+            if (_field == null || _field.Level == null || _cellBuffer == null || grassMaterial == null) return;
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            Tick();
+            LastCpuMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
+        }
 
-            // Only the slice of cells touched since last frame goes to the GPU.
-            if (_field.TryConsumeDirtyRange(out int start, out int count))
-                UploadRange(start, count);
+        private void Tick()
+        {
+            // A new level (or a fresh buffer) changes every cell: upload it all at once, level transitions can afford
+            // it. Otherwise only the tiles touched since last frame, capped so gift bursts spread over a few frames.
+            if (_field.ResetCount != _seenResetCount) UploadAllTiles();
+            else UploadTiles(maxTileUploadsPerFrame);
 
             var cam = targetCamera != null ? targetCamera : Camera.main;
             UpdateShaderGlobals();
@@ -259,6 +280,7 @@ namespace PlayShift.Grass
             grassMaterial.SetMatrix(FieldToWorldId, transform.localToWorldMatrix);
             float minM = _field.CurrentMinHeightCm * 0.01f, maxM = _field.CurrentMaxHeightCm * 0.01f;
             grassMaterial.SetVector(HeightClampId, new Vector4(minM, maxM, 0f, 0f));
+            grassMaterial.SetFloat(HeightBonusId, _field.HeightBonusCm * 0.01f);
             grassMaterial.SetFloat(GrassTimeId, _field.Clock);
 
             // Cutting heads bend the grass around them (GPU only; no per-blade physics).
@@ -292,12 +314,11 @@ namespace PlayShift.Grass
                 camPos = cam.transform.position;
             }
             int layer = gameObject.layer;
-            int drawn = 0;
+            int drawn = 0, calls = 0;
 
             for (int i = 0; i < _chunks.Length; i++)
             {
                 ref Chunk c = ref _chunks[i];
-                if (c.Count == 0) continue;
 
                 var localBounds = new Bounds();
                 localBounds.SetMinMax(c.LocalMin - new Vector3(tallest, 0f, tallest), c.LocalMax + new Vector3(tallest, tallest, tallest));
@@ -316,13 +337,16 @@ namespace PlayShift.Grass
 
                 int count = Mathf.Max(1, Mathf.CeilToInt(c.Count * density * fraction));
                 drawn += count;
-                _mpb.SetFloat(InstanceOffsetId, c.Offset);
+                calls++;
+                _mpb.SetVector(ChunkRectId, new Vector4(c.LocalMin.x, c.LocalMin.z, c.LocalMax.x - c.LocalMin.x, c.LocalMax.z - c.LocalMin.z));
+                _mpb.SetFloat(ChunkSeedId, c.Seed);
                 // Fewer, wider blades far away keep the same ground coverage.
                 _mpb.SetFloat(LodWidthScaleId, Mathf.Min(2.5f, 1f / Mathf.Sqrt(fraction)));
                 var shadows = dist < q.shadowCastDistance ? ShadowCastingMode.On : ShadowCastingMode.Off;
                 Graphics.DrawMeshInstancedProcedural(_bladeMesh, 0, grassMaterial, world, count, _mpb, shadows, true, layer, targetCamera);
             }
             LastDrawnBlades = drawn;
+            LastDrawCalls = calls;
         }
 
         private static Bounds TransformBounds(Matrix4x4 m, Bounds b)
@@ -341,16 +365,16 @@ namespace PlayShift.Grass
 
         private void ReleaseBuffers()
         {
-            _bladeBuffer?.Release(); _bladeBuffer = null;
             _cellBuffer?.Release(); _cellBuffer = null;
         }
 
         private void OnEnable()
         {
-            if (_field != null && _bladeBuffer == null)
+            if (_field != null && _cellBuffer == null && grassMaterial != null)
             {
-                RebuildIfLayoutChanged();
-                UploadAllCells();
+                EnsureCellBuffer();
+                RebuildChunksIfNeeded();
+                UploadAllTiles(); // the fresh buffer is empty
             }
         }
 

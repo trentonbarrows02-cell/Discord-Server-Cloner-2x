@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using PlayShift.Grass;
 using Xunit;
 
@@ -154,25 +155,70 @@ namespace PlayShift.Grass.Tests
         }
 
         [Fact]
-        public void DirtyRange_CoversCutCellsOnly()
+        public void DirtyTiles_CoverCutCellsOnly()
         {
             var f = NewLevel1Field();
-            Assert.True(f.TryConsumeDirtyRange(out _, out int initialCount));
-            Assert.Equal(f.CellCount, initialCount);
-            Assert.False(f.TryConsumeDirtyRange(out _, out _));
+            var tiles = new int[f.TileCount];
+            Assert.Equal(f.TileCount, f.DirtyTileCount); // a new level uploads everything
+            Assert.Equal(f.TileCount, f.ConsumeDirtyTiles(tiles, int.MaxValue));
+            Assert.Equal(0, f.DirtyTileCount);
 
             f.CutCircle(10f, 10f, 0.5f);
-            Assert.True(f.TryConsumeDirtyRange(out int start, out int count));
-            Assert.True(count < f.CellCount / 10, "only a small slice should need uploading");
+            int n = f.ConsumeDirtyTiles(tiles, int.MaxValue);
+            Assert.InRange(n, 1, 4); // a 1 m circle touches at most 2 x 2 tiles of 1.6 m
+            var queued = new System.Collections.Generic.HashSet<int>(tiles.Take(n));
             for (int i = 0; i < f.CellCount; i++)
-                if (f.IsCellCut(i)) Assert.InRange(i, start, start + count - 1);
+                if (f.IsCellCut(i))
+                {
+                    int cx = i % f.CellsX, cz = i / f.CellsX;
+                    Assert.Contains((cz >> GrassField.TileShift) * f.TilesX + (cx >> GrassField.TileShift), queued);
+                }
+
+            // Two far-apart heads (multi-blade gift) only dirty the tiles under each, not everything between.
+            f.CutCircle(2f, 2f, 0.3f);
+            f.CutCircle(48f, 48f, 0.3f);
+            Assert.InRange(f.DirtyTileCount, 2, 8);
+
+            // Per-frame budget: consuming in slices drains the queue without losing or repeating tiles.
+            Assert.Equal(1, f.ConsumeDirtyTiles(tiles, 1));
+            Assert.Equal(f.DirtyTileCount, f.ConsumeDirtyTiles(tiles, int.MaxValue));
+            Assert.Equal(0, f.DirtyTileCount);
+
+            // "Taller grass" gifts are one shared bonus: nothing to re-upload, heights still read correctly.
+            float before = f.GetHeightCm(0);
+            Assert.Equal(10f, f.IncreaseHeight(10f));
+            Assert.Equal(0, f.DirtyTileCount);
+            Assert.Equal(before + 10f, f.GetHeightCm(0), 3);
+
+            // A "remove grass" gift dirties only the patch it removed, not the whole lawn.
+            f.RemoveGrass(5_000);
+            Assert.InRange(f.DirtyTileCount, 1, f.TileCount / 10);
+
+            // Tile copy round-trips with the row-major view (base heights; bonus is added by the shader).
+            f.ConsumeDirtyTiles(tiles, int.MaxValue);
+            var tile = new float[GrassField.TileCellCount * 2];
+            var rows = new float[f.CellCount * 2];
+            f.CopyRenderCells(rows, 0, f.CellCount);
+            for (int t = 0; t < f.TileCount; t += 97)
+            {
+                f.CopyRenderTile(t, tile);
+                int cx0 = (t % f.TilesX) * GrassField.TileSize, cz0 = (t / f.TilesX) * GrassField.TileSize;
+                for (int j = 0; j < GrassField.TileCellCount; j++)
+                {
+                    int cx = cx0 + (j % GrassField.TileSize), cz = cz0 + (j / GrassField.TileSize);
+                    if (cx >= f.CellsX || cz >= f.CellsZ) continue;
+                    int i = cz * f.CellsX + cx;
+                    Assert.Equal(f.GetBaseHeightCm(i) * 0.01f, tile[2 * j], 5);
+                    Assert.Equal(rows[2 * i + 1], tile[2 * j + 1]);
+                }
+            }
 
             var heights = new float[f.CellCount];
             f.CopyRenderHeightsMeters(heights, 0, f.CellCount);
             for (int i = 0; i < f.CellCount; i++)
             {
                 if (f.IsCellCut(i)) Assert.Equal(0f, heights[i]);
-                else Assert.InRange(heights[i], 0.15f, 0.25f);
+                else Assert.InRange(heights[i], 0.25f, 0.35f); // level 1 range (15-25 cm) + the 10 cm gift above
             }
         }
     }

@@ -1,5 +1,5 @@
 // Shared blade builder for PlayShift grass (included by the URP and Built-in shaders).
-// One instance = one blade, read from _Blades. Its height and cut state come from the logical cell it
+// One instance = one blade, generated procedurally per chunk (no blade buffer). Its height and cut state come from the logical cell it
 // belongs to (_Cells: x = grown height in metres, y = time the cell was cut, or -1 while grown).
 //
 //  * Cut animation: when a cell is cut, its blades shorten over _CutAnim seconds with a small kick away
@@ -15,11 +15,18 @@
 
 #define PLAYSHIFT_MAX_CUTTERS 4
 
-StructuredBuffer<float4> _Blades;   // x, z (field-local metres), cell index, random seed
-StructuredBuffer<float2> _Cells;    // grown height (m), cut time (s) or -1
+// Per cell: base grown height (m, without _HeightBonus), cut time (s) or -1. Tile-major: 32x32-cell tiles one
+// after another, cells x-fastest inside a tile (see GrassField.CopyRenderTile).
+StructuredBuffer<float2> _Cells;
+float4 _CellGrid;                   // cellsX, cellsZ, 1/cellSizeX, 1/cellSizeZ
+float _TilesX;
+float _HeightBonus;                 // gift height bonus (m), one value for the whole field
+
+// Per draw (chunk). Blade positions are generated here from (seed, instance index): no blade buffer exists.
+float4 _ChunkRect;                  // x0, z0, sizeX, sizeZ (field-local metres)
+float _ChunkSeed;
 
 float4x4 _FieldToWorld;
-float _InstanceOffset;
 float _LodWidthScale;
 float4 _HeightClamp;                // x = min, y = max (metres)
 float _GrassTime;                   // same clock the logic stamps cut times with
@@ -45,6 +52,34 @@ struct GrassBlade
 
 float PsHash(float p) { p = frac(p * 0.1031); p *= p + 33.33; p *= p + p; return frac(p); }
 
+// PCG integer hash (good distribution, cheap); 24-bit float in [0, 1).
+uint PsPcg(uint v)
+{
+    uint state = v * 747796405u + 2891336453u;
+    uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    return (word >> 22u) ^ word;
+}
+float PsU01(uint h) { return (h >> 8) * (1.0 / 16777216.0); }
+
+// Blade i of the current chunk: uniform random position inside the chunk + per-blade seed. Any prefix of the
+// sequence is a uniform subsample, which is what LOD relies on (draw the first N).
+float4 PsProceduralBlade(uint i)
+{
+    uint h = PsPcg(i ^ PsPcg((uint)_ChunkSeed));
+    uint hx = PsPcg(h), hz = PsPcg(hx), hs = PsPcg(hz);
+    float2 p = _ChunkRect.xy + float2(PsU01(hx), PsU01(hz)) * _ChunkRect.zw;
+    return float4(p.x, p.y, 0.0, PsU01(hs));
+}
+
+// Tiled cell lookup for a field-local position.
+float2 PsCellAt(float2 p)
+{
+    uint cx = min((uint)max(p.x * _CellGrid.z, 0.0), (uint)_CellGrid.x - 1u);
+    uint cz = min((uint)max(p.y * _CellGrid.w, 0.0), (uint)_CellGrid.y - 1u);
+    uint tile = (cz >> 5) * (uint)_TilesX + (cx >> 5);
+    return _Cells[tile * 1024u + (cz & 31u) * 32u + (cx & 31u)];
+}
+
 float PsNoise(float2 p)
 {
     float2 i = floor(p), f = frac(p);
@@ -58,9 +93,9 @@ float PsNoise(float2 p)
 GrassBlade BuildBlade(uint instanceID, float2 uv)
 {
     GrassBlade o;
-    uint id = instanceID + (uint)_InstanceOffset;
-    float4 blade = _Blades[id];
-    float2 cell = _Cells[(uint)blade.z];
+    float4 blade = PsProceduralBlade(instanceID);
+    float2 cell = PsCellAt(blade.xy);
+    cell.x += _HeightBonus;
     float s = blade.w * 1000.0;
     float r1 = PsHash(s + 1.7), r2 = PsHash(s + 11.3), r3 = PsHash(s + 23.9);
     float r4 = PsHash(s + 37.1), r5 = PsHash(s + 51.7), r6 = PsHash(s + 63.2);

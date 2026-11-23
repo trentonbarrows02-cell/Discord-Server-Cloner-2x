@@ -26,9 +26,19 @@ namespace PlayShift.Grass
         private int _seed;
         private int _baseUnitsPerCell;
         private int _maxUnitsPerCell;
-        private int _dirtyMin = int.MaxValue;
-        private int _dirtyMax = -1;
         private int _version;
+
+        // Change tracking for the renderer, per tile of TileSize x TileSize cells. Each tile is queued at most once
+        // (FIFO ring), so the upload cost is proportional to how much grass actually changed, however far apart
+        // the changes are (several cutting heads, gifts) and never the whole field unless it really all changed.
+        private readonly bool[] _tileDirty;
+        private readonly int[] _dirtyQueue;
+        private int _dirtyHead, _dirtyCount;
+
+        /// <summary>Tiles are TileSize x TileSize cells (32 x 32 = 1.6 m at 5 cm cells).</summary>
+        public const int TileShift = 5;
+        public const int TileSize = 1 << TileShift;
+        public const int TileCellCount = TileSize * TileSize;
 
         public GrassField(GrassFieldLayout layout)
         {
@@ -40,8 +50,19 @@ namespace PlayShift.Grass
             _heightsCm = new float[n];
             _cutTime = new float[n];
             _permutation = new int[n];
+            TilesX = (layout.CellsX + TileSize - 1) >> TileShift;
+            TilesZ = (layout.CellsZ + TileSize - 1) >> TileShift;
+            _tileDirty = new bool[TilesX * TilesZ];
+            _dirtyQueue = new int[TilesX * TilesZ];
             EnsurePatchOffsets();
         }
+
+        public int TilesX { get; }
+        public int TilesZ { get; }
+        public int TileCount => TilesX * TilesZ;
+
+        /// <summary>Increments on every <see cref="Reset"/> (new level): the renderer uploads everything at once then.</summary>
+        public int ResetCount { get; private set; }
 
         /// <summary>Raised whenever GRASS LEFT changes. Argument is the new remaining count.</summary>
         public event Action<long> RemainingChanged;
@@ -88,7 +109,12 @@ namespace PlayShift.Grass
         public int BaseUnitsPerCell => _baseUnitsPerCell;
 
         public int GetUnits(int cell) => _units[cell];
-        public float GetHeightCm(int cell) => _heightsCm[cell];
+
+        /// <summary>Grown height of a cell in cm, including the gift height bonus (capped at the layout maximum).</summary>
+        public float GetHeightCm(int cell) => Math.Min(_heightsCm[cell] + HeightBonusCm, _layout.AbsoluteMaxHeightCm);
+
+        /// <summary>Height before the gift bonus. Stored per cell; the bonus is one shared value (no per-cell rewrite).</summary>
+        public float GetBaseHeightCm(int cell) => _heightsCm[cell];
         public bool IsCellCut(int cell) => _units[cell] == 0;
 
         public int CellIndex(int cx, int cz) => cz * _layout.CellsX + cx;
@@ -131,7 +157,8 @@ namespace PlayShift.Grass
             AddedByGifts = 0;
             IsCleared = false;
 
-            MarkDirty(0, n - 1);
+            ResetCount++;
+            MarkAllDirty();
             RemainingChanged?.Invoke(Remaining);
         }
 
@@ -162,7 +189,6 @@ namespace PlayShift.Grass
             float lenSq = dx * dx + dz * dz;
             float r2 = radius * radius;
             long removed = 0;
-            int firstTouched = int.MaxValue, lastTouched = -1;
 
             for (int cz = minZ; cz <= maxZ; cz++)
             {
@@ -187,14 +213,13 @@ namespace PlayShift.Grass
                     _units[i] = 0;
                     _cutTime[i] = Clock;
                     removed += u;
-                    if (i < firstTouched) firstTouched = i;
-                    if (i > lastTouched) lastTouched = i;
+                    MarkCellDirty(cx, cz);
                 }
             }
 
             if (removed == 0) return 0;
             CutByMower += removed;
-            MarkDirty(firstTouched, lastTouched);
+            _version++;
             ApplyRemoval(removed);
             return removed;
         }
@@ -252,7 +277,7 @@ namespace PlayShift.Grass
             if (added == 0) return 0;
             AddedByGifts += added;
             Remaining += added;
-            MarkDirty(0, _units.Length - 1);
+            _version++; // changed cells were marked dirty as they were visited
             RemainingChanged?.Invoke(Remaining);
             return added;
         }
@@ -284,7 +309,7 @@ namespace PlayShift.Grass
             long removed = amount - left;
             if (removed == 0) return 0;
             RemovedByGifts += removed;
-            MarkDirty(0, _units.Length - 1);
+            _version++; // changed cells were marked dirty as they were visited
             ApplyRemoval(removed);
             return removed;
         }
@@ -297,49 +322,83 @@ namespace PlayShift.Grass
             float applied = Math.Min(cm, Math.Max(0f, room));
             if (applied <= 0f) return 0f;
 
+            // O(1): the bonus is applied when heights are read (GetHeightCm) and by the shader (_HeightBonus), so a
+            // stream of "taller" gifts never rewrites or re-uploads the million cells.
             HeightBonusCm += applied;
-            float cap = _layout.AbsoluteMaxHeightCm;
-            for (int i = 0; i < _heightsCm.Length; i++)
-                _heightsCm[i] = Math.Min(_heightsCm[i] + applied, cap);
-
-            MarkDirty(0, _units.Length - 1);
+            _version++;
             return applied;
         }
 
         // ------------------------------------------------------------------ renderer support
 
+        /// <summary>Number of tiles changed and not yet consumed by the renderer.</summary>
+        public int DirtyTileCount => _dirtyCount;
+
         /// <summary>
-        /// Returns the index range of cells changed since the last call (inclusive start, count) and clears it.
-        /// The renderer uploads only this slice of its GPU cell buffer.
+        /// Moves up to <paramref name="max"/> changed tiles (oldest first) into <paramref name="tiles"/> and returns
+        /// how many. A renderer can cap this per frame so a burst of changes spreads over a few frames instead of
+        /// stalling one.
         /// </summary>
-        public bool TryConsumeDirtyRange(out int start, out int count)
+        public int ConsumeDirtyTiles(int[] tiles, int max)
         {
-            if (_dirtyMax < _dirtyMin) { start = 0; count = 0; return false; }
-            start = _dirtyMin;
-            count = _dirtyMax - _dirtyMin + 1;
-            _dirtyMin = int.MaxValue;
-            _dirtyMax = -1;
-            return true;
+            int n = _dirtyQueue.Length;
+            int k = Math.Min(Math.Min(max, tiles.Length), _dirtyCount);
+            for (int i = 0; i < k; i++)
+            {
+                int t = _dirtyQueue[_dirtyHead];
+                _dirtyHead = _dirtyHead + 1 == n ? 0 : _dirtyHead + 1;
+                _tileDirty[t] = false;
+                tiles[i] = t;
+            }
+            _dirtyCount -= k;
+            return k;
         }
 
         /// <summary>
-        /// Writes two floats per cell: [2i] = grown height in metres (kept after cutting, so the renderer can
-        /// animate from it), [2i+1] = cut time (see <see cref="Clock"/>) or -1 while the cell is grown.
+        /// Writes one tile in tile-major order (2 floats per cell, x fastest): [2j] = base grown height in metres
+        /// (without <see cref="HeightBonusCm"/>, which the renderer passes to the shader once; kept after cutting so
+        /// the cut can animate from it), [2j+1] = cut time (see <see cref="Clock"/>) or -1 while grown. Cells past
+        /// the field edge are written as (0, -1). The GPU buffer is laid out tile after tile, so a tile is one
+        /// contiguous upload of <see cref="TileCellCount"/> cells.
+        /// </summary>
+        public void CopyRenderTile(int tile, float[] destination)
+        {
+            int tx = tile % TilesX, tz = tile / TilesX;
+            int cx0 = tx << TileShift, cz0 = tz << TileShift;
+            int cellsX = _layout.CellsX, cellsZ = _layout.CellsZ;
+            int w = 0;
+            for (int lz = 0; lz < TileSize; lz++)
+            {
+                int cz = cz0 + lz;
+                for (int lx = 0; lx < TileSize; lx++, w += 2)
+                {
+                    int cx = cx0 + lx;
+                    if (cx >= cellsX || cz >= cellsZ) { destination[w] = 0f; destination[w + 1] = -1f; continue; }
+                    int i = cz * cellsX + cx;
+                    destination[w] = _heightsCm[i] * 0.01f;
+                    destination[w + 1] = _units[i] > 0 ? -1f : _cutTime[i];
+                }
+            }
+        }
+
+        /// <summary>
+        /// Row-major copy (tests/tools): [2i] = grown height in metres including the gift bonus, [2i+1] = cut time
+        /// or -1 while the cell is grown.
         /// </summary>
         public void CopyRenderCells(float[] destination, int start, int count)
         {
             for (int i = start, end = start + count; i < end; i++)
             {
-                destination[2 * i] = _heightsCm[i] * 0.01f;
+                destination[2 * i] = GetHeightCm(i) * 0.01f;
                 destination[2 * i + 1] = _units[i] > 0 ? -1f : _cutTime[i];
             }
         }
 
-        /// <summary>Writes render heights in metres: blade height for grown cells, 0 for cut cells.</summary>
+        /// <summary>Writes render heights in metres: blade height (with bonus) for grown cells, 0 for cut cells.</summary>
         public void CopyRenderHeightsMeters(float[] destination, int start, int count)
         {
             for (int i = start, end = start + count; i < end; i++)
-                destination[i] = _units[i] > 0 ? _heightsCm[i] * 0.01f : 0f;
+                destination[i] = _units[i] > 0 ? GetHeightCm(i) * 0.01f : 0f;
         }
 
         // ------------------------------------------------------------------ internals
@@ -356,9 +415,10 @@ namespace PlayShift.Grass
             }
         }
 
+        /// <summary>Base height (level range, without the gift bonus; see <see cref="GetHeightCm"/>).</summary>
         private float SampleHeightCm(int cx, int cz)
         {
-            float min = CurrentMinHeightCm, max = CurrentMaxHeightCm;
+            float min = _level.MinHeightCm, max = _level.MaxHeightCm;
             float s = Math.Max(1f, _layout.HeightNoiseCells);
             float patch = GrassRandom.ValueNoise(cx / s, cz / s, _seed);
             float detail = GrassRandom.ValueNoise(cx / (s * 0.3f) + 17.3f, cz / (s * 0.3f) - 4.1f, _seed + 1);
@@ -388,7 +448,8 @@ namespace PlayShift.Grass
             {
                 int cx = ccx + s_patchOffsetsX[k], cz = ccz + s_patchOffsetsZ[k];
                 if ((uint)cx >= (uint)_layout.CellsX || (uint)cz >= (uint)_layout.CellsZ) continue;
-                budget -= visit(CellIndex(cx, cz), budget);
+                int got = visit(CellIndex(cx, cz), budget);
+                if (got != 0) { budget -= got; MarkCellDirty(cx, cz); }
             }
             return budget;
         }
@@ -399,14 +460,31 @@ namespace PlayShift.Grass
             int n = _permutation.Length;
             int offset = _rng.NextInt(n);
             for (int k = 0; k < n && budget > 0; k++)
-                budget -= visit(_permutation[(offset + k) % n], budget);
+            {
+                int cell = _permutation[(offset + k) % n];
+                int got = visit(cell, budget);
+                if (got != 0) { budget -= got; MarkCellDirty(cell % _layout.CellsX, cell / _layout.CellsX); }
+            }
             return budget;
         }
 
-        private void MarkDirty(int first, int last)
+        private void MarkCellDirty(int cx, int cz)
         {
-            if (first < _dirtyMin) _dirtyMin = first;
-            if (last > _dirtyMax) _dirtyMax = last;
+            int t = (cz >> TileShift) * TilesX + (cx >> TileShift);
+            if (_tileDirty[t]) return;
+            _tileDirty[t] = true;
+            int n = _dirtyQueue.Length;
+            int slot = _dirtyHead + _dirtyCount;
+            _dirtyQueue[slot >= n ? slot - n : slot] = t;
+            _dirtyCount++;
+        }
+
+        private void MarkAllDirty()
+        {
+            int n = _dirtyQueue.Length;
+            for (int t = 0; t < n; t++) { _tileDirty[t] = true; _dirtyQueue[t] = t; }
+            _dirtyHead = 0;
+            _dirtyCount = n;
             _version++;
         }
 
