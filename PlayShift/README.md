@@ -40,13 +40,13 @@ To add the grass system to an existing scene instead, use **Create Level Setup (
   - Wind gusts roll across the lawn, and tall grass sways more.
   - Roots never move: each blade is a constant-length arc, so tall grass keeps its upright height.
 - **The cut**: the cutter sweeps a capsule from each head's previous position to its current one every frame. Cells under the blades are cut exactly once, GRASS LEFT drops by exactly their units, and each cell records the time it was cut. The shader then:
-  - shortens those blades to stubble over 0.18 s, with a small kick away from the head
+  - shortens those blades to stubble over 0.18 s, with a small kick away from the head. The grid is 5 cm (1 unit per cell on a 50 m lawn), so cut edges follow the round head in smooth curves, not square chunks.
   - leaves short, bright-green lawn with paler cut ends, never bare dirt
   - keeps a crisp border between cut and uncut grass
 
   Cut state lives in the logical grid, so it persists when you walk away and come back.
 - **Clippings**: `GrassClippings` uses one pooled `ParticleSystem` to throw small green and yellow slivers off the blade, following the blade rotation and the head's movement. Thick, tall grass produces more and short grass fewer. They tumble, land and fade, with no snow, smoke or big debris.
-- **Trimmer feel**: `TrimmerViewmodel` places the head on the ground about 1.45 m ahead, with the shaft rising to the bottom-right of the screen. It adds:
+- **Trimmer feel**: `TrimmerViewmodel` places the head on the ground about 1.4 m ahead, in the lower-middle of the screen. The long shaft runs diagonally out of the bottom-right corner; it is the model's shaft stretched 1.7x, while the head keeps its real size and cut radius. It adds:
   - smooth turning lag and a gentle left/right operator sweep
   - walk sway and an idle hum
   - stronger vibration and a slight pull-back in thick grass, which also slows walking
@@ -71,10 +71,10 @@ Regrowing cut grass is `RegrowGrass` (the same as an Add Grass gift). Gift rules
 
 - No GameObject, Rigidbody or Animator exists per blade or per unit. Grass is one static blade buffer plus one small per-cell buffer.
 - Cutting uploads only the changed slice of cells. Each head costs one capsule test per frame.
-- Grass is chunked, 2 x 2 m by default, with frustum and distance culling and three distance LODs.
+- Blades are scattered by area (blades per m2, separate from the 5 cm cut grid) and chunked 2 x 2 m, with frustum and distance culling and three distance LODs.
 - Each level draws a density fraction (Level 1 = 62% up to Level 5 = 100%).
 - Only chunks near the camera cast shadows.
-- Quality presets (Low, Medium, High, Ultra) set blades per cell (4 / 6 / 10 / 16), the LOD distances and the shadow-casting distance.
+- Quality presets (Low, Medium, High, Ultra) set blade density (380 / 600 / 950 / 1500 per m2), the LOD distances and the shadow-casting distance.
 - Clippings use one pooled particle system.
 - Rendering and gameplay don't depend on video capture.
 
