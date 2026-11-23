@@ -20,9 +20,8 @@ namespace PlayShift.Grass
         private static readonly Color GiftAdd = new Color(0.55f, 1f, 0.45f, 1f);
         private static readonly Color GiftRemove = new Color(1f, 0.55f, 0.45f, 1f);
         private static readonly Color GiftTaller = new Color(0.55f, 0.8f, 1f, 1f);
-        private static readonly Color CounterGreen = new Color(0.42f, 0.95f, 0.23f, 1f);
-        private static readonly Color CounterGradientBottom = new Color(0.62f, 0.78f, 0.55f, 1f);
-        private static readonly Color CounterOutline = new Color(0.03f, 0.1f, 0.02f, 1f);
+        private static readonly Color CounterGreen = new Color(0.5f, 0.96f, 0.22f, 1f);   // flat lime
+        private static readonly Color CounterOutline = new Color(0.16f, 0.11f, 0.29f, 1f); // dark indigo (fallback font path)
 
         [SerializeField] private int sortingOrder = 100;
         [SerializeField] private Vector2 referenceResolution = new Vector2(1920f, 1080f);
@@ -223,24 +222,21 @@ namespace PlayShift.Grass
         {
             // Clean TikTok-LIVE style: no boxes, no progress bar; just GRASS LEFT and a huge bold outlined number.
             var counter = GrassUiFactory.Rect("GrassLeft", _root);
-            _counterPanel = GrassUiFactory.Place(counter, new Vector2(0.5f, 1f), new Vector2(0f, -10f), new Vector2(1100f, 250f));
-            // Chunky game font (HudFontBuilder.SourceFontPath, currently Luckiest Guy): white heading, big green numbers with a light-to-dark vertical
-            // gradient, thick dark outlines and a drop shadow (readable on any stream).
+            _counterPanel = GrassUiFactory.Place(counter, new Vector2(0.5f, 1f), new Vector2(0f, -10f), new Vector2(1500f, 330f));
+            // Chunky game font (HudFontBuilder.SourceFontPath, currently Luckiest Guy): white heading and huge flat lime
+            // numbers, both with a thick dark-indigo outline and a solid indigo "3D" shadow (readable on any stream).
             var font = CounterFont;
             var labelStyle = font != null ? FontStyles.Normal : FontStyles.Bold; // the HUD font is already heavy; no fake bold
-            var label = GrassUiFactory.Text("GrassLeftLabel", _counterPanel, "GRASS LEFT", 68f, Ink, TextAlignmentOptions.Center, labelStyle);
+            var label = GrassUiFactory.Text("GrassLeftLabel", _counterPanel, "GRASS LEFT", 84f, Ink, TextAlignmentOptions.Center, labelStyle);
             if (font != null) label.font = font;
-            GrassUiFactory.Place(label.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, 0f), new Vector2(880f, 76f));
-            label.characterSpacing = 2f;
+            GrassUiFactory.Place(label.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, 0f), new Vector2(1100f, 96f));
+            label.characterSpacing = 1f;
             var labelMat = Resources.Load<Material>("PlayShiftFonts/HudFont SDF - Label");
             if (font != null && labelMat != null) label.fontSharedMaterial = labelMat; // outline + shadow baked in
             else { Outline(label, 0.28f); AddShadow(label, 5f); }
-            _grassLeftValue = GrassUiFactory.Text("GrassLeftValue", _counterPanel, "1,000,000", 190f, CounterGreen, TextAlignmentOptions.Center, labelStyle);
+            _grassLeftValue = GrassUiFactory.Text("GrassLeftValue", _counterPanel, "1,000,000", 240f, CounterGreen, TextAlignmentOptions.Center, labelStyle);
             if (font != null) _grassLeftValue.font = font;
-            GrassUiFactory.Place(_grassLeftValue.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -78f), new Vector2(1200f, 200f));
-            // Multiplies the green: full brightness at the top, deeper green at the bottom.
-            _grassLeftValue.enableVertexGradient = true;
-            _grassLeftValue.colorGradient = new VertexGradient(Color.white, Color.white, CounterGradientBottom, CounterGradientBottom);
+            GrassUiFactory.Place(_grassLeftValue.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -100f), new Vector2(1500f, 250f));
             var counterMat = Resources.Load<Material>("PlayShiftFonts/HudFont SDF - Counter");
             if (font != null && counterMat != null) _grassLeftValue.fontSharedMaterial = counterMat;
             else { Outline(_grassLeftValue, 0.26f, CounterOutline); AddShadow(_grassLeftValue, 10f); }

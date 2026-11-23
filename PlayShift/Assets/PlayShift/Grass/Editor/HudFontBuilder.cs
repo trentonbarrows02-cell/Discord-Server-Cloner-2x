@@ -44,7 +44,9 @@ namespace PlayShift.Grass.Editor
             if (existing != null) AssetDatabase.DeleteAsset(AssetPath);
             Directory.CreateDirectory(Path.GetDirectoryName(AssetPath));
 
-            var fa = TMP_FontAsset.CreateFontAsset(font, 96, 16, GlyphRenderMode.SDFAA, 1024, 1024, AtlasPopulationMode.Dynamic, false);
+            // 80 pt with 20 px padding: a wide distance field so the thick outline and the deep "3D" drop shadow stay
+            // clean (padding/size 0.25); printable ASCII still fits one 1024x1024 Alpha8 atlas (1 MB).
+            var fa = TMP_FontAsset.CreateFontAsset(font, 80, 20, GlyphRenderMode.SDFAA, 1024, 1024, AtlasPopulationMode.Dynamic, false);
             fa.name = Path.GetFileNameWithoutExtension(AssetPath);
             var chars = new System.Text.StringBuilder();
             for (char c = ' '; c <= '~'; c++) chars.Append(c);
@@ -65,13 +67,16 @@ namespace PlayShift.Grass.Editor
 
             // Material presets: thick outline + drop shadow (underlay) baked in. Shared by the texts that use them,
             // so no per-text material instances and no duplicate shadow text objects.
-            CreatePreset(fa, LabelMaterialPath, outline: Color.black, outlineWidth: 0.26f,
-                         shadow: new Color(0f, 0f, 0f, 0.7f), shadowOffsetY: -0.45f);
-            CreatePreset(fa, CounterMaterialPath, outline: new Color(0.02f, 0.05f, 0.01f, 1f), outlineWidth: 0.24f,
-                         shadow: new Color(0f, 0f, 0f, 0.75f), shadowOffsetY: -0.55f);
+            // TikTok-game style: dark indigo outline and a solid indigo "extruded" shadow straight below.
+            // Widths are in SDF units (relative to the 20 px padding): ~0.15 is a thick outline that keeps letters apart.
+            CreatePreset(fa, LabelMaterialPath, outline: HudInk, outlineWidth: 0.17f, shadow: HudInk, shadowOffsetY: -0.45f);
+            CreatePreset(fa, CounterMaterialPath, outline: HudInk, outlineWidth: 0.14f, shadow: HudInk, shadowOffsetY: -0.5f);
             AssetDatabase.SaveAssets();
             return fa;
         }
+
+        /// <summary>Outline + shadow colour: dark indigo, softer than pure black and reads well over sky and grass.</summary>
+        public static readonly Color HudInk = new Color(0.16f, 0.11f, 0.29f, 1f);
 
         public const string LabelMaterialPath = "Assets/PlayShift/Grass/Resources/PlayShiftFonts/HudFont SDF - Label.mat";
         public const string CounterMaterialPath = "Assets/PlayShift/Grass/Resources/PlayShiftFonts/HudFont SDF - Counter.mat";
@@ -93,7 +98,7 @@ namespace PlayShift.Grass.Editor
             m.SetColor("_UnderlayColor", shadow);
             m.SetFloat("_UnderlayOffsetX", 0f);
             m.SetFloat("_UnderlayOffsetY", shadowOffsetY);
-            m.SetFloat("_UnderlayDilate", outlineWidth * 2f);
+            m.SetFloat("_UnderlayDilate", outlineWidth * 2f); // same footprint as face + outline
             m.SetFloat("_UnderlaySoftness", 0f);
             AssetDatabase.CreateAsset(m, path);
         }
