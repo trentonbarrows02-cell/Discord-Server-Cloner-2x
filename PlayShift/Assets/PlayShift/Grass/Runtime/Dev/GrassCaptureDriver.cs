@@ -201,6 +201,23 @@ namespace PlayShift.Grass.Dev
                 GameSettingsMenu.Instance.SetOpen(false);
             }
 
+            // Counter colour options (owner choosing a replacement for lime), all with the heading's indigo outline.
+            if (manager.Hud != null)
+            {
+                var options = new (string name, Color fill)[]
+                {
+                    ("09_counter_white", Color.white),
+                    ("10_counter_gold", new Color(1f, 0.83f, 0.2f)),
+                    ("11_counter_sky", new Color(0.45f, 0.85f, 1f)),
+                };
+                foreach (var o in options)
+                {
+                    manager.Hud.PreviewCounterStyle(o.fill, GrassHud.LabelMaterial);
+                    yield return GameWait(0.2f);
+                    yield return Shot(o.name);
+                }
+            }
+
             // Gift burst stress test (TikTok spam): 30 frames, every frame a remove-25k, add-25k and taller gift.
             if (fieldRenderer != null)
             {

@@ -21,6 +21,16 @@ namespace PlayShift.Grass
         private static readonly Color GiftRemove = new Color(1f, 0.55f, 0.45f, 1f);
         private static readonly Color GiftTaller = new Color(0.55f, 0.8f, 1f, 1f);
         private static readonly Color CounterGreen = new Color(0.5f, 0.96f, 0.22f, 1f);   // flat lime
+        private Color _counterFill = CounterGreen;
+
+        /// <summary>Restyles the GRASS LEFT number (used by the capture tool to preview colour options side by side).</summary>
+        internal void PreviewCounterStyle(Color fill, Material preset)
+        {
+            _counterFill = fill;
+            _counterPunch = 0f;
+            _grassLeftValue.color = fill;
+            if (preset != null) _grassLeftValue.fontSharedMaterial = preset;
+        }
         private static readonly Color CounterOutline = new Color(0.16f, 0.11f, 0.29f, 1f); // dark indigo (fallback font path)
 
         [SerializeField] private int sortingOrder = 100;
@@ -113,8 +123,8 @@ namespace PlayShift.Grass
             _levelLabel.text = $"LEVEL {levelIndex + 1} / {levelCount}";
             _heightLabel.text = "Grass " + GrassUiFactory.FormatHeightRange(level.MinHeightCm, level.MaxHeightCm);
             _shownRemaining = -1;
-            _counterFlashColor = CounterGreen;
-            _grassLeftValue.color = CounterGreen;
+            _counterFlashColor = _counterFill;
+            _grassLeftValue.color = _counterFill;
             Refresh();
         }
 
@@ -270,7 +280,7 @@ namespace PlayShift.Grass
                 _counterPunch = Mathf.Max(0f, _counterPunch - Time.unscaledDeltaTime * 2.5f);
                 float s = _hudScale * (1f + 0.08f * _counterPunch);
                 _counterPanel.localScale = new Vector3(s, s, 1f);
-                _grassLeftValue.color = Color.Lerp(CounterGreen, _counterFlashColor, _counterPunch);
+                _grassLeftValue.color = Color.Lerp(_counterFill, _counterFlashColor, _counterPunch);
             }
         }
 

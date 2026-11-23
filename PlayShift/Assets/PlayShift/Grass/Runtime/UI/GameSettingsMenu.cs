@@ -19,6 +19,7 @@ namespace PlayShift.Grass
 
         private static readonly Color CardColor = new Color(0.1f, 0.08f, 0.2f, 0.94f);
         private static readonly Color ButtonColor = new Color(0.27f, 0.2f, 0.5f, 1f);
+        private static readonly Color RimColor = new Color(0.45f, 0.34f, 0.86f, 1f);
         private static readonly Color OnColor = new Color(0.36f, 0.78f, 0.2f, 1f);
         private static readonly Color OffColor = new Color(0.55f, 0.18f, 0.2f, 1f);
 
@@ -43,8 +44,19 @@ namespace PlayShift.Grass
             var dim = GrassUiFactory.Panel("SettingsMenu", canvasRoot, new Color(0f, 0f, 0f, 0.55f), rounded: false, raycast: true);
             GrassUiFactory.Stretch(dim.rectTransform);
             _root = dim.gameObject;
-            var card = GrassUiFactory.Panel("Card", dim.rectTransform, CardColor).rectTransform;
-            GrassUiFactory.Place(card, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(960f, 1120f));
+            // Game-style card: soft drop shadow, thick violet rim, big rounded corners.
+            var cardSize = new Vector2(960f, 1120f);
+            var shadow = GrassUiFactory.Panel("CardShadow", dim.rectTransform, new Color(0f, 0f, 0f, 0.45f));
+            GrassUiFactory.Place(shadow.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, -18f), cardSize + new Vector2(28f, 28f));
+            var rim = GrassUiFactory.Panel("CardRim", dim.rectTransform, RimColor);
+            GrassUiFactory.Place(rim.rectTransform, new Vector2(0.5f, 0.5f), Vector2.zero, cardSize + new Vector2(28f, 28f));
+            var cardImage = GrassUiFactory.Panel("Card", dim.rectTransform, CardColor);
+            var card = cardImage.rectTransform;
+            GrassUiFactory.Place(card, new Vector2(0.5f, 0.5f), Vector2.zero, cardSize);
+            // The rounded sprite has 20 px corners; < 1 enlarges them (about 55-60 px here).
+            shadow.pixelsPerUnitMultiplier = 0.33f;
+            rim.pixelsPerUnitMultiplier = 0.33f;
+            cardImage.pixelsPerUnitMultiplier = 0.36f;
 
             var title = GrassHud.HudText("Title", card, "SETTINGS", 84f, Color.white, GrassHud.LabelMaterial, 8f);
             GrassUiFactory.Place(title.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -40f), new Vector2(900f, 100f));
@@ -76,6 +88,8 @@ namespace PlayShift.Grass
             if (_root == null) return;
             IsOpen = open;
             _root.SetActive(open);
+            var player = FindAnyObjectByType<FirstPersonController>();
+            MenuBlurEffect.Set(player != null && player.Camera != null ? player.Camera : Camera.main, open);
             if (open)
             {
                 _resolutions = GameSettings.AvailableResolutions(); // monitor may have changed
