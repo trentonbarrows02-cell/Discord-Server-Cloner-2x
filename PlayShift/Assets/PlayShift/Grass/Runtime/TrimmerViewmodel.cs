@@ -23,14 +23,16 @@ namespace PlayShift.Grass
         [SerializeField] private GameObject trimmerModel;
         [SerializeField] private string cutterHeadName = "CutterHead";
         [SerializeField] private float modelScale = 1.85f;
+        [Tooltip("Lengthens only the shaft (model Z) so it reaches from the head on the ground up to the bottom-right corner. The cutting head keeps its real size.")]
+        [SerializeField] private float shaftStretch = 1.7f;
 
         [Header("Operating position (player space, metres/degrees)")]
         [Tooltip("Head position: x = right, z = forward.")]
-        [SerializeField] private Vector2 headOffset = new Vector2(0.42f, 1.45f);
+        [SerializeField] private Vector2 headOffset = new Vector2(0.05f, 1.4f);
         [Tooltip("Shaft rise: raises the handle end towards the player.")]
-        [SerializeField] private float shaftPitch = 14f;
+        [SerializeField] private float shaftPitch = 17f;
         [Tooltip("Swings the handle end to the right so the shaft enters from the bottom-right of the screen.")]
-        [SerializeField] private float handleSwing = 28f;
+        [SerializeField] private float handleSwing = 34f;
         [SerializeField] private float headHeight = 0.02f;
 
         [Header("Motion")]
@@ -79,7 +81,7 @@ namespace PlayShift.Grass
                 model.transform.SetParent(_bodyPivot, false);
                 model.transform.localPosition = Vector3.zero;
                 model.transform.localRotation = Quaternion.identity;
-                model.transform.localScale = Vector3.one * modelScale;
+                model.transform.localScale = new Vector3(modelScale, modelScale, modelScale * shaftStretch);
                 foreach (var c in model.GetComponentsInChildren<Collider>()) Destroy(c);
                 _mainSpinner = FindDeep(model.transform, cutterHeadName);
                 if (_mainSpinner != null)

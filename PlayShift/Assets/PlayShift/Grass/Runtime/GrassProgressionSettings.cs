@@ -43,14 +43,14 @@ namespace PlayShift.Grass
         [Header("Lawn layout (shared by every level)")]
         [Tooltip("Lawn size in metres (X, Z).")]
         public Vector2 fieldSizeMeters = new Vector2(50f, 50f);
-        [Tooltip("Logical cutting grid. 250 x 250 = 62,500 cells = 16 units per cell for 1,000,000 units.")]
-        public Vector2Int cellCount = new Vector2Int(250, 250);
+        [Tooltip("Logical cutting grid. Keep cells ~5 cm so cut edges are smooth curves. 1000 x 1000 on 50 m = 1 unit per cell.")]
+        public Vector2Int cellCount = new Vector2Int(1000, 1000);
         [Tooltip("Gift height increases never push grass above this.")]
         public float absoluteMaxHeightCm = 220f;
         [Tooltip("Once every cell is grown, Add Grass gifts can thicken cells up to this multiple of normal.")]
         [Min(1)] public int maxUnitsPerCellMultiplier = 4;
         [Tooltip("Size of natural tall/short patches, in cells.")]
-        [Min(1f)] public float heightNoiseCells = 14f;
+        [Min(1f)] public float heightNoiseCells = 56f;
         public int seed = 1234;
 
         [Header("TikTok gifts")]

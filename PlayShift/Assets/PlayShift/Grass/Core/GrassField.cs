@@ -5,7 +5,7 @@ namespace PlayShift.Grass
     /// <summary>
     /// The logical lawn. Grass is counted in "units" (GRASS LEFT) that are spread over a fixed grid of cells,
     /// completely independent of how many blades the renderer draws. A level's 1,000,000 units live in
-    /// e.g. 250 x 250 = 62,500 cells (16 units each); no per-unit or per-blade objects exist anywhere.
+    /// e.g. 1000 x 1000 cells of 5 cm (1 unit each on a 50 m lawn); no per-unit or per-blade objects exist anywhere.
     ///
     /// Coordinates are field-local metres: X in [0, SizeX], Z in [0, SizeZ].
     /// </summary>

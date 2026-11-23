@@ -64,11 +64,11 @@ namespace PlayShift.Grass.Tests
         public void RemoveGrass_IsAPatch_NotScatteredNoise()
         {
             var p = Playing();
-            p.RemoveGrass(16 * 200); // ~200 cells
+            p.RemoveGrass(400); // ~400 cells of 5 cm
             var cut = Enumerable.Range(0, p.Field.CellCount).Where(p.Field.IsCellCut).ToList();
             int minX = cut.Min(i => i % p.Field.CellsX), maxX = cut.Max(i => i % p.Field.CellsX);
             int minZ = cut.Min(i => i / p.Field.CellsX), maxZ = cut.Max(i => i / p.Field.CellsX);
-            Assert.True(maxX - minX < 25 && maxZ - minZ < 25, "gift removal should be one compact patch");
+            Assert.True(maxX - minX < 40 && maxZ - minZ < 40, "gift removal should be one compact patch");
         }
 
         [Fact]

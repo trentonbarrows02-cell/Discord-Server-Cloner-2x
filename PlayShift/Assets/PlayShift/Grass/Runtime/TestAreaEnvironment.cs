@@ -29,23 +29,55 @@ namespace PlayShift.Grass
             BuildVegetation(origin + new Vector3(size.x * 0.5f, 0f, size.y * 0.5f), Mathf.Max(size.x, size.y));
         }
 
+        private Vector3 _origin;
+        private Vector2 _size;
+
+        /// <summary>Flat around the lawn and path, gently rolling hills further out.</summary>
+        private float TerrainHeight(float x, float z)
+        {
+            float cx = _origin.x + _size.x * 0.5f, cz = _origin.z + _size.y * 0.5f;
+            float dx = Mathf.Max(Mathf.Abs(x - cx) - _size.x * 0.5f, 0f), dz = Mathf.Max(Mathf.Abs(z - cz) - _size.y * 0.5f, 0f);
+            float d = Mathf.Sqrt(dx * dx + dz * dz);
+            float t = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((d - 5f) / 30f));
+            float n = 0f, amp = 0.5f, f = 0.012f;
+            for (int i = 0; i < 4; i++) { n += amp * Mathf.PerlinNoise(x * f + 31.7f * i, z * f - 17.3f * i); amp *= 0.5f; f *= 2.1f; }
+            return _origin.y + t * (n * 10f - 2.5f) - 0.03f;
+        }
+
         private void BuildGround(Vector3 origin, Vector2 size)
         {
-            var lawnTex = Speckle(512, new Color32(79, 127, 37, 255), new[] { "5f9a2c", "457322", "6fa834", "3c6a1c", "7cb33c", "577d2a" }, 16000, 0.6f, 2.2f);
+            _origin = origin; _size = size;
+            var lawnTex = Speckle(512, new Color32(63, 138, 28, 255), new[] { "4fa224", "3a7d18", "5cb52b", "33721a", "6cc236", "468f20" }, 16000, 0.6f, 2.2f);
             var meadowTex = Speckle(512, new Color32(85, 104, 44, 255), new[] { "617a30", "4a5d26", "6e7d38", "5d5a33", "73883c", "3f5222" }, 14000, 0.6f, 2.5f);
+            var gravelTex = Speckle(256, new Color32(155, 143, 120, 255), new[] { "b3a891", "857a65", "a89a7d", "c2b9a3", "6f6555", "8c7f68" }, 7000, 0.6f, 2.2f);
 
-            var meadow = GameObject.CreatePrimitive(PrimitiveType.Plane);
-            meadow.name = "Meadow";
-            meadow.transform.SetParent(transform, false);
-            meadow.transform.position = origin + new Vector3(size.x * 0.5f, -0.01f, size.y * 0.5f);
-            meadow.transform.localScale = new Vector3(50f, 1f, 50f);
-            var mm = PipelineMaterials.CreateLit("Meadow", Color.white, meadowTex);
-            mm.mainTextureScale = new Vector2(220f, 220f);
-            if (mm.HasProperty("_BaseMap")) mm.SetTextureScale("_BaseMap", new Vector2(220f, 220f));
-            meadow.GetComponent<Renderer>().sharedMaterial = mm;
+            // Rolling meadow terrain.
+            const int res = 200; const float extent = 700f;
+            var verts = new Vector3[(res + 1) * (res + 1)]; var uvs = new Vector2[verts.Length]; var tris = new int[res * res * 6];
+            float cx = origin.x + size.x * 0.5f, cz = origin.z + size.y * 0.5f;
+            for (int j = 0; j <= res; j++)
+                for (int i = 0; i <= res; i++)
+                {
+                    float x = cx - extent / 2 + extent * i / res, z = cz - extent / 2 + extent * j / res;
+                    verts[j * (res + 1) + i] = new Vector3(x, TerrainHeight(x, z), z);
+                    uvs[j * (res + 1) + i] = new Vector2(x / 2.3f, z / 2.3f);
+                }
+            int k = 0;
+            for (int j = 0; j < res; j++)
+                for (int i = 0; i < res; i++)
+                {
+                    int v0 = j * (res + 1) + i;
+                    tris[k++] = v0; tris[k++] = v0 + res + 1; tris[k++] = v0 + 1;
+                    tris[k++] = v0 + 1; tris[k++] = v0 + res + 1; tris[k++] = v0 + res + 2;
+                }
+            var terrain = new Mesh { name = "Meadow", indexFormat = UnityEngine.Rendering.IndexFormat.UInt32, vertices = verts, uv = uvs, triangles = tris };
+            terrain.RecalculateNormals();
+            AddMesh("Meadow", terrain, PipelineMaterials.CreateLit("Meadow", Color.white, meadowTex), Vector3.zero);
 
+            // Short green lawn under the grass (cut grass reveals lawn, never dirt).
             var lawn = GameObject.CreatePrimitive(PrimitiveType.Plane);
             lawn.name = "LawnGround";
+            Destroy(lawn.GetComponent<Collider>());
             lawn.transform.SetParent(transform, false);
             lawn.transform.position = origin + new Vector3(size.x * 0.5f, 0f, size.y * 0.5f);
             lawn.transform.localScale = new Vector3((size.x + 1.2f) / 10f, 1f, (size.y + 1.2f) / 10f);
@@ -54,6 +86,44 @@ namespace PlayShift.Grass
             lm.mainTextureScale = tiles;
             if (lm.HasProperty("_BaseMap")) lm.SetTextureScale("_BaseMap", tiles);
             lawn.GetComponent<Renderer>().sharedMaterial = lm;
+
+            // Gravel path: a ring around the lawn and one path leading off towards the trees.
+            var gm = PipelineMaterials.CreateLit("GravelPath", Color.white, gravelTex);
+            float o = 2.6f, ii = 0.9f;
+            var ring = new Mesh { name = "PathRing" };
+            var rv = new System.Collections.Generic.List<Vector3>(); var rt = new System.Collections.Generic.List<int>();
+            void Quad(Vector3 a, Vector3 b, Vector3 c, Vector3 d) { int s0 = rv.Count; rv.Add(a); rv.Add(b); rv.Add(c); rv.Add(d); rt.AddRange(new[] { s0, s0 + 2, s0 + 1, s0, s0 + 3, s0 + 2 }); }
+            float y = origin.y + 0.006f, X0 = origin.x, Z0 = origin.z, X1 = origin.x + size.x, Z1 = origin.z + size.y;
+            Quad(new Vector3(X0 - o, y, Z0 - o), new Vector3(X1 + o, y, Z0 - o), new Vector3(X1 + o, y, Z0 - ii), new Vector3(X0 - o, y, Z0 - ii));
+            Quad(new Vector3(X0 - o, y, Z1 + ii), new Vector3(X1 + o, y, Z1 + ii), new Vector3(X1 + o, y, Z1 + o), new Vector3(X0 - o, y, Z1 + o));
+            Quad(new Vector3(X0 - o, y, Z0 - ii), new Vector3(X0 - ii, y, Z0 - ii), new Vector3(X0 - ii, y, Z1 + ii), new Vector3(X0 - o, y, Z1 + ii));
+            Quad(new Vector3(X1 + ii, y, Z0 - ii), new Vector3(X1 + o, y, Z0 - ii), new Vector3(X1 + o, y, Z1 + ii), new Vector3(X1 + ii, y, Z1 + ii));
+            // Spur path following the terrain.
+            float sx = cx + 5f;
+            for (int seg = 0; seg < 20; seg++)
+            {
+                float za = Z1 + o + seg * 2f, zb = za + 2f;
+                Quad(new Vector3(sx - 0.85f, TerrainHeight(sx, za) + 0.03f, za), new Vector3(sx + 0.85f, TerrainHeight(sx, za) + 0.03f, za),
+                     new Vector3(sx + 0.85f, TerrainHeight(sx, zb) + 0.03f, zb), new Vector3(sx - 0.85f, TerrainHeight(sx, zb) + 0.03f, zb));
+            }
+            ring.SetVertices(rv);
+            var ruv = new Vector2[rv.Count];
+            for (int i = 0; i < rv.Count; i++) ruv[i] = new Vector2(rv[i].x / 1.5f, rv[i].z / 1.5f);
+            ring.uv = ruv;
+            ring.SetTriangles(rt, 0);
+            ring.RecalculateNormals();
+            AddMesh("GravelPath", ring, gm, Vector3.zero);
+        }
+
+        private void AddMesh(string name, Mesh mesh, Material mat, Vector3 pos)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(transform, false);
+            go.transform.position = pos;
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var mr = go.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = mat;
+            mr.receiveShadows = true;
         }
 
         private void BuildVegetation(Vector3 centre, float lawnSize)
@@ -63,18 +133,42 @@ namespace PlayShift.Grass
             var barkMat = PipelineMaterials.CreateLit("Bark", new Color(0.29f, 0.23f, 0.16f));
             var cards = new List<(Vector3 p, Quaternion r, float s, Color c)>();
 
+            var needleTex = NeedleTexture(256);
+            var needleMat = PipelineMaterials.CreateLit("NeedleCards", Color.white, needleTex, alphaClip: true, cutoff: 0.45f, doubleSided: true);
+            var needles = new List<(Vector3 p, Quaternion r, float s, Color c)>();
+            Vector3 OnGround(float x, float z) => new Vector3(x, TerrainHeight(x, z), z);
+
+            // Near ring: broadleaf trees of varied shape and size mixed with conifers.
             for (int i = 0; i < treeCount; i++)
             {
-                float a = i / (float)treeCount * Mathf.PI * 2f + R() * 0.15f;
-                float r = lawnSize * 0.85f + 6f + R() * 18f;
-                AddTree(centre + new Vector3(Mathf.Cos(a) * r, 0f, Mathf.Sin(a) * r), 0.9f + R() * 0.6f, barkMat, cards);
+                float a = i / (float)treeCount * Mathf.PI * 2f + R() * 0.12f;
+                float r = lawnSize * 0.72f + 9f + R() * 16f;
+                var p = OnGround(centre.x + Mathf.Cos(a) * r, centre.z + Mathf.Sin(a) * r);
+                if (R() < 0.3f) AddConifer(p, 0.8f + R() * 0.5f, barkMat, needles);
+                else AddTree(p, 0.7f + R() * 0.75f, barkMat, cards);
             }
+            // Bushes along the path.
             for (int i = 0; i < bushCount; i++)
             {
-                float a = R() * Mathf.PI * 2f, r = lawnSize * 0.75f + 2f + R() * 6f;
-                AddBush(centre + new Vector3(Mathf.Cos(a) * r, 0f, Mathf.Sin(a) * r), 0.9f + R() * 0.7f, cards);
+                float a = R() * Mathf.PI * 2f, r = lawnSize * 0.72f + 3f + R() * 6f;
+                AddBush(OnGround(centre.x + Mathf.Cos(a) * r, centre.z + Mathf.Sin(a) * r), 0.8f + R() * 0.8f, cards);
             }
+            // Distant tree line on the hills.
+            for (int i = 0; i < 90; i++)
+            {
+                float a = R() * Mathf.PI * 2f, r = 70f + R() * 70f;
+                var p = OnGround(centre.x + Mathf.Cos(a) * r, centre.z + Mathf.Sin(a) * r);
+                if (R() < 0.4f) AddConifer(p, 1f + R() * 0.6f, barkMat, needles);
+                else AddTree(p, 1f + R() * 0.8f, barkMat, cards);
+            }
+            BuildCards(needles, needleMat, "Conifers");
 
+            BuildCards(cards, leafMat, "Foliage");
+        }
+
+        private void BuildCards(List<(Vector3 p, Quaternion r, float s, Color c)> cards, Material mat, string name)
+        {
+            var leafMat = mat;
             // Merge all leaf cards into meshes of <= 16k cards (one draw call each).
             const int perMesh = 16000;
             for (int start = 0; start < cards.Count; start += perMesh)
@@ -96,7 +190,7 @@ namespace PlayShift.Grass
                 var mesh = new Mesh { name = "Foliage", indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
                 mesh.vertices = v; mesh.uv = uv; mesh.colors = col; mesh.normals = nrm; mesh.triangles = tri;
                 mesh.RecalculateBounds();
-                var go = new GameObject("Foliage");
+                var go = new GameObject(name);
                 go.transform.SetParent(transform, false);
                 go.AddComponent<MeshFilter>().sharedMesh = mesh;
                 var mr = go.AddComponent<MeshRenderer>();
@@ -140,6 +234,55 @@ namespace PlayShift.Grass
                     cards.Add((cc + off * cr, Quaternion.Euler(R() * 360f, R() * 360f, R() * 360f), (1.1f + R() * 0.8f) * s, new Color(tint, tint * 1.02f, tint * 0.9f)));
                 }
             }
+        }
+
+        private void AddConifer(Vector3 pos, float s, Material bark, List<(Vector3, Quaternion, float, Color)> cards)
+        {
+            float h = (7f + R() * 5f) * s;
+            var trunk = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            Destroy(trunk.GetComponent<Collider>());
+            trunk.name = "ConiferTrunk";
+            trunk.transform.SetParent(transform, false);
+            trunk.transform.position = pos + Vector3.up * h * 0.45f;
+            trunk.transform.localScale = new Vector3(0.34f * s, h * 0.45f, 0.34f * s);
+            trunk.GetComponent<Renderer>().sharedMaterial = bark;
+            const int layers = 7;
+            for (int l = 0; l < layers; l++)
+            {
+                float t = l / (float)(layers - 1), ly = h * (0.18f + 0.8f * t), lr = (2.3f * (1f - t) + 0.35f) * s;
+                int n = Mathf.RoundToInt(30f * (1f - t) + 8f);
+                for (int k = 0; k < n; k++)
+                {
+                    float a = R() * Mathf.PI * 2f, rr = lr * Mathf.Sqrt(R());
+                    float tint = 0.75f + R() * 0.4f;
+                    cards.Add((pos + new Vector3(Mathf.Cos(a) * rr, ly + (R() - 0.6f) * 0.8f * s, Mathf.Sin(a) * rr),
+                        Quaternion.Euler(R() * 360f, R() * 360f, R() * 360f), (1f + R() * 0.6f) * s, new Color(tint, tint * 1.02f, tint * 0.9f)));
+                }
+            }
+        }
+
+        private Texture2D NeedleTexture(int size)
+        {
+            var px = new Color32[size * size];
+            var greens = new[] { new Color32(29, 61, 26, 255), new Color32(36, 73, 32, 255), new Color32(45, 85, 38, 255), new Color32(24, 53, 22, 255), new Color32(51, 94, 42, 255) };
+            for (int k = 0; k < 420; k++)
+            {
+                float a = R() * Mathf.PI * 2f, rad = Mathf.Sqrt(R()) * size * 0.44f;
+                float x = size / 2f + Mathf.Cos(a) * rad, y = size / 2f + Mathf.Sin(a) * rad * 0.7f;
+                float ex = x + (R() - 0.5f) * 14f, ey = y + 4f + R() * 8f;
+                var c = greens[_rng.Next(greens.Length)];
+                for (int st = 0; st <= 12; st++)
+                {
+                    float t = st / 12f;
+                    int ix = Mathf.RoundToInt(Mathf.Lerp(x, ex, t)), iy = Mathf.RoundToInt(Mathf.Lerp(y, ey, t));
+                    for (int oy = 0; oy <= 1; oy++)
+                        if (ix >= 0 && iy + oy >= 0 && ix < size && iy + oy < size) px[(iy + oy) * size + ix] = c;
+                }
+            }
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, true) { wrapMode = TextureWrapMode.Clamp };
+            tex.SetPixels32(px);
+            tex.Apply(true, true);
+            return tex;
         }
 
         private void AddBush(Vector3 pos, float s, List<(Vector3, Quaternion, float, Color)> cards)

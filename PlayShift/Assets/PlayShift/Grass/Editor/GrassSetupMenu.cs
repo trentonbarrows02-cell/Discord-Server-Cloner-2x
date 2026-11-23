@@ -28,8 +28,8 @@ namespace PlayShift.Grass.Editor
             var settings = LoadOrCreate<GrassProgressionSettings>(AssetFolder + "/GrassTestAreaSettings.asset", s =>
             {
                 s.fieldSizeMeters = new Vector2(24f, 24f);
-                s.cellCount = new Vector2Int(240, 240);
-                s.heightNoiseCells = 22f;
+                s.cellCount = new Vector2Int(480, 480);
+                s.heightNoiseCells = 44f;
             });
             var grassMat = GrassMaterial();
             var sky = LoadOrCreateMaterial(AssetFolder + "/SkyClouds.mat", "PlayShift/SkyClouds");

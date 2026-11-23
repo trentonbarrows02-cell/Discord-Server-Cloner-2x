@@ -31,7 +31,8 @@ namespace PlayShift.Grass
         [System.Serializable]
         public struct QualityPreset
         {
-            [Range(1, 32)] public int bladesPerCell;
+            [Tooltip("Blade density at full detail (blades per square metre, before the level's density fraction).")]
+            [Range(50, 3000)] public int bladesPerSquareMeter;
             public float fullDetailDistance;
             public float midDetailDistance;
             public float maxDrawDistance;
@@ -44,16 +45,16 @@ namespace PlayShift.Grass
 
         [Header("Quality")]
         [SerializeField] private GrassQuality quality = GrassQuality.High;
-        [SerializeField] private QualityPreset low = new QualityPreset { bladesPerCell = 4, fullDetailDistance = 9f, midDetailDistance = 22f, maxDrawDistance = 90f, shadowCastDistance = 0f };
-        [SerializeField] private QualityPreset medium = new QualityPreset { bladesPerCell = 6, fullDetailDistance = 12f, midDetailDistance = 30f, maxDrawDistance = 120f, shadowCastDistance = 7f };
-        [SerializeField] private QualityPreset high = new QualityPreset { bladesPerCell = 10, fullDetailDistance = 16f, midDetailDistance = 40f, maxDrawDistance = 160f, shadowCastDistance = 12f };
-        [SerializeField] private QualityPreset ultra = new QualityPreset { bladesPerCell = 16, fullDetailDistance = 24f, midDetailDistance = 55f, maxDrawDistance = 200f, shadowCastDistance = 20f };
+        [SerializeField] private QualityPreset low = new QualityPreset { bladesPerSquareMeter = 380, fullDetailDistance = 9f, midDetailDistance = 22f, maxDrawDistance = 90f, shadowCastDistance = 0f };
+        [SerializeField] private QualityPreset medium = new QualityPreset { bladesPerSquareMeter = 600, fullDetailDistance = 12f, midDetailDistance = 30f, maxDrawDistance = 120f, shadowCastDistance = 7f };
+        [SerializeField] private QualityPreset high = new QualityPreset { bladesPerSquareMeter = 950, fullDetailDistance = 16f, midDetailDistance = 40f, maxDrawDistance = 160f, shadowCastDistance = 12f };
+        [SerializeField] private QualityPreset ultra = new QualityPreset { bladesPerSquareMeter = 1500, fullDetailDistance = 24f, midDetailDistance = 55f, maxDrawDistance = 200f, shadowCastDistance = 20f };
         [Range(0.05f, 1f)] [SerializeField] private float midDetailFraction = 0.45f;
         [Range(0.02f, 1f)] [SerializeField] private float farDetailFraction = 0.2f;
 
         [Header("Layout")]
-        [Tooltip("Cells per chunk edge for culling/LOD.")]
-        [Range(4, 64)] [SerializeField] private int chunkCells = 20;
+        [Tooltip("Chunk edge in metres for culling/LOD (independent of the cutting grid).")]
+        [Range(0.5f, 8f)] [SerializeField] private float chunkMeters = 2f;
         [SerializeField] private int bladeSeed = 777;
         [Range(3, 10)] [SerializeField] private int bladeSegments = 6;
 
@@ -160,7 +161,7 @@ namespace PlayShift.Grass
         {
             if (_field == null || grassMaterial == null) return;
             var layout = _field.Layout;
-            int bpc = Q.bladesPerCell;
+            int bpc = Q.bladesPerSquareMeter;
             if (_bladeBuffer != null && _builtCellsX == layout.CellsX && _builtCellsZ == layout.CellsZ &&
                 _builtBladesPerCell == bpc && Mathf.Approximately(_builtSizeX, layout.SizeX) &&
                 Mathf.Approximately(_builtSizeZ, layout.SizeZ))
@@ -170,11 +171,14 @@ namespace PlayShift.Grass
             if (_bladeMesh == null) _bladeMesh = GrassBladeMesh.Create(bladeSegments);
 
             int cellsX = layout.CellsX, cellsZ = layout.CellsZ;
-            int chunksX = Mathf.CeilToInt(cellsX / (float)chunkCells);
-            int chunksZ = Mathf.CeilToInt(cellsZ / (float)chunkCells);
+            float sizeX = layout.SizeX, sizeZ = layout.SizeZ;
+            int chunksX = Mathf.CeilToInt(sizeX / chunkMeters);
+            int chunksZ = Mathf.CeilToInt(sizeZ / chunkMeters);
             float csx = layout.CellSizeX, csz = layout.CellSizeZ;
 
-            var blades = new Vector4[cellsX * cellsZ * bpc];
+            // Blades are scattered by area (not per cell); each one looks up the cutting cell under it.
+            long total = (long)Mathf.Ceil(sizeX * sizeZ * bpc * 1.02f) + chunksX * chunksZ;
+            var blades = new Vector4[total];
             _chunks = new Chunk[chunksX * chunksZ];
             var rng = new GrassRandom(bladeSeed);
             int write = 0;
@@ -182,15 +186,17 @@ namespace PlayShift.Grass
                 for (int kx = 0; kx < chunksX; kx++)
                 {
                     int start = write;
-                    int x0 = kx * chunkCells, x1 = Mathf.Min(cellsX, x0 + chunkCells);
-                    int z0 = kz * chunkCells, z1 = Mathf.Min(cellsZ, z0 + chunkCells);
-                    for (int cz = z0; cz < z1; cz++)
-                        for (int cx = x0; cx < x1; cx++)
-                        {
-                            int cell = cz * cellsX + cx;
-                            for (int b = 0; b < bpc; b++)
-                                blades[write++] = new Vector4((cx + rng.NextFloat()) * csx, (cz + rng.NextFloat()) * csz, cell, rng.NextFloat());
-                        }
+                    float x0 = kx * chunkMeters, x1 = Mathf.Min(sizeX, x0 + chunkMeters);
+                    float z0 = kz * chunkMeters, z1 = Mathf.Min(sizeZ, z0 + chunkMeters);
+                    int bladeCount = Mathf.Max(1, Mathf.RoundToInt((x1 - x0) * (z1 - z0) * bpc));
+                    bladeCount = Mathf.Min(bladeCount, blades.Length - write);
+                    for (int b = 0; b < bladeCount; b++)
+                    {
+                        float px = x0 + rng.NextFloat() * (x1 - x0), pz = z0 + rng.NextFloat() * (z1 - z0);
+                        int cx = Mathf.Min(cellsX - 1, (int)(px / csx)), cz = Mathf.Min(cellsZ - 1, (int)(pz / csz));
+                        blades[write++] = new Vector4(px, pz, cz * cellsX + cx, rng.NextFloat());
+                    }
+                    // Random order inside the chunk: drawing the first N instances is a uniform LOD subsample.
                     for (int i = write - 1; i > start; i--)
                     {
                         int j = start + rng.NextInt(i - start + 1);
@@ -200,10 +206,11 @@ namespace PlayShift.Grass
                     {
                         Offset = start,
                         Count = write - start,
-                        LocalMin = new Vector3(x0 * csx, 0f, z0 * csz),
-                        LocalMax = new Vector3(x1 * csx, 0f, z1 * csz),
+                        LocalMin = new Vector3(x0, 0f, z0),
+                        LocalMax = new Vector3(x1, 0f, z1),
                     };
                 }
+            if (write < blades.Length) System.Array.Resize(ref blades, write);
 
             _bladeBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, blades.Length, BladeStride);
             _bladeBuffer.SetData(blades);

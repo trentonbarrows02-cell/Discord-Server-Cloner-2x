@@ -27,7 +27,7 @@ float4 _Cutters[PLAYSHIFT_MAX_CUTTERS]; // xyz = head centre (world), w = radius
 float _CutterCount;
 float _Spin;                        // 0..1 blade speed
 
-float4 _ColYellowGreen, _ColOlive, _ColDarkGreen, _ColFreshGreen, _ColDry;
+float4 _ColYellowGreen, _ColGoldenGreen, _ColDarkGreen, _ColFreshGreen, _ColDry;
 float4 _StubbleColor, _StubbleTipColor;
 float _DryAmount, _BladeWidth, _WidthGrowth, _StubbleHeight, _LeanAmount;
 float4 _WindDirection;
@@ -69,7 +69,7 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
     float side = uv.x * 2.0 - 1.0;
 
     // Grown height: cell noise x per-blade variety, inside the level's range.
-    float full = clamp(cell.x * (0.78 + 0.44 * r1), _HeightClamp.x, _HeightClamp.y);
+    float full = clamp(cell.x * (0.82 + 0.36 * r1), _HeightClamp.x, _HeightClamp.y);
     float cutAge = cell.y < 0.0 ? -1.0 : _GrassTime - cell.y;
     float k = cutAge < 0.0 ? 0.0 : saturate(cutAge / max(_CutAnim, 1e-3));
     float ease = 1.0 - pow(1.0 - k, 3.0);
@@ -82,7 +82,7 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
     float2 bdir = float2(-wdir.y, wdir.x);
 
     // Mostly upright so tall grass keeps its height; a few blades lean or flop.
-    float arc = _LeanAmount * (0.12 + 0.38 * r3 * r3 + 0.25 * tall * r6);
+    float arc = _LeanAmount * (0.08 + 0.22 * r3 * r3 + 0.12 * tall * r6);
 
     float2 windDir = normalize(_WindDirection.xz + 1e-5);
     float ph = dot(root.xz, windDir) * 0.9 - _GrassTime * _WindSpeed;
@@ -117,9 +117,9 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
     float along = theta < 1e-3 ? 0.0 : h * (1.0 - cos(a)) / theta;
 
     // Varied widths; taller levels have thicker blades. Tapers to a point.
-    float w = _BladeWidth * (0.55 + 1.1 * r4 * r4)
+    float w = _BladeWidth * (0.7 + 0.6 * r4)
             * (1.0 + _WidthGrowth * (sqrt(max(full, 0.05) / 0.2) - 1.0))
-            * lerp(1.0, 1.25, ease) * _LodWidthScale;
+            * lerp(1.0, 1.35, ease) * _LodWidthScale;
     w *= 1.0 - pow(t, 1.6) * 0.92;
 
     float3 wax = float3(wdir.x, 0.0, wdir.y);
@@ -132,11 +132,12 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
 
     // Colour variety with dry golden patches.
     float dryPatch = PsNoise(root.xz * 0.35 + 3.1);
-    float3 tip = r6 < 0.25 ? _ColYellowGreen.rgb : r6 < 0.5 ? _ColOlive.rgb : r6 < 0.78 ? _ColDarkGreen.rgb : _ColFreshGreen.rgb;
-    tip = lerp(tip, _ColDry.rgb, saturate(_DryAmount * (smoothstep(0.62, 0.85, dryPatch) * (0.4 + 0.6 * r5) + 0.12 * step(0.93, r1))));
+    // Mostly yellow-green and golden-green, with darker and fresh greens mixed through.
+    float3 tip = r6 < 0.35 ? _ColYellowGreen.rgb : r6 < 0.6 ? _ColGoldenGreen.rgb : r6 < 0.78 ? _ColDarkGreen.rgb : _ColFreshGreen.rgb;
+    tip = lerp(tip, _ColDry.rgb, saturate(_DryAmount * (smoothstep(0.66, 0.9, dryPatch) * (0.3 + 0.4 * r5) + 0.08 * step(0.95, r1))));
     float3 rootC = tip * float3(0.35, 0.42, 0.3);
     float3 grown = lerp(rootC, tip, smoothstep(0.0, 0.85, t)) * (0.85 + 0.3 * r2);
-    float3 stubC = lerp(_StubbleColor.rgb, _StubbleTipColor.rgb, smoothstep(0.4, 1.0, t)) * (0.85 + 0.3 * r1);
+    float3 stubC = lerp(_StubbleColor.rgb, _StubbleTipColor.rgb, smoothstep(0.3, 1.0, t)) * (0.85 + 0.3 * r1);
     o.color = lerp(grown, stubC, ease) * lerp(0.55, 1.0, smoothstep(0.0, 0.7, t));
     return o;
 }

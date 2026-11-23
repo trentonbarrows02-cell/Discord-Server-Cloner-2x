@@ -6,26 +6,26 @@ Shader "PlayShift/InstancedGrassURP"
     Properties
     {
         [Header(Colour)]
-        _ColYellowGreen ("Yellow-green", Color) = (0.50, 0.62, 0.17, 1)
-        _ColOlive ("Olive", Color) = (0.37, 0.42, 0.14, 1)
-        _ColDarkGreen ("Dark green", Color) = (0.15, 0.31, 0.09, 1)
-        _ColFreshGreen ("Fresh green", Color) = (0.28, 0.50, 0.14, 1)
-        _ColDry ("Dry golden", Color) = (0.72, 0.60, 0.30, 1)
-        _DryAmount ("Dry patch amount", Range(0, 1)) = 1
-        _StubbleColor ("Cut lawn (base)", Color) = (0.20, 0.45, 0.08, 1)
-        _StubbleTipColor ("Cut lawn (cut ends)", Color) = (0.55, 0.78, 0.25, 1)
+        _ColYellowGreen ("Yellow-green", Color) = (0.55, 0.66, 0.18, 1)
+        _ColGoldenGreen ("Golden green", Color) = (0.66, 0.62, 0.22, 1)
+        _ColDarkGreen ("Dark green", Color) = (0.16, 0.32, 0.08, 1)
+        _ColFreshGreen ("Fresh green", Color) = (0.33, 0.55, 0.14, 1)
+        _ColDry ("Dry golden", Color) = (0.74, 0.64, 0.30, 1)
+        _DryAmount ("Dry patch amount", Range(0, 1)) = 0.8
+        _StubbleColor ("Cut lawn (base)", Color) = (0.16, 0.50, 0.05, 1)
+        _StubbleTipColor ("Cut lawn (cut ends)", Color) = (0.42, 0.86, 0.17, 1)
         _Translucency ("Back-light translucency", Range(0, 2)) = 0.9
 
         [Header(Shape)]
-        _BladeWidth ("Blade width (m)", Float) = 0.0075
-        _WidthGrowth ("Width growth with height", Range(0, 1)) = 0.55
+        _BladeWidth ("Blade width (m)", Float) = 0.0062
+        _WidthGrowth ("Width growth with height", Range(0, 1)) = 0.45
         _LeanAmount ("Natural lean", Range(0, 2)) = 1
-        _StubbleHeight ("Cut lawn height (m)", Float) = 0.045
+        _StubbleHeight ("Cut lawn height (m)", Float) = 0.04
         _CutAnim ("Cut animation (s)", Range(0.05, 0.5)) = 0.18
 
         [Header(Wind)]
         _WindDirection ("Wind direction (XZ)", Vector) = (0.86, 0, 0.5, 0)
-        _WindStrength ("Wind strength (rad)", Range(0, 1)) = 0.22
+        _WindStrength ("Wind strength (rad)", Range(0, 1)) = 0.17
         _WindSpeed ("Wind speed", Float) = 1.5
     }
 

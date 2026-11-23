@@ -20,6 +20,7 @@ namespace PlayShift.Grass
         private static readonly Color GiftAdd = new Color(0.55f, 1f, 0.45f, 1f);
         private static readonly Color GiftRemove = new Color(1f, 0.55f, 0.45f, 1f);
         private static readonly Color GiftTaller = new Color(0.55f, 0.8f, 1f, 1f);
+        private static readonly Color CounterGreen = new Color(0.42f, 0.95f, 0.23f, 1f);
 
         [SerializeField] private int sortingOrder = 100;
         [SerializeField] private Vector2 referenceResolution = new Vector2(1920f, 1080f);
@@ -90,13 +91,15 @@ namespace PlayShift.Grass
             _levelLabel.text = $"LEVEL {levelIndex + 1} / {levelCount}";
             _heightLabel.text = "Grass " + GrassUiFactory.FormatHeightRange(level.MinHeightCm, level.MaxHeightCm);
             _shownRemaining = -1;
-            _counterFlashColor = Ink;
+            _counterFlashColor = CounterGreen;
+            _grassLeftValue.color = CounterGreen;
             Refresh();
         }
 
         public void ShowLevelCleared(LevelResult result, GrassLevelDefinition next)
         {
-            Refresh(); // counter shows the final 0, then stops updating while the overlay is up
+            _shownRemaining = -1;
+            Refresh(); // counter snaps to the final 0, then stops updating while the overlay is up
             _clearedTitle.text = "LEVEL CLEARED!";
             _clearedSubtitle.text = $"{result.LevelName.ToUpperInvariant()} COMPLETE";
             _clearedTime.text = GrassUiFactory.FormatTime(result.CompletionSeconds);
@@ -111,6 +114,7 @@ namespace PlayShift.Grass
 
         public void ShowAllLevelsCompleted(IReadOnlyList<LevelResult> results)
         {
+            _shownRemaining = -1;
             Refresh();
             int count = results.Count;
             _victoryTitle.text = $"ALL {count} LEVELS COMPLETED!";
@@ -172,7 +176,7 @@ namespace PlayShift.Grass
                 _counterPunch = Mathf.Max(0f, _counterPunch - Time.unscaledDeltaTime * 2.5f);
                 float s = 1f + 0.08f * _counterPunch;
                 _counterPanel.localScale = new Vector3(s, s, 1f);
-                _grassLeftValue.color = Color.Lerp(Ink, _counterFlashColor, _counterPunch);
+                _grassLeftValue.color = Color.Lerp(CounterGreen, _counterFlashColor, _counterPunch);
             }
         }
 
@@ -182,10 +186,14 @@ namespace PlayShift.Grass
             var p = _manager.Progression;
             var field = p.Field;
 
-            if (field.Remaining != _shownRemaining)
+            // Count down smoothly towards the exact value (catches up within a few frames; jumps up instantly).
+            long target = field.Remaining;
+            long next = _shownRemaining < 0 || target > _shownRemaining ? target
+                : System.Math.Max(target, _shownRemaining - System.Math.Max(1L, (long)((_shownRemaining - target) * Mathf.Clamp01(Time.unscaledDeltaTime * 12f))));
+            if (next != _shownRemaining)
             {
-                _shownRemaining = field.Remaining;
-                _grassLeftValue.text = _shownRemaining.ToString("N0");
+                _shownRemaining = next;
+                SetText(_grassLeftValue, _shownRemaining.ToString("N0"));
                 long scale = System.Math.Max(field.InitialUnits, field.InitialUnits + field.AddedByGifts);
                 float frac = scale > 0 ? Mathf.Clamp01((float)((double)_shownRemaining / scale)) : 0f;
                 _progressFill.anchorMax = new Vector2(frac, 1f);
@@ -217,17 +225,21 @@ namespace PlayShift.Grass
         {
             // Clean TikTok-LIVE style: no boxes, a huge bold outlined number, a thin progress bar.
             var counter = GrassUiFactory.Rect("GrassLeft", _root);
-            _counterPanel = GrassUiFactory.Place(counter, new Vector2(0.5f, 1f), new Vector2(0f, -14f), new Vector2(900f, 230f));
-            var label = GrassUiFactory.Text("GrassLeftLabel", _counterPanel, "GRASS LEFT", 36f, new Color(0.91f, 1f, 0.84f), TextAlignmentOptions.Center, FontStyles.Bold);
-            GrassUiFactory.Place(label.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -4f), new Vector2(880f, 44f));
-            label.characterSpacing = 14f;
-            Outline(label, 0.28f);
-            _grassLeftValue = GrassUiFactory.Text("GrassLeftValue", _counterPanel, "1,000,000", 136f, Ink, TextAlignmentOptions.Center, FontStyles.Bold);
-            GrassUiFactory.Place(_grassLeftValue.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -40f), new Vector2(900f, 150f));
-            Outline(_grassLeftValue, 0.24f);
+            _counterPanel = GrassUiFactory.Place(counter, new Vector2(0.5f, 1f), new Vector2(0f, -10f), new Vector2(1100f, 250f));
+            // White heading, big vibrant-green numbers, thick black outlines and a drop shadow (readable on any stream).
+            var label = GrassUiFactory.Text("GrassLeftLabel", _counterPanel, "GRASS LEFT", 62f, Ink, TextAlignmentOptions.Center, FontStyles.Bold);
+            GrassUiFactory.Place(label.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, 0f), new Vector2(880f, 70f));
+            label.characterSpacing = 4f;
+            Outline(label, 0.3f);
+            AddShadow(label, 5f);
+            _grassLeftValue = GrassUiFactory.Text("GrassLeftValue", _counterPanel, "1,000,000", 160f, CounterGreen, TextAlignmentOptions.Center, FontStyles.Bold);
+            GrassUiFactory.Place(_grassLeftValue.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -58f), new Vector2(1100f, 170f));
+            Outline(_grassLeftValue, 0.32f);
+            AddShadow(_grassLeftValue, 9f);
 
             var border = GrassUiFactory.Panel("ProgressBorder", _counterPanel, new Color(1f, 1f, 1f, 0.9f));
-            GrassUiFactory.Place(border.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 8f), new Vector2(626f, 22f));
+            GrassUiFactory.Place(border.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, -14f), new Vector2(566f, 20f));
+            border.color = Color.black;
             var track = GrassUiFactory.Panel("ProgressTrack", border.rectTransform, new Color(0f, 0f, 0f, 0.55f));
             GrassUiFactory.Stretch(track.rectTransform, 3f);
             var fill = GrassUiFactory.Panel("ProgressFill", track.rectTransform, Grass);
@@ -241,21 +253,46 @@ namespace PlayShift.Grass
             // Level / height / timer, top left, no box.
             var info = GrassUiFactory.Rect("LevelInfo", _root);
             var infoRt = GrassUiFactory.Place(info, new Vector2(0f, 1f), new Vector2(36f, -28f), new Vector2(520f, 170f));
-            _levelLabel = GrassUiFactory.Text("LevelLabel", infoRt, "LEVEL 1 / 5", 58f, Ink, TextAlignmentOptions.Left, FontStyles.Bold);
-            GrassUiFactory.Place(_levelLabel.rectTransform, new Vector2(0f, 1f), Vector2.zero, new Vector2(520f, 66f));
+            // Secondary: smaller than the counter.
+            _levelLabel = GrassUiFactory.Text("LevelLabel", infoRt, "LEVEL 1 / 5", 42f, Ink, TextAlignmentOptions.Left, FontStyles.Bold);
+            GrassUiFactory.Place(_levelLabel.rectTransform, new Vector2(0f, 1f), Vector2.zero, new Vector2(520f, 50f));
             Outline(_levelLabel, 0.25f);
-            _heightLabel = GrassUiFactory.Text("HeightLabel", infoRt, "Grass 15-25 cm", 32f, new Color(0.91f, 1f, 0.84f), TextAlignmentOptions.Left, FontStyles.Bold);
-            GrassUiFactory.Place(_heightLabel.rectTransform, new Vector2(0f, 1f), new Vector2(0f, -68f), new Vector2(520f, 40f));
+            _heightLabel = GrassUiFactory.Text("HeightLabel", infoRt, "Grass 15-25 cm", 26f, new Color(0.91f, 1f, 0.84f), TextAlignmentOptions.Left, FontStyles.Bold);
+            GrassUiFactory.Place(_heightLabel.rectTransform, new Vector2(0f, 1f), new Vector2(0f, -52f), new Vector2(520f, 34f));
             Outline(_heightLabel, 0.3f);
-            _timerLabel = GrassUiFactory.Text("TimerLabel", infoRt, "TIME  00:00.0", 32f, Gold, TextAlignmentOptions.Left, FontStyles.Bold);
-            GrassUiFactory.Place(_timerLabel.rectTransform, new Vector2(0f, 1f), new Vector2(0f, -108f), new Vector2(520f, 40f));
+            _timerLabel = GrassUiFactory.Text("TimerLabel", infoRt, "TIME  00:00.0", 26f, Gold, TextAlignmentOptions.Left, FontStyles.Bold);
+            GrassUiFactory.Place(_timerLabel.rectTransform, new Vector2(0f, 1f), new Vector2(0f, -86f), new Vector2(520f, 34f));
             Outline(_timerLabel, 0.3f);
         }
 
         private static void Outline(TextMeshProUGUI t, float width)
         {
             t.outlineWidth = width;
-            t.outlineColor = new Color32(10, 30, 5, 245);
+            t.outlineColor = new Color32(0, 0, 0, 255);
+        }
+
+        /// <summary>Drop shadow: a dark copy of the text behind it, offset downwards.</summary>
+        private static void AddShadow(TextMeshProUGUI t, float offset)
+        {
+            var sh = GrassUiFactory.Text(t.name + "Shadow", t.rectTransform.parent, t.text, t.fontSize, new Color(0f, 0f, 0f, 0.55f), t.alignment, t.fontStyle);
+            var rt = sh.rectTransform;
+            rt.anchorMin = t.rectTransform.anchorMin; rt.anchorMax = t.rectTransform.anchorMax; rt.pivot = t.rectTransform.pivot;
+            rt.sizeDelta = t.rectTransform.sizeDelta;
+            rt.anchoredPosition = t.rectTransform.anchoredPosition + new Vector2(0f, -offset);
+            sh.characterSpacing = t.characterSpacing;
+            sh.outlineWidth = t.outlineWidth;
+            sh.outlineColor = new Color32(0, 0, 0, 140);
+            rt.SetSiblingIndex(t.rectTransform.GetSiblingIndex());
+            s_shadows[t] = sh;
+        }
+
+        private static readonly System.Collections.Generic.Dictionary<TextMeshProUGUI, TextMeshProUGUI> s_shadows =
+            new System.Collections.Generic.Dictionary<TextMeshProUGUI, TextMeshProUGUI>();
+
+        private static void SetText(TextMeshProUGUI t, string value)
+        {
+            t.text = value;
+            if (s_shadows.TryGetValue(t, out var sh) && sh != null) sh.text = value;
         }
 
         private void BuildGiftFeed()

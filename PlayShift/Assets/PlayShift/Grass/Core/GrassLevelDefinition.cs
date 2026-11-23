@@ -58,8 +58,10 @@ namespace PlayShift.Grass
     [Serializable]
     public sealed class GrassFieldLayout
     {
-        public int CellsX = 250;
-        public int CellsZ = 250;
+        // 5 cm cells: cut edges follow the round cutting head smoothly, and on a 50 x 50 m lawn
+        // 1000 x 1000 cells hold exactly one grass unit each.
+        public int CellsX = 1000;
+        public int CellsZ = 1000;
         public float SizeX = 50f;
         public float SizeZ = 50f;
 
@@ -70,7 +72,7 @@ namespace PlayShift.Grass
         public int MaxUnitsPerCellMultiplier = 4;
 
         /// <summary>Size of the smooth height patches, in cells. Bigger = broader tall/short patches.</summary>
-        public float HeightNoiseCells = 14f;
+        public float HeightNoiseCells = 56f;
 
         public int CellCount => CellsX * CellsZ;
         public float CellSizeX => SizeX / CellsX;
