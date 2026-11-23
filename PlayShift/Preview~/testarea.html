@@ -1,0 +1,41 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>PlayShift Grass Test Area</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #8fb8e0; font-family: "DejaVu Sans", "Liberation Sans", Arial, sans-serif; }
+  canvas#scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #hud { position: fixed; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; pointer-events: none; color: #fff; }
+  /* Clean TikTok-LIVE style counter: no boxes, huge bold numbers with a dark outline. */
+  #counter { position: absolute; left: 0; right: 0; top: 18px; text-align: center; }
+  #counter .label { font-size: 34px; font-weight: 900; letter-spacing: 8px; color: #e9ffd6;
+                    text-shadow: 0 3px 0 rgba(0,0,0,.55), 0 0 10px rgba(0,0,0,.45); }
+  #counter .value { font-size: 132px; font-weight: 900; line-height: 140px; letter-spacing: 2px;
+                    -webkit-text-stroke: 7px rgba(10, 30, 5, 0.95); paint-order: stroke fill;
+                    text-shadow: 0 7px 0 rgba(0,0,0,.45), 0 0 24px rgba(0,0,0,.35); }
+  #counter .bar { margin: 6px auto 0; width: 620px; height: 16px; border-radius: 8px; background: rgba(0,0,0,.42);
+                  box-shadow: 0 0 0 3px rgba(255,255,255,.85); overflow: hidden; }
+  #counter .fill { height: 100%; width: 100%; background: linear-gradient(90deg, #7be04a, #c9f25a); }
+  #level { position: absolute; left: 36px; top: 30px; }
+  #level .n { font-size: 54px; font-weight: 900; -webkit-text-stroke: 5px rgba(10,30,5,.9); paint-order: stroke fill; text-shadow: 0 4px 0 rgba(0,0,0,.4); }
+  #level .h { font-size: 30px; font-weight: 800; color: #e9ffd6; text-shadow: 0 2px 0 rgba(0,0,0,.6), 0 0 8px rgba(0,0,0,.5); }
+  #tag { position: absolute; right: 30px; bottom: 22px; font-size: 22px; color: rgba(255,255,255,.8); text-shadow: 0 0 4px #000; }
+  #state { position: absolute; right: 36px; top: 36px; font-size: 30px; font-weight: 900; text-shadow: 0 2px 0 rgba(0,0,0,.6), 0 0 8px rgba(0,0,0,.6); }
+  #caption { position: absolute; left: 50%; bottom: 70px; transform: translateX(-50%); font-size: 38px; font-weight: 900; white-space: nowrap;
+             -webkit-text-stroke: 5px rgba(0,0,0,.85); paint-order: stroke fill; }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div id="hud">
+  <div id="level"><div class="n" id="lvl">LEVEL 3</div><div class="h" id="hgt">60-80 cm grass</div></div>
+  <div id="counter"><div class="label">GRASS LEFT</div><div class="value" id="left">1,000,000</div><div class="bar"><div class="fill" id="fill"></div></div></div>
+  <div id="state"></div>
+  <div id="caption"></div>
+  <div id="tag">PlayShift Grass test area (browser preview)</div>
+</div>
+<script type="importmap">{"imports":{"three":"./three.module.js"}}</script>
+<script type="module" src="./testarea.js"></script>
+</body>
+</html>

@@ -11,6 +11,7 @@ const out = path.resolve(args[0] && !args[0].startsWith('--') ? args[0] : 'out/p
 const width = +opt('width', 1280), height = +opt('height', 720);
 const maxFrames = +opt('frames', 100000);
 const query = opt('query', '');
+const pageName = opt('page', 'index.html');
 const stills = opt('stills', '');
 const fromFrame = +opt('from', 0); // comma-separated frame numbers to also save as PNG
 
@@ -18,6 +19,8 @@ const root = __dirname;
 const files = {
   '/index.html': ['index.html', 'text/html'],
   '/preview.js': ['preview.js', 'text/javascript'],
+  '/testarea.html': ['testarea.html', 'text/html'],
+  '/testarea.js': ['testarea.js', 'text/javascript'],
   '/grass-core.js': ['grass-core.js', 'text/javascript'],
   '/three.module.js': ['node_modules/three/build/three.module.js', 'text/javascript'],
   '/GLTFLoader.js': ['node_modules/three/examples/jsm/loaders/GLTFLoader.js', 'text/javascript'],
@@ -40,28 +43,31 @@ const files = {
     if (!f) return route.fulfill({ status: 404, body: 'not found' });
     route.fulfill({ status: 200, contentType: f[1], body: fs.readFileSync(path.join(root, f[0])) });
   });
-  await page.goto(`http://preview.local/index.html?record=1&${query}`);
+  await page.goto(`http://preview.local/${pageName}?record=1&${query}`);
   await page.waitForFunction(() => window.previewReady === true, null, { timeout: 120000 });
 
   const stillSet = new Set(stills.split(',').filter(Boolean).map(Number));
+  const noVideo = args.includes('--no-video');
   const t0 = Date.now();
   let n = 0, evalMs = 0, lastLevel = -2; const marks = [];
   for (; n < maxFrames; n++) {
-    const te = Date.now(); const done = await page.evaluate(() => window.frame()); evalMs += Date.now() - te;
+    const te = Date.now(); const render = n >= fromFrame || stillSet.has(n) || stillSet.has(n + 1);
+    const done = await page.evaluate((r) => window.frame(r), render); evalMs += Date.now() - te;
     const lvl = await page.evaluate(() => window.levelIndexNow);
     if (lvl !== lastLevel) { marks.push(`${n} level${lvl + 1}`); lastLevel = lvl; fs.writeFileSync(path.join(path.dirname(out), path.basename(out, '.mp4') + '.marks'), marks.join('\n')); }
+    if (stillSet.has(n)) await page.screenshot({ path: path.join(path.dirname(out), `still_${n}.png`) });
     if (n < fromFrame) { if (done) break; continue; }
     const file = path.join(framesDir, String(n - fromFrame).padStart(5, '0') + '.jpg');
-    await page.screenshot({ path: file, type: 'jpeg', quality: 90 });
+    if (!noVideo) await page.screenshot({ path: file, type: 'jpeg', quality: 90 });
     if (n % 30 === 0) fs.writeFileSync(path.join(path.dirname(out), path.basename(out, '.mp4') + '.progress'), String(n));
-    if (stillSet.has(n)) await page.screenshot({ path: path.join(path.dirname(out), `still_${n}.png`) });
     if (n % 60 === 0) console.log(`frame ${n}  ${((Date.now() - t0) / 1000).toFixed(0)}s`);
     if (done) break;
   }
   await browser.close();
   console.log(`rendered ${n + 1} frames in ${((Date.now() - t0) / 1000).toFixed(0)}s (frame() ${(evalMs / 1000).toFixed(0)}s)`);
 
-  execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', '30', '-i', path.join(framesDir, '%05d.jpg'),
+  if (noVideo) return;
+  execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', opt('fps', '30'), '-i', path.join(framesDir, '%05d.jpg'),
     '-c:v', 'libx264', '-preset', 'medium', '-crf', '24', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', out]);
   console.log('wrote', out, (fs.statSync(out).size / 1e6).toFixed(1) + ' MB');
 })().catch((e) => { console.error(e); process.exit(1); });
