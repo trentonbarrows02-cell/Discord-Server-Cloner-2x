@@ -80,7 +80,7 @@ namespace PlayShift.Grass
             if (m == null || m.Progression == null) return;
             if (_router == null)
             {
-                _router = new TikTokGiftRouter(m.Progression, m.Settings.BuildGiftRules())
+                _router = new TikTokGiftRouter(m.Progression, m.Settings.BuildGiftRules(), m.Modifiers)
                 {
                     IgnoreStreakInProgress = m.Settings.ignoreStreakInProgress,
                 };

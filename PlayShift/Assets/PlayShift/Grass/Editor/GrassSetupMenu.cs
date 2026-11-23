@@ -4,150 +4,204 @@ using System.Linq;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace PlayShift.Grass.Editor
 {
-    /// <summary>One-click scene setup: settings asset, grass material, lawn, HUD, gift receiver and (optionally) a test mower.</summary>
+    /// <summary>
+    /// One-click scene setup.
+    ///  - Create Test Area: a polished first-person test lawn (dense grass, trimmer viewmodel, clippings,
+    ///    audio, sky, sun with shadows, perimeter trees) to tune the cutting feel before the full game.
+    ///  - Create Level Setup: just the grass system, for an existing scene.
+    /// </summary>
     public static class GrassSetupMenu
     {
         private const string AssetFolder = "Assets/PlayShift/Grass/Generated";
-        private const string SettingsPath = AssetFolder + "/GrassProgressionSettings.asset";
-        private const string MaterialPath = AssetFolder + "/InstancedGrass.mat";
+        private const string TrimmerModelPath = "Assets/PlayShift/Models/Trimmer.glb";
 
-        [MenuItem("PlayShift/Grass/Create Level Setup", priority = 0)]
-        public static void CreateLevelSetup() => CreateSetup(withTestMower: false);
-
-        [MenuItem("PlayShift/Grass/Create Level Setup + Test Trimmer", priority = 1)]
-        public static void CreateLevelSetupWithMower() => CreateSetup(withTestMower: true);
-
-        private static void CreateSetup(bool withTestMower)
+        [MenuItem("PlayShift/Grass/Create Test Area (first-person)", priority = 0)]
+        public static void CreateTestArea()
         {
             EnsureTmpEssentials();
             Directory.CreateDirectory(AssetFolder);
 
-            var settings = AssetDatabase.LoadAssetAtPath<GrassProgressionSettings>(SettingsPath);
-            if (settings == null)
+            var settings = LoadOrCreate<GrassProgressionSettings>(AssetFolder + "/GrassTestAreaSettings.asset", s =>
             {
-                settings = ScriptableObject.CreateInstance<GrassProgressionSettings>();
-                AssetDatabase.CreateAsset(settings, SettingsPath);
-            }
-
-            var material = AssetDatabase.LoadAssetAtPath<Material>(MaterialPath);
-            if (material == null)
-            {
-                var shader = Shader.Find("PlayShift/InstancedGrass");
-                if (shader == null)
-                {
-                    EditorUtility.DisplayDialog("PlayShift Grass", "Shader 'PlayShift/InstancedGrass' not found. Make sure InstancedGrass.shader compiled.", "OK");
-                    return;
-                }
-                material = new Material(shader) { enableInstancing = true };
-                AssetDatabase.CreateAsset(material, MaterialPath);
-            }
+                s.fieldSizeMeters = new Vector2(24f, 24f);
+                s.cellCount = new Vector2Int(240, 240);
+                s.heightNoiseCells = 22f;
+            });
+            var grassMat = GrassMaterial();
+            var sky = LoadOrCreateMaterial(AssetFolder + "/SkyClouds.mat", "PlayShift/SkyClouds");
+            var clipMat = AssetDatabase.LoadAssetAtPath<Material>(AssetFolder + "/GrassClippings.mat");
+            if (clipMat == null) { clipMat = PipelineMaterials.CreateParticleUnlit("GrassClippings"); AssetDatabase.CreateAsset(clipMat, AssetFolder + "/GrassClippings.mat"); }
             AssetDatabase.SaveAssets();
+            if (grassMat == null) return;
 
             Undo.IncrementCurrentGroup();
             int group = Undo.GetCurrentGroup();
+
+            // Lighting: bright daytime sun with soft shadows, cloud sky, light haze.
+            var sun = UnityEngine.Object.FindObjectsOfType<Light>().FirstOrDefault(l => l.type == LightType.Directional);
+            if (sun == null)
+            {
+                sun = new GameObject("Sun").AddComponent<Light>();
+                sun.type = LightType.Directional;
+                Undo.RegisterCreatedObjectUndo(sun.gameObject, "Create Sun");
+            }
+            Undo.RecordObject(sun.transform, "Sun");
+            sun.transform.rotation = Quaternion.Euler(38f, 135f, 0f);
+            sun.intensity = PipelineMaterials.IsUrp ? 2.2f : 1.25f;
+            sun.color = new Color(1f, 0.95f, 0.86f);
+            sun.shadows = LightShadows.Soft;
+            sun.shadowStrength = 0.85f;
+            RenderSettings.sun = sun;
+            if (sky != null) RenderSettings.skybox = sky;
+            RenderSettings.ambientMode = AmbientMode.Skybox;
+            RenderSettings.ambientIntensity = 1.1f;
+            RenderSettings.fog = true;
+            RenderSettings.fogMode = FogMode.Linear;
+            RenderSettings.fogColor = new Color(0.81f, 0.88f, 0.94f);
+            RenderSettings.fogStartDistance = 60f;
+            RenderSettings.fogEndDistance = 260f;
+            DynamicGI.UpdateEnvironment();
+            QualitySettings.shadowDistance = Mathf.Max(QualitySettings.shadowDistance, 40f);
+
+            // Grass system.
+            var root = new GameObject("GrassTestArea");
+            Undo.RegisterCreatedObjectUndo(root, "Create Grass Test Area");
+            var renderer = root.AddComponent<GrassFieldRenderer>();
+            var manager = root.AddComponent<GrassLevelManager>();
+            root.AddComponent<TikTokGiftReceiver>();
+            var env = new GameObject("Environment").AddComponent<TestAreaEnvironment>();
+            env.transform.SetParent(root.transform, false);
+            Set(manager, "settings", settings);
+            Set(manager, "fieldRenderer", renderer);
+            SetInt(manager, "startLevel", 3);
+            Set(renderer, "grassMaterial", grassMat);
+            Set(env, "manager", manager);
+
+            // First-person player: camera + floating trimmer, no body or hands.
+            foreach (var cam in UnityEngine.Object.FindObjectsOfType<Camera>())
+                if (cam.CompareTag("MainCamera")) { Undo.RecordObject(cam.gameObject, "Disable camera"); cam.gameObject.SetActive(false); }
+
+            var player = new GameObject("Player");
+            Undo.RegisterCreatedObjectUndo(player, "Create Player");
+            player.transform.position = new Vector3(12f, 0f, -1.75f);
+            var cc = player.AddComponent<CharacterController>();
+            cc.height = 1.8f; cc.radius = 0.3f; cc.center = new Vector3(0f, 0.9f, 0f);
+            var camGo = new GameObject("PlayerCamera", typeof(Camera), typeof(AudioListener));
+            camGo.tag = "MainCamera";
+            camGo.transform.SetParent(player.transform, false);
+            var camera = camGo.GetComponent<Camera>();
+            camera.nearClipPlane = 0.03f;
+            camera.farClipPlane = 900f;
+            camera.fieldOfView = 68f;
+
+            var blades = player.AddComponent<TrimmerBlades>();
+            var cutter = player.AddComponent<GrassCutter>();
+            var fp = player.AddComponent<FirstPersonController>();
+            var vm = player.AddComponent<TrimmerViewmodel>();
+            Set(cutter, "blades", blades);
+            Set(fp, "playerCamera", camera);
+            Set(fp, "cutter", cutter);
+            Set(fp, "blades", blades);
+            var model = AssetDatabase.LoadAssetAtPath<GameObject>(TrimmerModelPath);
+            if (model == null)
+                Debug.LogWarning($"[PlayShift Grass] Could not import {TrimmerModelPath}. Install glTFast (Package Manager > Add package by name > com.unity.cloud.gltfast), then assign it to TrimmerViewmodel.");
+            Set(vm, "trimmerModel", model);
+            Set(vm, "controller", fp);
+            Set(vm, "cutter", cutter);
+            Set(vm, "blades", blades);
+
+            var clipGo = new GameObject("GrassClippings", typeof(ParticleSystem));
+            clipGo.transform.SetParent(player.transform, false);
+            var clips = clipGo.AddComponent<GrassClippings>();
+            Set(clips, "cutter", cutter);
+            Set(clips, "clippingMaterial", clipMat);
+
+            var audioGo = new GameObject("TrimmerAudio", typeof(AudioSource));
+            audioGo.transform.SetParent(player.transform, false);
+            var audio = audioGo.AddComponent<TrimmerAudio>();
+            Set(audio, "blades", blades);
+            Set(audio, "cutter", cutter);
+
+            Undo.CollapseUndoOperations(group);
+            Selection.activeGameObject = root;
+            Debug.Log("[PlayShift Grass] Test area created. Press Play: hold Left Mouse (or press Space) to run the trimmer, WASD to walk, mouse to look. " +
+                      "Change the level on GrassTestArea > GrassLevelManager > Start Level; quality on GrassFieldRenderer > Quality.", root);
+        }
+
+        [MenuItem("PlayShift/Grass/Create Level Setup (existing scene)", priority = 1)]
+        public static void CreateLevelSetup()
+        {
+            EnsureTmpEssentials();
+            Directory.CreateDirectory(AssetFolder);
+            var settings = LoadOrCreate<GrassProgressionSettings>(AssetFolder + "/GrassProgressionSettings.asset", null);
+            var grassMat = GrassMaterial();
+            AssetDatabase.SaveAssets();
+            if (grassMat == null) return;
 
             var root = new GameObject("GrassLevel");
             Undo.RegisterCreatedObjectUndo(root, "Create Grass Level");
             var renderer = root.AddComponent<GrassFieldRenderer>();
             var manager = root.AddComponent<GrassLevelManager>();
             root.AddComponent<TikTokGiftReceiver>();
-
-            var so = new SerializedObject(manager);
-            so.FindProperty("settings").objectReferenceValue = settings;
-            so.FindProperty("fieldRenderer").objectReferenceValue = renderer;
-            so.ApplyModifiedPropertiesWithoutUndo();
-            var rso = new SerializedObject(renderer);
-            rso.FindProperty("grassMaterial").objectReferenceValue = material;
-            rso.ApplyModifiedPropertiesWithoutUndo();
-
-            // Ground under the lawn so cut stubble has soil to sit on.
-            var ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
-            ground.name = "LawnGround";
-            ground.transform.SetParent(root.transform, false);
-            Vector2 size = settings.fieldSizeMeters;
-            ground.transform.localPosition = new Vector3(size.x * 0.5f, -0.005f, size.y * 0.5f);
-            ground.transform.localScale = new Vector3(size.x / 10f, 1f, size.y / 10f);
-            var groundRenderer = ground.GetComponent<Renderer>();
-            var groundMat = new Material(groundRenderer.sharedMaterial) { color = new Color(0.22f, 0.17f, 0.09f) };
-            AssetDatabase.CreateAsset(groundMat, AssetDatabase.GenerateUniqueAssetPath(AssetFolder + "/LawnGround.mat"));
-            groundRenderer.sharedMaterial = groundMat;
-
-            // Attach a cutter to whatever was selected (your mower), or create a test mower.
-            var selected = Selection.activeGameObject;
-            if (withTestMower)
-            {
-                var mower = CreateTrimmer(root.transform.TransformPoint(new Vector3(2f, 0f, 2f)));
-                var ctrl = mower.AddComponent<DebugMowerController>();
-                var cam = Camera.main;
-                if (cam != null)
-                {
-                    var cso = new SerializedObject(ctrl);
-                    cso.FindProperty("followCamera").objectReferenceValue = cam.transform;
-                    cso.ApplyModifiedPropertiesWithoutUndo();
-                }
-            }
-            else if (selected != null && selected != root && selected.GetComponent<GrassCutter>() == null)
-            {
-                Undo.AddComponent<GrassCutter>(selected);
-                Debug.Log($"[PlayShift Grass] Added GrassCutter to '{selected.name}'.", selected);
-            }
-
-            Undo.CollapseUndoOperations(group);
+            Set(manager, "settings", settings);
+            Set(manager, "fieldRenderer", renderer);
+            Set(renderer, "grassMaterial", grassMat);
             Selection.activeGameObject = root;
-            Debug.Log("[PlayShift Grass] Level setup created. Move 'GrassLevel' so its origin is the lawn's corner; " +
-                      "add a GrassCutter to your mower if it does not have one.", root);
+            Debug.Log("[PlayShift Grass] Level setup created. Move 'GrassLevel' so its origin is the lawn's corner, and add a " +
+                      "GrassCutter (plus TrimmerBlades/TrimmerViewmodel for first-person) to the player.", root);
         }
 
-        private const string TrimmerModelPath = "Assets/PlayShift/Models/Trimmer.glb";
-        private const float TrimmerScale = 2.2f;
-
-        [MenuItem("PlayShift/Grass/Add Trimmer To Scene", priority = 20)]
-        public static void AddTrimmerToScene()
+        private static Material GrassMaterial()
         {
-            var t = CreateTrimmer(Vector3.zero);
-            Selection.activeGameObject = t;
+            string shaderName = GrassFieldRenderer.DefaultShaderName;
+            string path = AssetFolder + (PipelineMaterials.IsUrp ? "/InstancedGrassURP.mat" : "/InstancedGrass.mat");
+            var mat = LoadOrCreateMaterial(path, shaderName);
+            if (mat == null)
+                EditorUtility.DisplayDialog("PlayShift Grass", $"Shader '{shaderName}' not found or failed to compile. Check the Console for shader errors.", "OK");
+            return mat;
         }
 
-        /// <summary>
-        /// Trimmer root (cutter + visuals) with the model as a child. The model's origin is the bottom centre of
-        /// the cutting head and it faces +Z, so the root's position is exactly where grass gets cut.
-        /// Needs a glTF importer for .glb (Unity's glTFast package: com.unity.cloud.gltfast); falls back to a cube.
-        /// </summary>
-        private static GameObject CreateTrimmer(Vector3 position)
+        private static Material LoadOrCreateMaterial(string path, string shaderName)
         {
-            var root = new GameObject("Trimmer");
-            Undo.RegisterCreatedObjectUndo(root, "Create Trimmer");
-            root.transform.position = position;
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (mat != null) return mat;
+            var shader = Shader.Find(shaderName);
+            if (shader == null) return null;
+            mat = new Material(shader);
+            AssetDatabase.CreateAsset(mat, path);
+            return mat;
+        }
 
-            var modelAsset = AssetDatabase.LoadAssetAtPath<GameObject>(TrimmerModelPath);
-            GameObject model;
-            if (modelAsset != null)
-            {
-                model = (GameObject)PrefabUtility.InstantiatePrefab(modelAsset);
-                model.transform.localScale = Vector3.one * TrimmerScale;
-            }
-            else
-            {
-                Debug.LogWarning($"[PlayShift Grass] Could not import {TrimmerModelPath}. Install glTFast (Package Manager > Add package by name > " +
-                                 "com.unity.cloud.gltfast) to use the trimmer model; using a placeholder cube for now.");
-                model = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                UnityEngine.Object.DestroyImmediate(model.GetComponent<Collider>());
-                model.transform.localScale = new Vector3(0.4f, 0.15f, 1.6f);
-                model.transform.localPosition = new Vector3(0f, 0.08f, -0.7f);
-            }
-            model.name = "TrimmerModel";
-            model.transform.SetParent(root.transform, false);
+        private static T LoadOrCreate<T>(string path, Action<T> init) where T : ScriptableObject
+        {
+            var a = AssetDatabase.LoadAssetAtPath<T>(path);
+            if (a != null) return a;
+            a = ScriptableObject.CreateInstance<T>();
+            init?.Invoke(a);
+            AssetDatabase.CreateAsset(a, path);
+            return a;
+        }
 
-            var cutter = root.AddComponent<GrassCutter>();
-            cutter.CutRadius = 0.65f;
-            var visuals = root.AddComponent<TrimmerVisuals>();
-            var vso = new SerializedObject(visuals);
-            vso.FindProperty("sweepRoot").objectReferenceValue = model.transform;
-            vso.ApplyModifiedPropertiesWithoutUndo();
-            return root;
+        private static void Set(UnityEngine.Object target, string field, UnityEngine.Object value)
+        {
+            var so = new SerializedObject(target);
+            var p = so.FindProperty(field);
+            if (p == null) { Debug.LogWarning($"[PlayShift Grass] {target.GetType().Name} has no field '{field}'."); return; }
+            p.objectReferenceValue = value;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void SetInt(UnityEngine.Object target, string field, int value)
+        {
+            var so = new SerializedObject(target);
+            var p = so.FindProperty(field);
+            if (p == null) return;
+            p.intValue = value;
+            so.ApplyModifiedPropertiesWithoutUndo();
         }
 
         /// <summary>Imports TMP Essential Resources non-interactively if the project lacks them.</summary>

@@ -36,6 +36,9 @@ namespace PlayShift.Grass
 
         public GrassProgressionSettings Settings => settings;
         public GrassProgression Progression { get; private set; }
+
+        /// <summary>Timed trimmer modifiers (speed, radius, slow, multi-blade); gifts and power-ups add to this.</summary>
+        public TrimmerModifiers Modifiers { get; } = new TrimmerModifiers();
         public GrassField Field => Progression?.Field;
         public GrassHud Hud => hud;
 
@@ -84,7 +87,12 @@ namespace PlayShift.Grass
 
         private void Update()
         {
-            Progression?.Tick(Time.deltaTime);
+            if (Progression == null) return;
+            // Runs before the cutters (DefaultExecutionOrder -100): cut cells get stamped with this clock and
+            // the grass shader animates them shortening from that moment.
+            Progression.Field.Clock = Time.time;
+            Progression.Tick(Time.deltaTime);
+            Modifiers.Tick(Time.deltaTime);
         }
 
         /// <summary>Starts a level by 1-based number.</summary>
@@ -106,6 +114,14 @@ namespace PlayShift.Grass
 
         public void RestartCurrentLevel() => Progression.StartLevel(Mathf.Max(0, Progression.CurrentLevelIndex));
 
+        // Gameplay modifiers (usable from gifts, power-ups or UnityEvents).
+        public void AddSpeedBoost(float fraction, float seconds) => Modifiers.Add(TrimmerModifierType.SpeedBoost, fraction, seconds);
+        public void AddRadiusBoost(float fraction, float seconds) => Modifiers.Add(TrimmerModifierType.RadiusBoost, fraction, seconds);
+        public void SlowTrimmer(float fraction, float seconds) => Modifiers.Add(TrimmerModifierType.Slow, fraction, seconds);
+        public void AddBlades(int count, float seconds) => Modifiers.Add(TrimmerModifierType.MultiBlade, count, seconds);
+        /// <summary>Regrows previously cut grass (same as an Add Grass gift).</summary>
+        public long RegrowGrass(long units) => Progression.AddGrass(units);
+
         // Gift / scripting entry points (also usable from UnityEvents).
         public long AddGrass(long units) => Progression.AddGrass(units);
         public long RemoveGrass(long units) => Progression.RemoveGrass(units);
@@ -126,6 +142,7 @@ namespace PlayShift.Grass
 
         private void HandleLevelCleared(LevelResult result)
         {
+            Modifiers.Clear();
             if (!result.IsFinalLevel)
                 hud.ShowLevelCleared(result, Progression.NextLevelDefinition);
             onLevelCleared.Invoke(result.LevelNumber, (float)result.CompletionSeconds, result.TotalGrassCut);

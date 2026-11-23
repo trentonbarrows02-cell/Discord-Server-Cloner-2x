@@ -19,6 +19,8 @@ namespace PlayShift.Grass
             [Min(0.5f)] public float maxHeightCm = 25f;
             [Tooltip("GRASS LEFT at the start of the level.")]
             [Min(1)] public long startingUnits = GrassLevelDefinition.DefaultStartingUnits;
+            [Tooltip("Fraction of the renderer's blades per cell drawn on this level (taller levels are thicker).")]
+            [Range(0.05f, 1f)] public float bladeDensity = 1f;
         }
 
         [Serializable]
@@ -29,8 +31,10 @@ namespace PlayShift.Grass
             public GiftActionType action = GiftActionType.AddGrass;
             [Tooltip("Grass units for Add/Remove Grass, centimetres for Increase Height. Per gift.")]
             public double amount = 1000;
-            [Tooltip("A combo of N gifts applies the amount N times.")]
+            [Tooltip("A combo of N gifts applies the amount N times (modifiers: the duration N times).")]
             public bool scaleByRepeatCount = true;
+            [Tooltip("Seconds, for the timed trimmer modifiers (Speed Boost, Radius Boost, Slow Trimmer, Multi Blade).")]
+            public float durationSeconds = 10f;
         }
 
         [Header("Levels (played in order; the last one is the final level)")]
@@ -60,7 +64,7 @@ namespace PlayShift.Grass
             {
                 var e = levels[i];
                 string name = string.IsNullOrWhiteSpace(e.displayName) ? $"Level {i + 1}" : e.displayName;
-                result.Add(new GrassLevelDefinition(name, e.minHeightCm, Mathf.Max(e.minHeightCm, e.maxHeightCm), e.startingUnits));
+                result.Add(new GrassLevelDefinition(name, e.minHeightCm, Mathf.Max(e.minHeightCm, e.maxHeightCm), e.startingUnits, Mathf.Clamp(e.bladeDensity, 0.05f, 1f)));
             }
             return result;
         }
@@ -84,7 +88,7 @@ namespace PlayShift.Grass
             var result = new List<GiftRule>(giftRules.Count);
             foreach (var g in giftRules)
                 if (g != null && !string.IsNullOrWhiteSpace(g.giftName))
-                    result.Add(new GiftRule(g.giftName, g.action, g.amount, g.scaleByRepeatCount));
+                    result.Add(new GiftRule(g.giftName, g.action, g.amount, g.scaleByRepeatCount, g.durationSeconds));
             return result;
         }
 
@@ -105,7 +109,7 @@ namespace PlayShift.Grass
         {
             var list = new List<LevelEntry>();
             foreach (var d in GrassLevelDefinition.CreateDefaultLevels())
-                list.Add(new LevelEntry { displayName = d.DisplayName, minHeightCm = d.MinHeightCm, maxHeightCm = d.MaxHeightCm, startingUnits = d.StartingUnits });
+                list.Add(new LevelEntry { displayName = d.DisplayName, minHeightCm = d.MinHeightCm, maxHeightCm = d.MaxHeightCm, startingUnits = d.StartingUnits, bladeDensity = d.BladeDensity });
             return list;
         }
 
@@ -113,7 +117,7 @@ namespace PlayShift.Grass
         {
             var list = new List<GiftRuleEntry>();
             foreach (var r in TikTokGiftRouter.CreateDefaultRules())
-                list.Add(new GiftRuleEntry { giftName = r.GiftName, action = r.Action, amount = r.Amount, scaleByRepeatCount = r.ScaleByRepeatCount });
+                list.Add(new GiftRuleEntry { giftName = r.GiftName, action = r.Action, amount = r.Amount, scaleByRepeatCount = r.ScaleByRepeatCount, durationSeconds = r.DurationSeconds });
             return list;
         }
 
