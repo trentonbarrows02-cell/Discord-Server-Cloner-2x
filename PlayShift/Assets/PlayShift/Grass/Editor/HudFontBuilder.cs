@@ -89,7 +89,7 @@ namespace PlayShift.Grass.Editor
         public static readonly Color HudInk = new Color(0.16f, 0.11f, 0.29f, 1f);
 
         /// <summary>Thin edge on the lime numbers: a deeper green of the same hue.</summary>
-        public static readonly Color CounterEdge = new Color(0.24f, 0.66f, 0.1f, 1f);
+        public static readonly Color CounterEdge = new Color(0.07f, 0.5f, 0.18f, 1f);
 
         public const string LabelMaterialPath = "Assets/PlayShift/Grass/Resources/PlayShiftFonts/HudFont SDF - Label.mat";
         public const string CounterMaterialPath = "Assets/PlayShift/Grass/Resources/PlayShiftFonts/HudFont SDF - Counter.mat";

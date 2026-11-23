@@ -20,7 +20,7 @@ namespace PlayShift.Grass
         private static readonly Color GiftAdd = new Color(0.55f, 1f, 0.45f, 1f);
         private static readonly Color GiftRemove = new Color(1f, 0.55f, 0.45f, 1f);
         private static readonly Color GiftTaller = new Color(0.55f, 0.8f, 1f, 1f);
-        private static readonly Color CounterGreen = new Color(0.5f, 0.96f, 0.22f, 1f);   // flat lime
+        internal static readonly Color CounterGreen = new Color(0.24f, 0.87f, 0.33f, 1f); // grass green (owner: green, not lime)
         private Color _counterFill = CounterGreen;
 
         /// <summary>Restyles the GRASS LEFT number (used by the capture tool to preview colour options side by side).</summary>
@@ -100,7 +100,8 @@ namespace PlayShift.Grass
             BuildVictoryOverlay();
             HideOverlays();
             // Settings page (Esc) on top of everything else on this canvas.
-            gameObject.AddComponent<GameSettingsMenu>().Build(_root);
+            gameObject.AddComponent<MainMenu>().Build(_root);          // title screen (shown at start)
+            gameObject.AddComponent<GameSettingsMenu>().Build(_root);  // above the title screen
             if (Resources.Load<TMP_Settings>("TMP Settings") == null || TMP_Settings.defaultFontAsset == null)
                 Debug.LogError("[PlayShift Grass] TextMeshPro has no default font. Import 'TMP Essential Resources' " +
                                "(Window > TextMeshPro) or run PlayShift > Grass > Create Level Setup.", this);
@@ -263,12 +264,25 @@ namespace PlayShift.Grass
             else GrassUiFactory.Place(_levelInfo, new Vector2(0f, 1f), new Vector2(36f, -28f), _levelInfo.sizeDelta);
         }
 
+        private bool _playHudVisible = true;
+
+        /// <summary>The title screen hides the gameplay HUD (counter, gift popup, level info).</summary>
+        private void SetPlayHudVisible(bool visible)
+        {
+            if (visible == _playHudVisible) return;
+            _playHudVisible = visible;
+            _counterPanel.gameObject.SetActive(visible);
+            _giftPopup.gameObject.SetActive(visible);
+            _levelInfo.gameObject.SetActive(visible);
+        }
+
         /// <summary>Cards wider than a portrait screen shrink to fit.</summary>
         private float OverlayFit(Overlay o) => _portrait ? Mathf.Min(1f, 1020f / Mathf.Max(1f, o.Card.sizeDelta.x)) : 1f;
 
         private void Update()
         {
             UpdateOrientation();
+            SetPlayHudVisible(!MainMenu.IsOpen);
             Refresh();
             AnimateOverlay(_cleared);
             AnimateOverlay(_victory);

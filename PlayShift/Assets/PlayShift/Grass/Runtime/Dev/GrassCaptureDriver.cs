@@ -88,6 +88,14 @@ namespace PlayShift.Grass.Dev
             _report.AppendLine("Level " + (manager.Progression.CurrentLevelIndex + 1) + ", initial units " + field.InitialUnits.ToString("N0"));
 
             yield return GameWait(1.5f); // settle: HUD build, shader warm-up, player lands on the ground
+            if (MainMenu.IsOpen && MainMenu.Instance != null)
+            {
+                yield return GameWait(1.0f); // let the background pan a little
+                yield return Shot("00_main_menu");
+                _report.AppendLine($"Title screen: level timer held at {manager.Progression.ElapsedSeconds:F2} s (should be 0)");
+                MainMenu.Instance.Play();
+                yield return GameWait(0.6f);
+            }
             _report.AppendLine("Player position after settling: " + fp.transform.position.ToString("F2"));
             yield return Shot("01_uncut_trimmer_off");
 
@@ -199,23 +207,6 @@ namespace PlayShift.Grass.Dev
                 yield return GameWait(0.3f);
                 yield return Shot("08_settings");
                 GameSettingsMenu.Instance.SetOpen(false);
-            }
-
-            // Counter colour options (owner choosing a replacement for lime), all with the heading's indigo outline.
-            if (manager.Hud != null)
-            {
-                var options = new (string name, Color fill)[]
-                {
-                    ("09_counter_white", Color.white),
-                    ("10_counter_gold", new Color(1f, 0.83f, 0.2f)),
-                    ("11_counter_sky", new Color(0.45f, 0.85f, 1f)),
-                };
-                foreach (var o in options)
-                {
-                    manager.Hud.PreviewCounterStyle(o.fill, GrassHud.LabelMaterial);
-                    yield return GameWait(0.2f);
-                    yield return Shot(o.name);
-                }
             }
 
             // Gift burst stress test (TikTok spam): 30 frames, every frame a remove-25k, add-25k and taller gift.

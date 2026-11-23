@@ -20,7 +20,7 @@ namespace PlayShift.Grass
         private static readonly Color CardColor = new Color(0.1f, 0.08f, 0.2f, 0.94f);
         private static readonly Color ButtonColor = new Color(0.27f, 0.2f, 0.5f, 1f);
         private static readonly Color RimColor = new Color(0.45f, 0.34f, 0.86f, 1f);
-        private static readonly Color OnColor = new Color(0.36f, 0.78f, 0.2f, 1f);
+        private static readonly Color OnColor = new Color(0.17f, 0.7f, 0.29f, 1f);
         private static readonly Color OffColor = new Color(0.55f, 0.18f, 0.2f, 1f);
 
         private GameObject _root;
@@ -71,8 +71,17 @@ namespace PlayShift.Grass
 
             var close = GrassUiFactory.Button("Close", card, "CLOSE", OnColor, out var closeLabel);
             StyleButtonLabel(closeLabel, 50f);
-            GrassUiFactory.Place((RectTransform)close.transform, new Vector2(0.5f, 0f), new Vector2(0f, 64f), new Vector2(380f, 100f));
+            _closeButton = (RectTransform)close.transform;
             close.onClick.AddListener(() => SetOpen(false));
+            var menu = GrassUiFactory.Button("MainMenu", card, "MAIN MENU", ButtonColor, out var menuLabel);
+            StyleButtonLabel(menuLabel, 44f);
+            _menuButton = (RectTransform)menu.transform;
+            menu.onClick.AddListener(() =>
+            {
+                SetOpen(false);
+                if (MainMenu.Instance != null) MainMenu.Instance.Show();
+            });
+            LayoutBottomButtons();
 
             var hint = GrassUiFactory.Text("Hint", card, "ESC opens / closes settings", 26f, new Color(1f, 1f, 1f, 0.6f));
             GrassUiFactory.Place(hint.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 8f), new Vector2(900f, 34f));
@@ -89,26 +98,46 @@ namespace PlayShift.Grass
             IsOpen = open;
             _root.SetActive(open);
             var player = FindAnyObjectByType<FirstPersonController>();
-            MenuBlurEffect.Set(player != null && player.Camera != null ? player.Camera : Camera.main, open);
+            // The title screen keeps its own blur when settings close over it.
+            MenuBlurEffect.Set(player != null && player.Camera != null ? player.Camera : Camera.main, open || MainMenu.IsOpen);
             if (open)
             {
                 _resolutions = GameSettings.AvailableResolutions(); // monitor may have changed
                 _resolutionIndex = ClosestResolution(Screen.width, Screen.height);
                 RefreshLabels();
+                LayoutBottomButtons();
                 Cursor.lockState = CursorLockMode.None;
                 Cursor.visible = true;
             }
             else
             {
                 GameSettings.Save();
-                Cursor.lockState = CursorLockMode.Locked;
-                Cursor.visible = false;
+                bool backToTitle = MainMenu.IsOpen;
+                Cursor.lockState = backToTitle ? CursorLockMode.None : CursorLockMode.Locked;
+                Cursor.visible = backToTitle;
             }
         }
 
         private void Update()
         {
-            if (EscapePressed()) SetOpen(!IsOpen);
+            // Esc toggles settings during play; on the title screen it only closes settings (menu buttons handle the rest).
+            if (EscapePressed() && (IsOpen || !MainMenu.IsOpen)) SetOpen(!IsOpen);
+        }
+
+        private RectTransform _closeButton, _menuButton;
+
+        /// <summary>CLOSE alone when opened from the title screen; CLOSE + MAIN MENU side by side during play.</summary>
+        private void LayoutBottomButtons()
+        {
+            if (_closeButton == null) return;
+            bool fromTitle = MainMenu.IsOpen;
+            _menuButton.gameObject.SetActive(!fromTitle);
+            if (fromTitle) GrassUiFactory.Place(_closeButton, new Vector2(0.5f, 0f), new Vector2(0f, 64f), new Vector2(380f, 100f));
+            else
+            {
+                GrassUiFactory.Place(_closeButton, new Vector2(0.5f, 0f), new Vector2(-200f, 64f), new Vector2(360f, 100f));
+                GrassUiFactory.Place(_menuButton, new Vector2(0.5f, 0f), new Vector2(200f, 64f), new Vector2(360f, 100f));
+            }
         }
 
         private void OnDestroy()

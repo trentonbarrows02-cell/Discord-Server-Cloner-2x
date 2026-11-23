@@ -113,6 +113,10 @@ namespace PlayShift.Grass
         private void LateUpdate()
         {
             if (_rig == null) return;
+            // Title screen: the lawn is the backdrop, the trimmer is hidden.
+            bool show = !MainMenu.IsOpen;
+            if (_rig.gameObject.activeSelf != show) _rig.gameObject.SetActive(show);
+            if (!show) return;
             float dt = Time.deltaTime;
             var m = GrassLevelManager.Instance;
             int extra = m != null ? m.Modifiers.ExtraBlades : 0;

@@ -91,9 +91,13 @@ namespace PlayShift.Grass
             // Runs before the cutters (DefaultExecutionOrder -100): cut cells get stamped with this clock and
             // the grass shader animates them shortening from that moment.
             Progression.Field.Clock = Time.time;
-            Progression.Tick(Time.deltaTime);
-            Modifiers.Tick(Time.deltaTime);
+            float dt = HoldTimer ? 0f : Time.deltaTime;
+            Progression.Tick(dt);
+            Modifiers.Tick(dt);
         }
+
+        /// <summary>True while the title screen is up: the level timer and timed modifiers don't advance.</summary>
+        public bool HoldTimer { get; set; }
 
         /// <summary>Starts a level by 1-based number.</summary>
         public void StartLevel(int levelNumber)
