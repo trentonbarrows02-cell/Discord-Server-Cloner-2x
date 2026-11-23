@@ -25,6 +25,8 @@ namespace PlayShift.Grass
         [SerializeField] private float modelScale = 1.85f;
         [Tooltip("Lengthens only the shaft (model Z) so it reaches from the head on the ground up to the bottom-right corner. The cutting head keeps its real size.")]
         [SerializeField] private float shaftStretch = 1.7f;
+        [Tooltip("Use the body mesh without the loop handle (Resources/TrimmerBody_NoHandle, built by TrimmerMeshTools).")]
+        [SerializeField] private bool hideHandle = true;
 
         [Header("Operating position (player space, metres/degrees)")]
         [Tooltip("Head position: x = right, z = forward.")]
@@ -85,6 +87,7 @@ namespace PlayShift.Grass
                 model.transform.localRotation = Quaternion.identity;
                 model.transform.localScale = new Vector3(modelScale, modelScale, modelScale * shaftStretch);
                 foreach (var c in model.GetComponentsInChildren<Collider>()) Destroy(c);
+                if (hideHandle) SwapBodyWithoutHandle(model.transform);
                 _mainSpinner = FindDeep(model.transform, cutterHeadName);
                 if (_mainSpinner != null)
                 {
@@ -159,6 +162,15 @@ namespace PlayShift.Grass
         /// the head is still level, from the renderers' world bounds; the head only spins about its vertical axis, so
         /// this holds at every blade angle. Tilt from vibration is tiny and covered by <see cref="headHeight"/>.
         /// </summary>
+        /// <summary>Replaces the body mesh with the pre-built version that has no loop handle (and no loose blade fragment).</summary>
+        private void SwapBodyWithoutHandle(Transform model)
+        {
+            var noHandle = Resources.Load<Mesh>("TrimmerBody_NoHandle");
+            if (noHandle == null) { Debug.LogWarning("[PlayShift Grass] TrimmerBody_NoHandle mesh missing; showing the handle.", this); return; }
+            foreach (var mf in model.GetComponentsInChildren<MeshFilter>(true))
+                if (mf.sharedMesh != null && mf.sharedMesh.name == "TrimmerBody") mf.sharedMesh = noHandle;
+        }
+
         private static float LowestPointBelowPivot(Transform head)
         {
             float minY = 0f;

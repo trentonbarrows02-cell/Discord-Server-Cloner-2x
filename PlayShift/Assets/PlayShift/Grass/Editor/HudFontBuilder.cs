@@ -77,7 +77,10 @@ namespace PlayShift.Grass.Editor
             // TikTok-game style: dark indigo outline and a solid indigo "extruded" shadow straight below.
             // Widths are in SDF units (relative to the 20 px padding): ~0.15 is a thick outline that keeps letters apart.
             CreatePreset(fa, LabelMaterialPath, outline: HudInk, outlineWidth: 0.17f, shadow: HudInk, shadowOffsetY: -0.45f);
-            CreatePreset(fa, CounterMaterialPath, outline: HudInk, outlineWidth: 0.14f, shadow: HudInk, shadowOffsetY: -0.5f);
+            // Numbers: no dark ring around each digit, just a thin deeper-green edge ("green on green"); the dark
+            // indigo only shows as the solid shadow underneath.
+            CreatePreset(fa, CounterMaterialPath, outline: CounterEdge, outlineWidth: 0.07f, shadow: HudInk, shadowOffsetY: -0.55f,
+                         shadowDilate: 0.12f);
             AssetDatabase.SaveAssets();
             return fa;
         }
@@ -85,10 +88,14 @@ namespace PlayShift.Grass.Editor
         /// <summary>Outline + shadow colour: dark indigo, softer than pure black and reads well over sky and grass.</summary>
         public static readonly Color HudInk = new Color(0.16f, 0.11f, 0.29f, 1f);
 
+        /// <summary>Thin edge on the lime numbers: a deeper green of the same hue.</summary>
+        public static readonly Color CounterEdge = new Color(0.24f, 0.66f, 0.1f, 1f);
+
         public const string LabelMaterialPath = "Assets/PlayShift/Grass/Resources/PlayShiftFonts/HudFont SDF - Label.mat";
         public const string CounterMaterialPath = "Assets/PlayShift/Grass/Resources/PlayShiftFonts/HudFont SDF - Counter.mat";
 
-        private static void CreatePreset(TMP_FontAsset fa, string path, Color outline, float outlineWidth, Color shadow, float shadowOffsetY)
+        private static void CreatePreset(TMP_FontAsset fa, string path, Color outline, float outlineWidth, Color shadow, float shadowOffsetY,
+                                         float shadowDilate = -1f)
         {
             AssetDatabase.DeleteAsset(path);
             var m = new Material(fa.material) { name = Path.GetFileNameWithoutExtension(path) };
@@ -105,7 +112,8 @@ namespace PlayShift.Grass.Editor
             m.SetColor("_UnderlayColor", shadow);
             m.SetFloat("_UnderlayOffsetX", 0f);
             m.SetFloat("_UnderlayOffsetY", shadowOffsetY);
-            m.SetFloat("_UnderlayDilate", outlineWidth * 2f); // same footprint as face + outline
+            // Default: same footprint as face + outline. Smaller = the shadow peeks out mostly below the letter.
+            m.SetFloat("_UnderlayDilate", shadowDilate >= 0f ? shadowDilate : outlineWidth * 2f);
             m.SetFloat("_UnderlaySoftness", 0f);
             AssetDatabase.CreateAsset(m, path);
         }
