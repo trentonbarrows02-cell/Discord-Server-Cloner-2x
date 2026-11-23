@@ -12,18 +12,18 @@ Shader "PlayShift/InstancedGrass"
         _TipColor ("Tip Colour", Color) = (0.46, 0.68, 0.20, 1)
         _DryColor ("Dry Tint", Color) = (0.62, 0.62, 0.28, 1)
         _DryAmount ("Dry Tint Amount", Range(0, 1)) = 0.25
-        _StubbleColor ("Cut Stubble Colour", Color) = (0.42, 0.52, 0.18, 1)
+        _StubbleColor ("Cut Stubble Colour", Color) = (0.53, 0.66, 0.25, 1)
         _RootAO ("Root Darkening", Range(0, 1)) = 0.35
         _Translucency ("Back-light Translucency", Range(0, 2)) = 0.6
 
         [Header(Shape)]
-        _BladeWidth ("Blade Width at 20cm (m)", Float) = 0.011
+        _BladeWidth ("Blade Width at 20cm (m)", Float) = 0.022
         _WidthGrowth ("Width Growth With Height", Range(0, 1)) = 0.45
         _HeightJitter ("Per-blade Height Jitter", Range(0, 0.4)) = 0.12
         _BendShort ("Arc Angle, short grass (rad)", Range(0, 1.5)) = 0.25
-        _BendTall ("Arc Angle, 1.5m grass (rad)", Range(0, 2.2)) = 1.25
-        _MaxArc ("Max Arc Angle (rad)", Range(0.5, 2.5)) = 1.6
-        _StubbleHeight ("Cut Stubble Height (m)", Float) = 0.025
+        _BendTall ("Arc Angle, 1.5m grass (rad)", Range(0, 2.2)) = 0.95
+        _MaxArc ("Max Arc Angle (rad)", Range(0.5, 2.5)) = 1.35
+        _StubbleHeight ("Cut Stubble Height (m)", Float) = 0.035
 
         [Header(Wind)]
         _WindDirection ("Wind Direction (XZ)", Vector) = (1, 0, 0.35, 0)

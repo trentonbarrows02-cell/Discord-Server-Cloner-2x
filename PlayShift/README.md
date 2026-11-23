@@ -109,6 +109,19 @@ They cover these cases:
 - level 1 through 5 progression and the final victory event
 - every gift operation and edge case, including streak handling and the height cap
 
+## Browser preview (progress videos)
+
+`Preview~/` is a three.js copy of the module, used to record progress videos without a Unity editor.
+`grass-core.js` is a port of the C# core, and the blade shader is a GLSL port of `InstancedGrass.shader`
+with the same bending, wind and width maths. Its chunked LOD works the same way as `GrassFieldRenderer`.
+It renders a scripted run through all five levels frame by frame and encodes an MP4:
+
+```
+cd PlayShift/Preview~ && npm install && node record.js out/progress.mp4
+```
+
+Pass `--query "plan=shot&level=5&cam=low"` to render a short clip of one level. The trimmer in the preview is a placeholder model.
+
 ## Known limitations
 
 - The renderer, shader and UI scripts compile against the UnityEngine 2021.3 API, but this module has not

@@ -1,0 +1,7 @@
+{
+  "name": "playshift-grass-preview",
+  "private": true,
+  "description": "Browser preview of the PlayShift grass progression, used to record progress videos outside Unity.",
+  "scripts": { "record": "node record.js" },
+  "dependencies": { "three": "0.160.0" }
+}

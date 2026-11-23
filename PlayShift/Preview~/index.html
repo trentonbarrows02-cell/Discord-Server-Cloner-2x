@@ -1,0 +1,80 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>PlayShift Grass Preview</title>
+<style>
+  :root { --gold: #ffd138; --grass: #73db4d; --panel: rgba(13, 23, 13, 0.72); }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #9cc4e4; font-family: "DejaVu Sans", "Liberation Sans", Arial, sans-serif; }
+  canvas#scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  /* HUD laid out at the Unity reference resolution (1920x1080) and scaled to the window. */
+  #hud { position: fixed; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; pointer-events: none; color: #fff; }
+  .panel { position: absolute; background: var(--panel); border-radius: 20px; }
+  #counter { left: 650px; top: 24px; width: 620px; height: 176px; text-align: center; transition: none; }
+  #counter .label { margin-top: 14px; font-size: 30px; font-weight: bold; letter-spacing: 6px; color: var(--grass); }
+  #counter .value { font-size: 86px; font-weight: bold; line-height: 96px; }
+  #counter .track { position: absolute; left: 40px; bottom: 18px; width: 540px; height: 14px; border-radius: 7px; background: rgba(255,255,255,0.15); overflow: hidden; }
+  #counter .fill { height: 100%; width: 100%; background: var(--grass); border-radius: 7px; }
+  #info { left: 24px; top: 24px; width: 420px; height: 150px; }
+  #info .lvl { position: absolute; left: 24px; top: 12px; font-size: 44px; font-weight: bold; }
+  #info .h { position: absolute; left: 24px; top: 70px; font-size: 28px; color: rgba(255,255,255,0.72); }
+  #info .t { position: absolute; left: 24px; top: 104px; font-size: 32px; font-weight: bold; color: var(--gold); }
+  #feed { position: absolute; left: 28px; bottom: 28px; width: 1100px; }
+  .toast { font-size: 30px; font-weight: bold; text-shadow: 0 0 4px #000, 0 0 4px #000; margin-top: 6px; }
+  #badge { position: absolute; right: 28px; top: 28px; padding: 10px 22px; font-size: 30px; font-weight: bold; color: #fff; background: rgba(200,40,40,0.85); border-radius: 14px; display: none; }
+  #caption { position: absolute; left: 50%; bottom: 40px; transform: translateX(-50%); padding: 12px 28px; font-size: 32px; font-weight: bold; background: rgba(0,0,0,0.55); border-radius: 14px; white-space: nowrap; display: none; }
+  .overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.62); display: none; }
+  .card { position: absolute; left: 50%; top: 50%; border-radius: 22px; text-align: center; }
+  .title { font-size: 104px; font-weight: bold; margin-top: 36px; line-height: 120px;
+           background: linear-gradient(#fff, var(--tc)); -webkit-background-clip: text; background-clip: text; color: transparent;
+           -webkit-text-stroke: 3px rgba(40,25,0,0.9); }
+  .sub { font-size: 36px; font-weight: bold; letter-spacing: 8px; margin-top: 4px; }
+  .stats { display: flex; justify-content: center; gap: 40px; margin-top: 30px; }
+  .stat { width: 400px; height: 150px; background: rgba(0,0,0,0.3); border-radius: 18px; }
+  .stat .cap { font-size: 26px; font-weight: bold; letter-spacing: 6px; color: rgba(255,255,255,0.72); margin-top: 18px; }
+  .stat .val { font-size: 64px; font-weight: bold; margin-top: 14px; }
+  .detail { font-size: 26px; color: rgba(255,255,255,0.72); margin-top: 22px; }
+  .btn { position: absolute; left: 50%; width: 460px; height: 108px; margin-left: -230px; border-radius: 20px; font-size: 46px; font-weight: bold; line-height: 108px; }
+  .hint { position: absolute; left: 0; right: 0; bottom: 40px; font-size: 26px; color: rgba(255,255,255,0.72); }
+  #cleared .card { width: 980px; height: 660px; background: rgba(15,36,15,0.96); box-shadow: 4px 4px 0 rgba(255,209,56,0.85); --tc: var(--gold); }
+  #victory .card { width: 1240px; height: 860px; background: rgba(33,23,5,0.97); box-shadow: 4px 4px 0 rgba(255,199,38,0.85); --tc: #ffc726; }
+  #victory .title { font-size: 96px; }
+  table { margin: 26px auto 0; background: rgba(0,0,0,0.3); border-radius: 18px; padding: 16px 30px; font-size: 34px; border-spacing: 26px 12px; }
+  td.time { color: var(--gold); }
+  .totals { font-size: 34px; font-weight: bold; margin-top: 26px; }
+  #confetti { position: absolute; inset: 0; }
+  #fade { position: absolute; inset: 0; background: #000; opacity: 0; }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div id="hud">
+  <div id="info" class="panel"><div class="lvl" id="lvl">LEVEL 1 / 5</div><div class="h" id="hgt">Grass 15-25 cm</div><div class="t" id="tmr">TIME  00:00.0</div></div>
+  <div id="counter" class="panel"><div class="label">GRASS LEFT</div><div class="value" id="left">1,000,000</div><div class="track"><div class="fill" id="fill"></div></div></div>
+  <div id="feed"></div>
+  <div id="badge"></div>
+  <div id="caption"></div>
+  <div id="cleared" class="overlay"><div class="card">
+    <div class="title">LEVEL CLEARED!</div>
+    <div class="sub" id="c-sub" style="color: var(--grass)">LEVEL 1 COMPLETE</div>
+    <div class="stats">
+      <div class="stat"><div class="cap">COMPLETION TIME</div><div class="val" id="c-time" style="color: var(--gold)">00:00.0</div></div>
+      <div class="stat"><div class="cap">TOTAL GRASS CUT</div><div class="val" id="c-cut" style="color: var(--grass)">1,000,000</div></div>
+    </div>
+    <div class="detail" id="c-detail"></div>
+    <div class="btn" id="c-next" style="bottom: 92px; background: #47ad33">NEXT LEVEL &gt;</div>
+    <div class="hint" id="c-hint"></div>
+  </div></div>
+  <div id="victory" class="overlay"><div class="card">
+    <div class="title" id="v-title">ALL 5 LEVELS COMPLETED!</div>
+    <div class="sub">EVERY LAWN MOWED - CHAMPION!</div>
+    <table id="v-table"></table>
+    <div class="totals" id="v-totals"></div>
+    <div class="btn" style="bottom: 60px; background: #d9991a">PLAY AGAIN</div>
+  </div></div>
+  <canvas id="confetti" width="1920" height="1080"></canvas>
+  <div id="fade"></div>
+</div>
+<script type="module" src="./preview.js"></script>
+</body>
+</html>
