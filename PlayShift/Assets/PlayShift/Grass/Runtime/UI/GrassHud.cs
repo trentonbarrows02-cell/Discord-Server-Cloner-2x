@@ -21,6 +21,8 @@ namespace PlayShift.Grass
         private static readonly Color GiftRemove = new Color(1f, 0.55f, 0.45f, 1f);
         private static readonly Color GiftTaller = new Color(0.55f, 0.8f, 1f, 1f);
         private static readonly Color CounterGreen = new Color(0.42f, 0.95f, 0.23f, 1f);
+        private static readonly Color CounterGradientBottom = new Color(0.62f, 0.78f, 0.55f, 1f);
+        private static readonly Color CounterOutline = new Color(0.03f, 0.1f, 0.02f, 1f);
 
         [SerializeField] private int sortingOrder = 100;
         [SerializeField] private Vector2 referenceResolution = new Vector2(1920f, 1080f);
@@ -222,16 +224,26 @@ namespace PlayShift.Grass
             // Clean TikTok-LIVE style: no boxes, no progress bar; just GRASS LEFT and a huge bold outlined number.
             var counter = GrassUiFactory.Rect("GrassLeft", _root);
             _counterPanel = GrassUiFactory.Place(counter, new Vector2(0.5f, 1f), new Vector2(0f, -10f), new Vector2(1100f, 250f));
-            // White heading, big vibrant-green numbers, thick black outlines and a drop shadow (readable on any stream).
-            var label = GrassUiFactory.Text("GrassLeftLabel", _counterPanel, "GRASS LEFT", 62f, Ink, TextAlignmentOptions.Center, FontStyles.Bold);
-            GrassUiFactory.Place(label.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, 0f), new Vector2(880f, 70f));
-            label.characterSpacing = 4f;
-            Outline(label, 0.3f);
-            AddShadow(label, 5f);
-            _grassLeftValue = GrassUiFactory.Text("GrassLeftValue", _counterPanel, "1,000,000", 160f, CounterGreen, TextAlignmentOptions.Center, FontStyles.Bold);
-            GrassUiFactory.Place(_grassLeftValue.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -58f), new Vector2(1100f, 170f));
-            Outline(_grassLeftValue, 0.32f);
-            AddShadow(_grassLeftValue, 9f);
+            // Chunky rounded game font (Lilita One): white heading, big green numbers with a light-to-dark vertical
+            // gradient, thick dark outlines and a drop shadow (readable on any stream).
+            var font = CounterFont;
+            var labelStyle = font != null ? FontStyles.Normal : FontStyles.Bold; // Lilita is already heavy; no fake bold
+            var label = GrassUiFactory.Text("GrassLeftLabel", _counterPanel, "GRASS LEFT", 68f, Ink, TextAlignmentOptions.Center, labelStyle);
+            if (font != null) label.font = font;
+            GrassUiFactory.Place(label.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, 0f), new Vector2(880f, 76f));
+            label.characterSpacing = 2f;
+            var labelMat = Resources.Load<Material>("PlayShiftFonts/LilitaOne SDF - Label");
+            if (font != null && labelMat != null) label.fontSharedMaterial = labelMat; // outline + shadow baked in
+            else { Outline(label, 0.28f); AddShadow(label, 5f); }
+            _grassLeftValue = GrassUiFactory.Text("GrassLeftValue", _counterPanel, "1,000,000", 190f, CounterGreen, TextAlignmentOptions.Center, labelStyle);
+            if (font != null) _grassLeftValue.font = font;
+            GrassUiFactory.Place(_grassLeftValue.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -60f), new Vector2(1200f, 200f));
+            // Multiplies the green: full brightness at the top, deeper green at the bottom.
+            _grassLeftValue.enableVertexGradient = true;
+            _grassLeftValue.colorGradient = new VertexGradient(Color.white, Color.white, CounterGradientBottom, CounterGradientBottom);
+            var counterMat = Resources.Load<Material>("PlayShiftFonts/LilitaOne SDF - Counter");
+            if (font != null && counterMat != null) _grassLeftValue.fontSharedMaterial = counterMat;
+            else { Outline(_grassLeftValue, 0.26f, CounterOutline); AddShadow(_grassLeftValue, 10f); }
 
             // Level / height / timer, top left, no box.
             var info = GrassUiFactory.Rect("LevelInfo", _root);
@@ -248,16 +260,25 @@ namespace PlayShift.Grass
             Outline(_timerLabel, 0.3f);
         }
 
-        private static void Outline(TextMeshProUGUI t, float width)
+        private static void Outline(TextMeshProUGUI t, float width) => Outline(t, width, Color.black);
+
+        private static void Outline(TextMeshProUGUI t, float width, Color color)
         {
             t.outlineWidth = width;
-            t.outlineColor = new Color32(0, 0, 0, 255);
+            t.outlineColor = color;
         }
+
+        private static TMP_FontAsset s_counterFont;
+
+        /// <summary>Lilita One SDF, built by PlayShift > Grass > Rebuild HUD Font. Null falls back to TMP's default font.</summary>
+        private static TMP_FontAsset CounterFont =>
+            s_counterFont != null ? s_counterFont : (s_counterFont = Resources.Load<TMP_FontAsset>("PlayShiftFonts/LilitaOne SDF"));
 
         /// <summary>Drop shadow: a dark copy of the text behind it, offset downwards.</summary>
         private static void AddShadow(TextMeshProUGUI t, float offset)
         {
             var sh = GrassUiFactory.Text(t.name + "Shadow", t.rectTransform.parent, t.text, t.fontSize, new Color(0f, 0f, 0f, 0.55f), t.alignment, t.fontStyle);
+            sh.font = t.font;
             var rt = sh.rectTransform;
             rt.anchorMin = t.rectTransform.anchorMin; rt.anchorMax = t.rectTransform.anchorMax; rt.pivot = t.rectTransform.pivot;
             rt.sizeDelta = t.rectTransform.sizeDelta;

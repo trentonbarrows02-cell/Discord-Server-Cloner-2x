@@ -68,6 +68,7 @@ namespace PlayShift.Grass.Editor
         {
             if (askToSave && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
 
+            HudFontBuilder.Ensure();
             Directory.CreateDirectory(Path.GetDirectoryName(ScenePath));
             var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
             GrassSetupMenu.CreateTestArea();
