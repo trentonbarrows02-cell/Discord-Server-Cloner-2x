@@ -114,7 +114,7 @@ namespace PlayShift.Grass.Editor
         /// The loop handle is fused to the shaft, so it is cut by position (body mesh space; the shaft runs along X):
         /// triangles whose centre lies in x = [box.x, box.y] and above y = box.z (the top of the shaft) are removed.
         /// </summary>
-        public static readonly Vector3 HandleBox = new Vector3(-0.27f, -0.09f, 0.372f);
+        public static readonly Vector3 HandleBox = new Vector3(-0.29f, -0.07f, 0.358f);
 
         public static Mesh Build(HashSet<int> remove, Vector3 handleBox)
         {

@@ -24,10 +24,12 @@ namespace PlayShift.Grass.Dev
     [DefaultExecutionOrder(10000)] // after GrassFieldRenderer.LateUpdate has queued this frame's grass
     public sealed class GrassCaptureDriver : MonoBehaviour
     {
-        private const int Width = 1920, Height = 1080;
+        // Portrait by default (vertical TikTok streams); -captureSize 1920x1080 for landscape.
+        private static int Width = 1080, Height = 1920;
         private const int ClipFps = 30;
         private const float ClipSeconds = 5f;
-        private const int ClipWidth = 1920, ClipHeight = 1080; // full res: downscaling thin grass blades makes the clip look soft
+        private static int ClipWidth => Width;   // full res: downscaling thin grass blades makes the clip look soft
+        private static int ClipHeight => Height;
 
         private FirstPersonController.FpInput _input;
         private string _dir;
@@ -58,6 +60,13 @@ namespace PlayShift.Grass.Dev
             _dir = Path.Combine(Directory.GetParent(Application.dataPath).FullName, "Captures", DateTime.Now.ToString("yyyyMMdd_HHmmss"));
             Directory.CreateDirectory(_dir);
             Application.runInBackground = true;
+            var args = Environment.GetCommandLineArgs();
+            for (int i = 0; i < args.Length - 1; i++)
+                if (args[i] == "-captureSize")
+                {
+                    var wh = args[i + 1].Split('x');
+                    Width = int.Parse(wh[0]) & ~1; Height = int.Parse(wh[1]) & ~1;
+                }
 
             var fp = FindAnyObjectByType<FirstPersonController>();
             var cutter = FindAnyObjectByType<GrassCutter>();
@@ -113,8 +122,8 @@ namespace PlayShift.Grass.Dev
             var attrs = new VideoTrackAttributes
             {
                 frameRate = new MediaRational(ClipFps),
-                width = ClipWidth,
-                height = ClipHeight,
+                width = (uint)ClipWidth,
+                height = (uint)ClipHeight,
                 includeAlpha = false,
                 bitRateMode = VideoBitrateMode.High
             };
@@ -182,6 +191,14 @@ namespace PlayShift.Grass.Dev
                 receiver.EnqueueGift("DEC282", "Ice Cream Cone");
                 yield return GameWait(0.4f);
                 yield return Shot("06_gift_popup");
+            }
+
+            if (GameSettingsMenu.Instance != null)
+            {
+                GameSettingsMenu.Instance.SetOpen(true);
+                yield return GameWait(0.3f);
+                yield return Shot("08_settings");
+                GameSettingsMenu.Instance.SetOpen(false);
             }
 
             // Gift burst stress test (TikTok spam): 30 frames, every frame a remove-25k, add-25k and taller gift.

@@ -25,6 +25,13 @@ namespace PlayShift.Grass
 
         [SerializeField] private int sortingOrder = 100;
         [SerializeField] private Vector2 referenceResolution = new Vector2(1920f, 1080f);
+        [Tooltip("Vertical (TikTok) screens: layout is scaled to the screen width and the counter/popup enlarged by this.")]
+        [SerializeField] private float portraitHudScale = 1.2f;
+
+        private Canvas _canvas;
+        private UnityEngine.UI.CanvasScaler _scaler;
+        private bool _portrait, _orientationKnown;
+        private float _hudScale = 1f;
         [SerializeField] private float giftToastSeconds = 4f;
 
         private GrassLevelManager _manager;
@@ -36,6 +43,7 @@ namespace PlayShift.Grass
         private TextMeshProUGUI _heightLabel;
         private TextMeshProUGUI _timerLabel;
         private RectTransform _counterPanel;
+        private RectTransform _levelInfo;
         private long _shownRemaining = -1;
         private float _counterPunch;
         private Color _counterFlashColor = Ink;
@@ -81,6 +89,8 @@ namespace PlayShift.Grass
             BuildClearedOverlay();
             BuildVictoryOverlay();
             HideOverlays();
+            // Settings page (Esc) on top of everything else on this canvas.
+            gameObject.AddComponent<GameSettingsMenu>().Build(_root);
             if (Resources.Load<TMP_Settings>("TMP Settings") == null || TMP_Settings.defaultFontAsset == null)
                 Debug.LogError("[PlayShift Grass] TextMeshPro has no default font. Import 'TMP Essential Resources' " +
                                "(Window > TextMeshPro) or run PlayShift > Grass > Create Level Setup.", this);
@@ -202,7 +212,7 @@ namespace PlayShift.Grass
                 return;
             }
             float k = Mathf.Clamp01(age / popIn);
-            float s = Mathf.Lerp(1.35f, 1f, 1f - (1f - k) * (1f - k)); // ease-out punch
+            float s = _hudScale * Mathf.Lerp(1.35f, 1f, 1f - (1f - k) * (1f - k)); // ease-out punch
             _giftPopup.localScale = new Vector3(s, s, 1f);
             _giftPopupGroup.alpha = age < giftPopupSeconds ? 1f : 1f - (age - giftPopupSeconds) / fadeOut;
         }
@@ -220,8 +230,35 @@ namespace PlayShift.Grass
 
         // ------------------------------------------------------------------ per frame
 
+        /// <summary>
+        /// Portrait (vertical TikTok stream) vs landscape: switches the canvas scaling reference so the layout follows
+        /// the screen width in portrait, and enlarges the counter/popup there. Only does work when orientation flips.
+        /// </summary>
+        private void UpdateOrientation()
+        {
+            if (_canvas == null) return;
+            var r = _canvas.pixelRect;
+            if (r.width <= 0f || r.height <= 0f) return;
+            bool portrait = r.height > r.width;
+            if (_orientationKnown && portrait == _portrait) return;
+            _orientationKnown = true;
+            _portrait = portrait;
+            _scaler.referenceResolution = portrait ? new Vector2(1080f, 1920f) : referenceResolution;
+            _scaler.matchWidthOrHeight = portrait ? 0f : 0.5f; // portrait: fit the width
+            _hudScale = portrait ? portraitHudScale : 1f;
+            _counterPanel.localScale = new Vector3(_hudScale, _hudScale, 1f);
+            _giftPopup.anchoredPosition = new Vector2(0f, -12f - 238f * _hudScale); // keep it just under the counter
+            // The counter spans the width in portrait: level / time move to the bottom-left corner out of its way.
+            if (portrait) GrassUiFactory.Place(_levelInfo, new Vector2(0f, 0f), new Vector2(36f, 40f), _levelInfo.sizeDelta);
+            else GrassUiFactory.Place(_levelInfo, new Vector2(0f, 1f), new Vector2(36f, -28f), _levelInfo.sizeDelta);
+        }
+
+        /// <summary>Cards wider than a portrait screen shrink to fit.</summary>
+        private float OverlayFit(Overlay o) => _portrait ? Mathf.Min(1f, 1020f / Mathf.Max(1f, o.Card.sizeDelta.x)) : 1f;
+
         private void Update()
         {
+            UpdateOrientation();
             Refresh();
             AnimateOverlay(_cleared);
             AnimateOverlay(_victory);
@@ -231,7 +268,7 @@ namespace PlayShift.Grass
             if (_counterPunch > 0f)
             {
                 _counterPunch = Mathf.Max(0f, _counterPunch - Time.unscaledDeltaTime * 2.5f);
-                float s = 1f + 0.08f * _counterPunch;
+                float s = _hudScale * (1f + 0.08f * _counterPunch);
                 _counterPanel.localScale = new Vector3(s, s, 1f);
                 _grassLeftValue.color = Color.Lerp(CounterGreen, _counterFlashColor, _counterPunch);
             }
@@ -268,6 +305,8 @@ namespace PlayShift.Grass
             scaler.uiScaleMode = UnityEngine.UI.CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = referenceResolution;
             scaler.matchWidthOrHeight = 0.5f;
+            _canvas = canvas;
+            _scaler = scaler;
             if (gameObject.GetComponent<UnityEngine.UI.GraphicRaycaster>() == null)
                 gameObject.AddComponent<UnityEngine.UI.GraphicRaycaster>();
             gameObject.layer = 5;
@@ -303,6 +342,7 @@ namespace PlayShift.Grass
             // Level / height / timer, top left, no box.
             var info = GrassUiFactory.Rect("LevelInfo", _root);
             var infoRt = GrassUiFactory.Place(info, new Vector2(0f, 1f), new Vector2(36f, -28f), new Vector2(520f, 170f));
+            _levelInfo = infoRt;
             // Secondary: smaller than the counter.
             _levelLabel = GrassUiFactory.Text("LevelLabel", infoRt, "LEVEL 1 / 5", 42f, Ink, TextAlignmentOptions.Left, FontStyles.Bold);
             GrassUiFactory.Place(_levelLabel.rectTransform, new Vector2(0f, 1f), Vector2.zero, new Vector2(520f, 50f));
@@ -324,7 +364,7 @@ namespace PlayShift.Grass
         }
 
         /// <summary>HUD text in the chunky HUD font with a shared outline+shadow material (falls back to TMP's default font).</summary>
-        private static TextMeshProUGUI HudText(string name, Transform parent, string text, float size, Color color, Material preset, float spacing)
+        internal static TextMeshProUGUI HudText(string name, Transform parent, string text, float size, Color color, Material preset, float spacing)
         {
             var font = CounterFont;
             var t = GrassUiFactory.Text(name, parent, text, size, color, TextAlignmentOptions.Center, font != null ? FontStyles.Normal : FontStyles.Bold);
@@ -339,9 +379,9 @@ namespace PlayShift.Grass
         }
 
         private static Material s_labelMaterial, s_counterMaterial;
-        private static Material LabelMaterial =>
+        internal static Material LabelMaterial =>
             s_labelMaterial != null ? s_labelMaterial : (s_labelMaterial = Resources.Load<Material>("PlayShiftFonts/HudFont SDF - Label"));
-        private static Material CounterMaterial =>
+        internal static Material CounterMaterial =>
             s_counterMaterial != null ? s_counterMaterial : (s_counterMaterial = Resources.Load<Material>("PlayShiftFonts/HudFont SDF - Counter"));
 
         private static TMP_FontAsset s_counterFont;
@@ -489,7 +529,7 @@ namespace PlayShift.Grass
             o.Root.SetActive(true);
             o.Root.transform.SetAsLastSibling();
             o.ShownAt = Time.unscaledTime;
-            o.Card.localScale = Vector3.one * 0.6f;
+            o.Card.localScale = Vector3.one * (0.6f * OverlayFit(o));
             o.Fx.Play(burst, rain);
         }
 
@@ -503,7 +543,7 @@ namespace PlayShift.Grass
             }
         }
 
-        private static void AnimateOverlay(Overlay o)
+        private void AnimateOverlay(Overlay o)
         {
             if (o == null || !o.Root.activeSelf) return;
             float t = Time.unscaledTime - o.ShownAt;
@@ -511,7 +551,7 @@ namespace PlayShift.Grass
             float p = Mathf.Clamp01(t / 0.45f);
             const float c1 = 1.70158f, c3 = c1 + 1f;
             float ease = 1f + c3 * Mathf.Pow(p - 1f, 3f) + c1 * Mathf.Pow(p - 1f, 2f);
-            o.Card.localScale = Vector3.one * Mathf.LerpUnclamped(0.6f, 1f, ease);
+            o.Card.localScale = Vector3.one * (Mathf.LerpUnclamped(0.6f, 1f, ease) * OverlayFit(o));
             float pulse = 1f + 0.04f * Mathf.Sin(t * 5f);
             o.Title.rectTransform.localScale = new Vector3(pulse, pulse, 1f);
         }

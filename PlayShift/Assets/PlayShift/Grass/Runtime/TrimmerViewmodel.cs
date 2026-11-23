@@ -31,6 +31,10 @@ namespace PlayShift.Grass
         [Header("Operating position (player space, metres/degrees)")]
         [Tooltip("Head position: x = right, z = forward.")]
         [SerializeField] private Vector2 headOffset = new Vector2(0.05f, 1.4f);
+        [Tooltip("Head distance ahead on vertical (portrait) screens: closer, so it sits low in the tall view.")]
+        [SerializeField] private float portraitHeadForward = 1.15f;
+        [Tooltip("Head sideways offset on portrait screens (negative = left), so it sits lower-middle with the shaft from the bottom-right.")]
+        [SerializeField] private float portraitHeadRight = -0.12f;
         [Tooltip("Shaft rise: raises the handle end towards the player.")]
         [SerializeField] private float shaftPitch = 17f;
         [Tooltip("Swings the handle end to the right so the shaft enters from the bottom-right of the screen.")]
@@ -140,7 +144,11 @@ namespace PlayShift.Grass
             _rig.rotation = Quaternion.Euler(0f, _yaw + _sweep, 0f);
             float groundY = m != null ? m.FieldTransform.position.y - transform.position.y : 0f;
             // Vibration only lifts the head (never pushes it down) so the blades stay above the lawn.
-            var headLocal = new Vector3(headOffset.x + sway + jx, groundY + _headLift + headHeight + Mathf.Abs(jy), headOffset.y + pull);
+            var cam = controller != null ? controller.Camera : null;
+            bool portrait = cam != null && cam.aspect < 1f;
+            float forward = portrait ? portraitHeadForward : headOffset.y;
+            float right = portrait ? portraitHeadRight : headOffset.x;
+            var headLocal = new Vector3(right + sway + jx, groundY + _headLift + headHeight + Mathf.Abs(jy), forward + pull);
             _bodyPivot.localPosition = headLocal;
             _bodyPivot.localRotation = Quaternion.Euler(shaftPitch, -handleSwing, 0f);
             _mainHeadRoot.localPosition = headLocal;

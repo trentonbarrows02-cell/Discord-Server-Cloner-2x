@@ -8,7 +8,7 @@ namespace PlayShift.Grass
     /// thick grass, and gameplay modifiers (speed boost / slow) scale the speed.
     ///
     /// Controls: WASD / arrows move, mouse looks, Shift sprints, hold Left Mouse to run the trimmer,
-    /// Space toggles it on/off (hands-free for streams), Esc releases the cursor.
+    /// Space toggles it on/off (hands-free for streams), Esc opens settings (and frees the cursor).
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
     public sealed class FirstPersonController : MonoBehaviour
@@ -29,6 +29,14 @@ namespace PlayShift.Grass
         [SerializeField] private GrassCutter cutter;
         [SerializeField] private TrimmerBlades blades;
         [SerializeField] private bool lockCursor = true;
+
+        [Header("View")]
+        [Tooltip("Start pitch on vertical (portrait) screens: looks further ahead, like TikTok trimmer games; the taller " +
+                 "view still shows the cutting head near the bottom.")]
+        [SerializeField] private float portraitStartPitch = -14f;
+        [Tooltip("Upper limit for the vertical FOV on very tall screens. The FOV itself comes from GameSettings (horizontal, 60-120).")]
+        [SerializeField] private float maxVerticalFov = 130f;
+        private bool _pitchTouched;
 
         private CharacterController _cc;
         private Vector3 _velocity;
@@ -70,9 +78,14 @@ namespace PlayShift.Grass
 
         private void Update()
         {
-            var input = InputOverride != null ? InputOverride() : ReadInput();
+            // Settings page open: the player stands still (the level keeps running so gifts still land on stream).
+            var input = InputOverride != null ? InputOverride() : GameSettingsMenu.IsOpen ? default : ReadInput();
             float dt = Time.deltaTime;
 
+            UpdateFieldOfView();
+            bool portrait = playerCamera != null && playerCamera.aspect < 1f;
+            if (input.Look.y != 0f) _pitchTouched = true;
+            if (!_pitchTouched) _pitch = portrait ? portraitStartPitch : startPitch; // follows orientation until the player looks
             _yaw += input.Look.x;
             _pitch = Mathf.Clamp(_pitch + input.Look.y, minPitch, maxPitch);
             transform.rotation = Quaternion.Euler(0f, _yaw, 0f);
@@ -95,6 +108,15 @@ namespace PlayShift.Grass
             Speed = new Vector2(_velocity.x, _velocity.z).magnitude;
         }
 
+        /// <summary>The FOV setting (60-120) is horizontal, so it feels the same on vertical and horizontal screens;
+        /// Unity's camera FOV is vertical, so it is converted for the current aspect ratio.</summary>
+        private void UpdateFieldOfView()
+        {
+            if (playerCamera == null) return;
+            float fov = GameSettings.VerticalFov(playerCamera.aspect, maxVerticalFov);
+            if (!Mathf.Approximately(playerCamera.fieldOfView, fov)) playerCamera.fieldOfView = fov;
+        }
+
         private FpInput ReadInput()
         {
             var i = new FpInput();
@@ -108,7 +130,7 @@ namespace PlayShift.Grass
                 i.Move.y = (kb.wKey.isPressed || kb.upArrowKey.isPressed ? 1f : 0f) - (kb.sKey.isPressed || kb.downArrowKey.isPressed ? 1f : 0f);
                 i.Sprint = kb.leftShiftKey.isPressed;
                 i.TrimmerToggle = kb.spaceKey.wasPressedThisFrame;
-                if (kb.escapeKey.wasPressedThisFrame) SetCursor(false);
+                // Esc belongs to GameSettingsMenu (opens settings and frees the cursor).
             }
             if (mouse != null)
             {
@@ -124,7 +146,7 @@ namespace PlayShift.Grass
             i.Move = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
             i.Sprint = Input.GetKey(KeyCode.LeftShift);
             i.TrimmerToggle = Input.GetKeyDown(KeyCode.Space);
-            if (Input.GetKeyDown(KeyCode.Escape)) SetCursor(false);
+            // Esc belongs to GameSettingsMenu (opens settings and frees the cursor).
             if (locked)
             {
                 // Legacy axes are already scaled per frame; 10x keeps the same feel as the Input System path.
