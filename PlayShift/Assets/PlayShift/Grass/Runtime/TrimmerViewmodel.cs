@@ -7,9 +7,9 @@ namespace PlayShift.Grass
     /// First-person trimmer with no hands, arms or body: the tool floats in its operating position, its
     /// shaft entering from the bottom-right of the screen and its cutting head on the ground ahead.
     ///
-    /// The shaft follows the player's yaw with a slight lag (smooth turning), sweeps left/right while
-    /// cutting, sways with walking, hums when running and vibrates more and pulls back a little in thick
-    /// grass. The cutting head is detached from the shaft so it stays level with the ground and is the exact
+    /// By default the tool is locked to where the player aims (see lockToView); a loose mode adds turn lag and an
+    /// automatic left/right sweep. It sways slightly with walking, hums when running and vibrates more and pulls
+    /// back a little in thick grass. The cutting head is detached from the shaft so it stays level with the ground and is the exact
     /// point the <see cref="GrassCutter"/> cuts at, so the cut width always matches the visible head.
     /// Extra heads (multi-blade upgrades/modifiers) are spawned beside it on a crossbar.
     /// </summary>
@@ -44,6 +44,9 @@ namespace PlayShift.Grass
         [SerializeField] private float headHeight = 0.035f;
 
         [Header("Motion")]
+        [Tooltip("On: the trimmer stays exactly where you aim (no turn lag, no automatic left/right sweep, no idle " +
+                 "drift), so the view feels locked and steady. Off: the older loose feel with sweep and lag below.")]
+        [SerializeField] private bool lockToView = true;
         [SerializeField] private float sweepDegrees = 24f;
         [SerializeField] private float sweepHz = 0.55f;
         [SerializeField] private float turnLag = 7f;
@@ -131,16 +134,20 @@ namespace PlayShift.Grass
 
             // Smooth turning: the tool lags slightly behind the view.
             float targetYaw = controller != null ? controller.Yaw : transform.eulerAngles.y;
-            _yaw = Mathf.LerpAngle(_yaw, targetYaw, 1f - Mathf.Exp(-turnLag * dt));
+            _yaw = lockToView ? targetYaw : Mathf.LerpAngle(_yaw, targetYaw, 1f - Mathf.Exp(-turnLag * dt));
 
-            // Operator sweep while the trimmer runs.
-            _sweepPhase += dt * sweepHz * Mathf.PI * 2f * Mathf.Clamp01(rpm * 1.5f);
-            float sweepTarget = sweepDegrees * Mathf.Sin(_sweepPhase) * Mathf.Clamp01((rpm - 0.2f) * 2f);
+            // Operator sweep while the trimmer runs (loose mode only).
+            float sweepTarget = 0f;
+            if (!lockToView)
+            {
+                _sweepPhase += dt * sweepHz * Mathf.PI * 2f * Mathf.Clamp01(rpm * 1.5f);
+                sweepTarget = sweepDegrees * Mathf.Sin(_sweepPhase) * Mathf.Clamp01((rpm - 0.2f) * 2f);
+            }
             _sweep = Mathf.Lerp(_sweep, sweepTarget, 1f - Mathf.Exp(-8f * dt));
 
             _walkPhase += speed * dt;
             float t = Time.time;
-            float sway = Mathf.Sin(_walkPhase * 2.6f) * walkSway * Mathf.Min(1f, speed) + Mathf.Sin(t * 1.3f) * 0.006f;
+            float sway = Mathf.Sin(_walkPhase * 2.6f) * walkSway * Mathf.Min(1f, speed) + (lockToView ? 0f : Mathf.Sin(t * 1.3f) * 0.006f);
             float jx = (Mathf.Sin(t * 91f) + Mathf.Sin(t * 57.3f)) * 0.5f * vibrationMetres * vib;
             float jy = Mathf.Sin(t * 73.1f) * vibrationMetres * vib;
             float pull = -thickGrassPullBack * load;
