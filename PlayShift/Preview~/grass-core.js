@@ -2,11 +2,11 @@
 // the Unity module: same unit bookkeeping, height noise, swept cutting, gift operations and progression.
 
 export const DEFAULT_LEVELS = [
-  { name: 'Level 1', min: 15, max: 25, units: 1_000_000 },
-  { name: 'Level 2', min: 30, max: 45, units: 1_000_000 },
-  { name: 'Level 3', min: 50, max: 70, units: 1_000_000 },
-  { name: 'Level 4', min: 80, max: 110, units: 1_000_000 },
-  { name: 'Level 5', min: 120, max: 150, units: 1_000_000 },
+  { name: 'Level 1', min: 15, max: 25, units: 1_000_000, density: 0.62 },
+  { name: 'Level 2', min: 35, max: 50, units: 1_000_000, density: 0.72 },
+  { name: 'Level 3', min: 60, max: 80, units: 1_000_000, density: 0.82 },
+  { name: 'Level 4', min: 90, max: 110, units: 1_000_000, density: 0.92 },
+  { name: 'Level 5', min: 120, max: 150, units: 1_000_000, density: 1.0 },
 ];
 
 export function hash01(x, z, seed) {
@@ -56,6 +56,8 @@ export class GrassField {
     const n = this.layout.cellsX * this.layout.cellsZ;
     this.units = new Int32Array(n);
     this.heights = new Float32Array(n);
+    this.cutTime = new Float32Array(n).fill(-1);
+    this.clock = 0;
     this.perm = new Int32Array(n);
     this.level = null;
     this.onCleared = null;
@@ -78,6 +80,7 @@ export class GrassField {
     for (let k = 0; k < rem; k++) this.units[this.perm[k]] += 1;
     this.bonus = 0;
     for (let i = 0; i < n; i++) this.heights[i] = this.sample(i % this.layout.cellsX, (i / this.layout.cellsX) | 0);
+    this.cutTime.fill(-1);
     this.initial = level.units; this.remaining = level.units;
     this.cutByMower = 0; this.removedByGifts = 0; this.addedByGifts = 0; this.cleared = false;
     this.markDirty(0, n - 1);
@@ -112,7 +115,7 @@ export class GrassField {
         if (len > 1e-12) t = Math.min(1, Math.max(0, ((px - ax) * dx + (pz - az) * dz) / len));
         const qx = ax + dx * t - px, qz = az + dz * t - pz;
         if (qx * qx + qz * qz > r2) continue;
-        this.units[i] = 0; removed += u;
+        this.units[i] = 0; this.cutTime[i] = this.clock; removed += u;
         if (i < first) first = i; if (i > last) last = i;
       }
     }
@@ -171,7 +174,7 @@ export class GrassField {
     if (this.cleared || amount <= 0) return 0;
     amount = Math.min(amount, this.remaining);
     let left = amount;
-    const take = (c, b) => { const u = this.units[c]; if (!u) return 0; const t = Math.min(b, u); this.units[c] = u - t; return t; };
+    const take = (c, b) => { const u = this.units[c]; if (!u) return 0; const t = Math.min(b, u); this.units[c] = u - t; if (u === t) this.cutTime[c] = this.clock; return t; };
     const centre = this.findRandom(false);
     if (centre >= 0) { left = this.visitPatch(centre, left, take); left = this.visitAll(left, take); }
     const removed = amount - left;

@@ -5,18 +5,78 @@ GRASS LEFT counting, LEVEL CLEARED and ALL LEVELS COMPLETED screens, and TikTok 
 
 Copy `Assets/PlayShift/` into the game's `Assets/` folder. The `Tests~` folder is a .NET test project; Unity ignores it.
 
-## Quick start
+## Quick start: first-person test area
 
-1. Requirements: Unity 2021.3 or newer, Built-in pipeline or URP (not HDRP), with uGUI and TextMeshPro (both are default packages). The GPU must support shader model 4.5 (DX11+, Metal, Vulkan, GLES 3.1+).
-2. Select your mower in the scene, then run **PlayShift > Grass > Create Level Setup**. This:
-   - creates `Assets/PlayShift/Grass/Generated/GrassProgressionSettings.asset` and `InstancedGrass.mat`
-   - adds a `GrassLevel` object (manager, renderer and TikTok gift receiver) plus a ground plane
-   - adds a `GrassCutter` to the selected mower
-   - imports TMP Essential Resources if they are missing
+1. Requirements:
+   - Unity 2021.3 or newer, with **URP** or the Built-in pipeline (not HDRP).
+   - uGUI and TextMeshPro (default packages).
+   - **glTFast** (Package Manager > Add package by name > `com.unity.cloud.gltfast`), so Unity can import the trimmer `.glb`.
+   - A shader model 4.5 GPU (DX11+, Metal, Vulkan).
+2. In an empty scene, run **PlayShift > Grass > Create Test Area (first-person)**. It builds:
+   - a 24 x 24 m test lawn with 1,000,000 grass units, starting on Level 3 (60-80 cm)
+   - a first-person player holding your trimmer (no hands, arms or body)
+   - grass clippings and trimmer audio
+   - a cloud sky, a sun with soft shadows, haze, and trees and bushes around the perimeter
+3. Press Play.
 
-   To try it in an empty scene, use **Create Level Setup + Test Trimmer** instead (WASD/arrows to drive, Shift for a speed boost).
-3. Move `GrassLevel` so its origin sits at the lawn's corner. The lawn covers local X 0 to 50 m and Z 0 to 50 m by default.
-4. Press Play. Level 1 starts with **GRASS LEFT 1,000,000**.
+| Control | Action |
+|---|---|
+| Hold Left Mouse | Run the trimmer |
+| Space | Toggle the trimmer on/off hands-free (for streaming) |
+| WASD / arrows | Walk |
+| Mouse | Look |
+| Shift | Sprint |
+| Esc | Release the cursor |
+
+To test other heights, change **GrassTestArea > GrassLevelManager > Start Level**. To test performance, change **GrassFieldRenderer > Quality** (Low, Medium, High or Ultra).
+
+To add the grass system to an existing scene instead, use **Create Level Setup (existing scene)**. Then give your player a `GrassCutter`, plus `TrimmerBlades` and `TrimmerViewmodel` for first-person.
+
+## How the cutting feels
+
+- **Blades**: `TrimmerBlades` spins up and coasts down smoothly, timed by `deltaTime` so it is frame-rate independent. At speed, a soft motion-blur ring fades in over each head. It supports any number of heads.
+- **Grass reaction**: this runs on the GPU in `GrassBlade.hlsl`, with no per-blade physics.
+  - Uncut blades near a head lean away from it, more for tall grass and while the blades spin, and spring back when it leaves.
+  - Wind gusts roll across the lawn, and tall grass sways more.
+  - Roots never move: each blade is a constant-length arc, so tall grass keeps its upright height.
+- **The cut**: the cutter sweeps a capsule from each head's previous position to its current one every frame. Cells under the blades are cut exactly once, GRASS LEFT drops by exactly their units, and each cell records the time it was cut. The shader then:
+  - shortens those blades to stubble over 0.18 s, with a small kick away from the head
+  - leaves short, bright-green lawn with paler cut ends, never bare dirt
+  - keeps a crisp border between cut and uncut grass
+
+  Cut state lives in the logical grid, so it persists when you walk away and come back.
+- **Clippings**: `GrassClippings` uses one pooled `ParticleSystem` to throw small green and yellow slivers off the blade, following the blade rotation and the head's movement. Thick, tall grass produces more and short grass fewer. They tumble, land and fade, with no snow, smoke or big debris.
+- **Trimmer feel**: `TrimmerViewmodel` places the head on the ground about 1.45 m ahead, with the shaft rising to the bottom-right of the screen. It adds:
+  - smooth turning lag and a gentle left/right operator sweep
+  - walk sway and an idle hum
+  - stronger vibration and a slight pull-back in thick grass, which also slows walking
+
+  The camera itself never shakes.
+- **Audio**: `TrimmerAudio` synthesises the motor in code, so it is an original sound with nothing to license. Its pitch follows blade speed, which gives natural start-up and shutdown, and it bogs down and gets raspier under load. The cutting rustle is heavier in thick grass. Optional slots accept your own licensed clips for start-up, motor loop, shutdown, light and thick cutting, and clippings.
+
+## Gameplay modifiers (for future gifts and power-ups)
+
+`GrassLevelManager.Modifiers` is a set of timed, stackable modifiers that knows nothing about TikTok:
+
+| Modifier | Effect |
+|---|---|
+| SpeedBoost | Faster walking and blade spin |
+| RadiusBoost | Wider cut |
+| Slow | Slower walking and blades, never below 20% |
+| MultiBlade | Extra heads on a crossbar, up to 3 |
+
+Regrowing cut grass is `RegrowGrass` (the same as an Add Grass gift). Gift rules in the settings asset can trigger any of these (`SpeedBoost`, `RadiusBoost`, `SlowTrimmer`, `MultiBlade`, with a duration), and `GrassLevelManager` exposes matching methods for power-ups or UnityEvents.
+
+## Performance
+
+- No GameObject, Rigidbody or Animator exists per blade or per unit. Grass is one static blade buffer plus one small per-cell buffer.
+- Cutting uploads only the changed slice of cells. Each head costs one capsule test per frame.
+- Grass is chunked, 2 x 2 m by default, with frustum and distance culling and three distance LODs.
+- Each level draws a density fraction (Level 1 = 62% up to Level 5 = 100%).
+- Only chunks near the camera cast shadows.
+- Quality presets (Low, Medium, High, Ultra) set blades per cell (4 / 6 / 10 / 16), the LOD distances and the shadow-casting distance.
+- Clippings use one pooled particle system.
+- Rendering and gameplay don't depend on video capture.
 
 ## Trimmer model
 
@@ -25,10 +85,10 @@ Copy `Assets/PlayShift/` into the game's `Assets/` folder. The `Tests~` folder i
 - **Cleaned**: two stray pieces of the generated mesh were removed (a tiny duplicate trimmer and a detached handle fragment).
 - **Optimized**: reduced from 1.85M to about 47k triangles, with textures at 2048 px (4.3 MB instead of 61 MB).
 - **Re-oriented**: the origin is now the bottom centre of the cutting head, it faces +Z, and the handle is tilted up.
-- **Spinning head**: the blade head is a separate child, `CutterHead`. `TrimmerVisuals` spins it while a level is being played and adds a small side-to-side sweep.
+- **Spinning head**: the blade head is a separate child, `CutterHead`. `TrimmerViewmodel` detaches it so it stays level on the ground, and `TrimmerBlades` spins it.
 
 Unity needs a glTF importer for `.glb` files: install **glTFast** (Package Manager > Add package by name > `com.unity.cloud.gltfast`).
-**PlayShift > Grass > Add Trimmer To Scene** builds a `Trimmer` object with the model at scale 2.2 (about 1.8 m long) and a `GrassCutter` with radius 0.65 m.
+The test area uses the model at scale 1.85 (about 1.5 m long). The cut radius is 0.65 m, which matches the blade tips at that scale.
 
 ## Levels and configuration
 
@@ -37,9 +97,9 @@ All values live in the settings asset:
 | Level | Default height | Starting units |
 |---|---|---|
 | 1 | 15-25 cm | 1,000,000 |
-| 2 | 30-45 cm | 1,000,000 |
-| 3 | 50-70 cm | 1,000,000 |
-| 4 | 80-110 cm | 1,000,000 |
+| 2 | 35-50 cm | 1,000,000 |
+| 3 | 60-80 cm | 1,000,000 |
+| 4 | 90-110 cm | 1,000,000 |
 | 5 | 120-150 cm | 1,000,000 |
 
 - **Levels**: name, min/max height and starting units for each level. The last entry is the final level, so adding or removing entries changes the campaign length.
