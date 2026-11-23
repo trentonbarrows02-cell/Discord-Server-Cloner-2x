@@ -17,7 +17,7 @@ namespace PlayShift.Grass.Editor
         [MenuItem("PlayShift/Grass/Create Level Setup", priority = 0)]
         public static void CreateLevelSetup() => CreateSetup(withTestMower: false);
 
-        [MenuItem("PlayShift/Grass/Create Level Setup + Test Mower", priority = 1)]
+        [MenuItem("PlayShift/Grass/Create Level Setup + Test Trimmer", priority = 1)]
         public static void CreateLevelSetupWithMower() => CreateSetup(withTestMower: true);
 
         private static void CreateSetup(bool withTestMower)
@@ -79,13 +79,7 @@ namespace PlayShift.Grass.Editor
             var selected = Selection.activeGameObject;
             if (withTestMower)
             {
-                var mower = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                mower.name = "TestMower";
-                Undo.RegisterCreatedObjectUndo(mower, "Create Test Mower");
-                mower.transform.position = root.transform.TransformPoint(new Vector3(2f, 0.25f, 2f));
-                mower.transform.localScale = new Vector3(1.1f, 0.5f, 1.4f);
-                UnityEngine.Object.DestroyImmediate(mower.GetComponent<Collider>());
-                mower.AddComponent<GrassCutter>();
+                var mower = CreateTrimmer(root.transform.TransformPoint(new Vector3(2f, 0f, 2f)));
                 var ctrl = mower.AddComponent<DebugMowerController>();
                 var cam = Camera.main;
                 if (cam != null)
@@ -105,6 +99,55 @@ namespace PlayShift.Grass.Editor
             Selection.activeGameObject = root;
             Debug.Log("[PlayShift Grass] Level setup created. Move 'GrassLevel' so its origin is the lawn's corner; " +
                       "add a GrassCutter to your mower if it does not have one.", root);
+        }
+
+        private const string TrimmerModelPath = "Assets/PlayShift/Models/Trimmer.glb";
+        private const float TrimmerScale = 2.2f;
+
+        [MenuItem("PlayShift/Grass/Add Trimmer To Scene", priority = 20)]
+        public static void AddTrimmerToScene()
+        {
+            var t = CreateTrimmer(Vector3.zero);
+            Selection.activeGameObject = t;
+        }
+
+        /// <summary>
+        /// Trimmer root (cutter + visuals) with the model as a child. The model's origin is the bottom centre of
+        /// the cutting head and it faces +Z, so the root's position is exactly where grass gets cut.
+        /// Needs a glTF importer for .glb (Unity's glTFast package: com.unity.cloud.gltfast); falls back to a cube.
+        /// </summary>
+        private static GameObject CreateTrimmer(Vector3 position)
+        {
+            var root = new GameObject("Trimmer");
+            Undo.RegisterCreatedObjectUndo(root, "Create Trimmer");
+            root.transform.position = position;
+
+            var modelAsset = AssetDatabase.LoadAssetAtPath<GameObject>(TrimmerModelPath);
+            GameObject model;
+            if (modelAsset != null)
+            {
+                model = (GameObject)PrefabUtility.InstantiatePrefab(modelAsset);
+                model.transform.localScale = Vector3.one * TrimmerScale;
+            }
+            else
+            {
+                Debug.LogWarning($"[PlayShift Grass] Could not import {TrimmerModelPath}. Install glTFast (Package Manager > Add package by name > " +
+                                 "com.unity.cloud.gltfast) to use the trimmer model; using a placeholder cube for now.");
+                model = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                UnityEngine.Object.DestroyImmediate(model.GetComponent<Collider>());
+                model.transform.localScale = new Vector3(0.4f, 0.15f, 1.6f);
+                model.transform.localPosition = new Vector3(0f, 0.08f, -0.7f);
+            }
+            model.name = "TrimmerModel";
+            model.transform.SetParent(root.transform, false);
+
+            var cutter = root.AddComponent<GrassCutter>();
+            cutter.CutRadius = 0.65f;
+            var visuals = root.AddComponent<TrimmerVisuals>();
+            var vso = new SerializedObject(visuals);
+            vso.FindProperty("sweepRoot").objectReferenceValue = model.transform;
+            vso.ApplyModifiedPropertiesWithoutUndo();
+            return root;
         }
 
         /// <summary>Imports TMP Essential Resources non-interactively if the project lacks them.</summary>

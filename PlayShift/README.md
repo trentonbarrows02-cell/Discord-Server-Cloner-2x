@@ -14,9 +14,21 @@ Copy `Assets/PlayShift/` into the game's `Assets/` folder. The `Tests~` folder i
    - adds a `GrassCutter` to the selected mower
    - imports TMP Essential Resources if they are missing
 
-   To try it in an empty scene, use **Create Level Setup + Test Mower** instead (WASD/arrows to drive, Shift for a speed boost).
+   To try it in an empty scene, use **Create Level Setup + Test Trimmer** instead (WASD/arrows to drive, Shift for a speed boost).
 3. Move `GrassLevel` so its origin sits at the lawn's corner. The lawn covers local X 0 to 50 m and Z 0 to 50 m by default.
 4. Press Play. Level 1 starts with **GRASS LEFT 1,000,000**.
+
+## Trimmer model
+
+`Assets/PlayShift/Models/Trimmer.glb` is a cleaned copy of the supplied Tripo model, `lawn trimmer 3d model.glb`:
+
+- **Cleaned**: two stray pieces of the generated mesh were removed (a tiny duplicate trimmer and a detached handle fragment).
+- **Optimized**: reduced from 1.85M to about 47k triangles, with textures at 2048 px (4.3 MB instead of 61 MB).
+- **Re-oriented**: the origin is now the bottom centre of the cutting head, it faces +Z, and the handle is tilted up.
+- **Spinning head**: the blade head is a separate child, `CutterHead`. `TrimmerVisuals` spins it while a level is being played and adds a small side-to-side sweep.
+
+Unity needs a glTF importer for `.glb` files: install **glTFast** (Package Manager > Add package by name > `com.unity.cloud.gltfast`).
+**PlayShift > Grass > Add Trimmer To Scene** builds a `Trimmer` object with the model at scale 2.2 (about 1.8 m long) and a `GrassCutter` with radius 0.65 m.
 
 ## Levels and configuration
 

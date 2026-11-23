@@ -2,6 +2,7 @@
 // Grass logic comes from grass-core.js (a port of the C# core); the blade shader below is a GLSL port of
 // Assets/PlayShift/Grass/Shaders/InstancedGrass.shader with the same bending/wind/width maths.
 import * as THREE from './three.module.js';
+import { GLTFLoader } from './GLTFLoader.js';
 import { GrassProgression, DEFAULT_LEVELS, mulberry32 } from './grass-core.js';
 
 const Q = new URLSearchParams(location.search);
@@ -9,7 +10,7 @@ const CELLS = +(Q.get('cells') || 200);
 const SIZE = +(Q.get('size') || 40);
 const BPC = +(Q.get('bpc') || 8);
 const FPS = 30;
-const CUT_RADIUS = 0.6;
+const CUT_RADIUS = 0.65;
 const MOWER_SPEED = 5; // m/s
 
 // ------------------------------------------------------------------ logic
@@ -32,7 +33,7 @@ const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.05, 4
 const sunDir = new THREE.Vector3(0.45, 0.8, 0.35).normalize();
 const sun = new THREE.DirectionalLight(0xfff3e0, 2.2);
 sun.position.copy(sunDir).multiplyScalar(50);
-scene.add(sun, new THREE.HemisphereLight(0xcfe6ff, 0x4a3a20, 0.9));
+scene.add(sun, new THREE.HemisphereLight(0xdcecff, 0x6a5a40, 1.6));
 
 // Ground: soil under the lawn, rough meadow around it, a low hedge border.
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshLambertMaterial({ color: 0x5d7a3a }));
@@ -198,23 +199,17 @@ function uploadCells() {
   grassMat.uniforms.heightClamp.value.set(field.curMin * 0.01, field.curMax * 0.01);
 }
 
-// ------------------------------------------------------------------ placeholder trimmer (replace with the real model)
+// ------------------------------------------------------------------ trimmer (your Tripo model, cleaned + optimized)
+// Trimmer.glb: origin = bottom centre of the cutting head, forward = +Z, child "CutterHead" spins around local Y.
+const TRIMMER_SCALE = +(Q.get('trimmerScale') || 2.2);
 const mower = new THREE.Group();
-{
-  const red = new THREE.MeshLambertMaterial({ color: 0xd0342c }), dark = new THREE.MeshLambertMaterial({ color: 0x222222 });
-  const grey = new THREE.MeshLambertMaterial({ color: 0x9a9a9a });
-  const deck = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.28, 1.25), red); deck.position.y = 0.3;
-  const hood = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.35, 0.55), red); hood.position.set(0, 0.6, 0.25);
-  const seat = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.12, 0.45), dark); seat.position.set(0, 0.62, -0.35);
-  const back = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.45, 0.1), dark); back.position.set(0, 0.85, -0.55);
-  const wheel = new THREE.CylinderGeometry(0.22, 0.22, 0.16, 16); wheel.rotateZ(Math.PI / 2);
-  for (const [x, z, s] of [[-0.62, 0.45, 0.8], [0.62, 0.45, 0.8], [-0.62, -0.45, 1.2], [0.62, -0.45, 1.2]]) {
-    const w = new THREE.Mesh(wheel, dark); w.scale.set(1, s, s); w.position.set(x, 0.22 * s, z); mower.add(w);
-  }
-  const wheelPost = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.4), grey); wheelPost.position.set(0, 0.85, 0.15); wheelPost.rotation.x = -0.5;
-  const steer = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.03, 8, 20), dark); steer.position.set(0, 1.02, 0.05); steer.rotation.x = -1.1;
-  mower.add(deck, hood, seat, back, wheelPost, steer);
-}
+let cutterHead = null, trimmerLoaded = false;
+new GLTFLoader().load('./Trimmer.glb', (g) => {
+  g.scene.scale.setScalar(TRIMMER_SCALE);
+  g.scene.traverse((o) => { if (o.name === 'CutterHead') cutterHead = o; });
+  mower.add(g.scene);
+  trimmerLoaded = true;
+}, undefined, (e) => { console.error('Trimmer.glb failed to load', e); trimmerLoaded = true; });
 scene.add(mower);
 const mowerState = { x: 0.5, z: 0.5, heading: 0, path: [], pathIndex: 0 };
 
@@ -223,7 +218,7 @@ const CLIP_N = 600;
 const clipGeo = new THREE.BufferGeometry();
 const clipPos = new Float32Array(CLIP_N * 3), clipVel = new Float32Array(CLIP_N * 3), clipLife = new Float32Array(CLIP_N);
 clipGeo.setAttribute('position', new THREE.BufferAttribute(clipPos, 3));
-const clips = new THREE.Points(clipGeo, new THREE.PointsMaterial({ color: 0x7fb53c, size: 0.06 }));
+const clips = new THREE.Points(clipGeo, new THREE.PointsMaterial({ color: 0x8cc044, size: 0.035 }));
 clips.frustumCulled = false; scene.add(clips);
 let clipNext = 0;
 const fxRng = mulberry32(99);
@@ -232,7 +227,7 @@ function emitClippings(n) {
   for (let k = 0; k < n; k++) {
     const i = clipNext; clipNext = (clipNext + 1) % CLIP_N;
     const side = fxRng() > 0.5 ? 1 : -1;
-    clipPos[i * 3] = mowerState.x + fz * 0.65 * side; clipPos[i * 3 + 1] = 0.2; clipPos[i * 3 + 2] = mowerState.z - fx * 0.65 * side;
+    clipPos[i * 3] = mowerState.x + fz * 0.5 * side; clipPos[i * 3 + 1] = 0.08; clipPos[i * 3 + 2] = mowerState.z - fx * 0.5 * side;
     clipVel[i * 3] = fz * side * (1 + fxRng() * 2) - fx * fxRng(); clipVel[i * 3 + 1] = 1 + fxRng() * 2; clipVel[i * 3 + 2] = -fx * side * (1 + fxRng() * 2) - fz * fxRng();
     clipLife[i] = 0.6 + fxRng() * 0.5;
   }
@@ -415,11 +410,14 @@ function cameraTarget() {
   if (camMode === 'overview') {
     return [new THREE.Vector3(SIZE / 2 - 4, 34, -16), new THREE.Vector3(SIZE / 2, 0, SIZE * 0.5)];
   }
+  if (camMode === 'close') {
+    return [new THREE.Vector3(mowerState.x + fz * 2.6 + fx * 1.6, 1.25 + grassH, mowerState.z - fx * 2.6 + fz * 1.6), new THREE.Vector3(mowerState.x - fx * 0.5, 0.45, mowerState.z - fz * 0.5)];
+  }
   if (camMode === 'low') {
     const p = new THREE.Vector3(mowerState.x - fx * 6 + fz * 4, 0.6 + grassH * 1.1, mowerState.z - fz * 6 - fx * 4);
     return [p, new THREE.Vector3(mowerState.x + fx * 2, grassH * 0.4, mowerState.z + fz * 2)];
   }
-  const back = 4.5 + grassH * 2, up = 2.4 + grassH * 1.6;
+  const back = 3.2 + grassH * 2, up = 1.7 + grassH * 1.5;
   return [new THREE.Vector3(mowerState.x - fx * back, up, mowerState.z - fz * back), new THREE.Vector3(mowerState.x + fx * 3, 0.3, mowerState.z + fz * 3)];
 }
 function updateCamera(dt, snap) {
@@ -453,11 +451,11 @@ if (levelPlan === 'shot') {
   levelSegments(L, { intro: +(Q.get('dur') || 2), cam: Q.get('cam') || 'chase', timelapse: 1, clearedDur: 1 });
 }
 if (levelPlan === 'full') {
-  levelSegments(0, { intro: 6, gifts: [[1.6, () => gift('mowfan22', 'TikTok', 'remove', 5000)], [3.6, () => gift('lawnqueen', 'Rose', 'add', 2500, 4)]], timelapse: 6, clearedDur: 3.6 });
-  levelSegments(1, { intro: 3, timelapse: 3.5, clearedDur: 2.6, cam: 'low' });
-  levelSegments(2, { intro: 3.5, gifts: [[1.4, () => gift('gardenguy', 'Galaxy', 'taller', 20)]], timelapse: 3.5, clearedDur: 2.6, cam: 'low' });
-  levelSegments(3, { intro: 3, timelapse: 3.5, clearedDur: 2.6, cam: 'low' });
-  levelSegments(4, { intro: 4.5, gifts: [[2.0, () => gift('bigtipper', 'Ice Cream Cone', 'remove', 15000)]], timelapse: 4.5, clearedDur: 6 });
+  levelSegments(0, { intro: 7, cam: 'close', gifts: [[2.8, () => { camMode = 'chase'; }], [3.4, () => gift('mowfan22', 'TikTok', 'remove', 5000)], [5.2, () => gift('lawnqueen', 'Rose', 'add', 2500, 4)]], timelapse: 5, clearedDur: 3.6 });
+  levelSegments(1, { intro: 2.8, timelapse: 2.6, clearedDur: 2.4, cam: 'low' });
+  levelSegments(2, { intro: 3.2, gifts: [[1.2, () => gift('gardenguy', 'Galaxy', 'taller', 20)]], timelapse: 2.6, clearedDur: 2.4, cam: 'low' });
+  levelSegments(3, { intro: 2.8, timelapse: 2.6, clearedDur: 2.4 });
+  levelSegments(4, { intro: 4, gifts: [[1.8, () => gift('bigtipper', 'Ice Cream Cone', 'remove', 15000)]], timelapse: 3.5, clearedDur: 5.5 });
 }
 
 let segIndex = -1, segT = 0, current = null;
@@ -481,7 +479,10 @@ window.frame = () => {
   updateClippings(DT);
   uploadCells();
   grassMat.uniforms.time.value = clock;
-  mower.position.set(mowerState.x, 0, mowerState.z); mower.rotation.y = mowerState.heading;
+  mower.position.set(mowerState.x, 0, mowerState.z);
+  // Side-to-side sweep like a hand-held trimmer, and a fast-spinning head while working.
+  mower.rotation.y = mowerState.heading + (prog.playing ? Math.sin(clock * 5.5) * 0.12 : 0);
+  if (cutterHead) cutterHead.rotation.y += prog.playing ? 2.35 : 0.05;
   updateCamera(DT, false);
   updateLod();
   toasts.forEach((t) => (t.life -= DT)); toasts = toasts.filter((t) => t.life > 0);
@@ -497,6 +498,7 @@ window.frame = () => {
   renderer.render(scene, camera);
   const done = s.untilCleared ? (!prog.playing && segT >= 0.3) || segT > s.dur * 4 : segT >= s.dur;
   if (done) { s.end && s.end(); nextSegment(); }
+  window.levelIndexNow = prog.index;
   return !current;
 };
 
@@ -505,4 +507,5 @@ if (!Q.has('record')) {
   const loop = () => { if (!window.frame()) requestAnimationFrame(loop); };
   requestAnimationFrame(loop);
 }
-window.previewReady = true;
+const waitReady = () => { if (trimmerLoaded) window.previewReady = true; else setTimeout(waitReady, 50); };
+waitReady();

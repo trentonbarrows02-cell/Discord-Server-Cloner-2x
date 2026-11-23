@@ -1,0 +1,25 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Trimmer Model Check</title>
+<style>html,body{margin:0;background:#b9d7ef;overflow:hidden}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"./three.module.js"}}</script></head><body>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from './GLTFLoader.js';
+const Q = new URLSearchParams(location.search);
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(innerWidth, innerHeight); r.outputColorSpace = THREE.SRGBColorSpace;
+r.toneMapping = THREE.ACESFilmicToneMapping; document.body.appendChild(r.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color('#b9d7ef');
+scene.add(new THREE.HemisphereLight(0xffffff, 0x556644, 1.6));
+const d = new THREE.DirectionalLight(0xffffff, 2.5); d.position.set(2, 3, 2); scene.add(d);
+const cam = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 0.01, 50);
+const files = (Q.get('files') || 'trimmer.glb').split(',');
+const loader = new GLTFLoader();
+const yaw = +(Q.get('yaw') || 35) * Math.PI / 180;
+Promise.all(files.map((f) => loader.loadAsync(f))).then((gs) => {
+  gs.forEach((g, i) => { g.scene.position.x = (i - (gs.length - 1) / 2) * 1.25; g.scene.rotation.y = yaw; scene.add(g.scene); });
+  const box = new THREE.Box3().setFromObject(scene); const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
+  const elev = +(Q.get('elev') || 25) * Math.PI / 180, dist = Math.max(sz.x / 1.6, sz.y, sz.z) * 1.9 + 0.3;
+  cam.position.set(c.x, c.y + Math.sin(elev) * dist, c.z + Math.cos(elev) * dist); cam.lookAt(c);
+  scene.add(new THREE.GridHelper(4, 40, 0x557755, 0x88aa88));
+  r.render(scene, cam); window.ready = true;
+}).catch((e) => { console.error(e); window.ready = 'error ' + e.message; });
+</script></body></html>

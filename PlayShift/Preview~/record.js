@@ -11,7 +11,8 @@ const out = path.resolve(args[0] && !args[0].startsWith('--') ? args[0] : 'out/p
 const width = +opt('width', 1280), height = +opt('height', 720);
 const maxFrames = +opt('frames', 100000);
 const query = opt('query', '');
-const stills = opt('stills', ''); // comma-separated frame numbers to also save as PNG
+const stills = opt('stills', '');
+const fromFrame = +opt('from', 0); // comma-separated frame numbers to also save as PNG
 
 const root = __dirname;
 const files = {
@@ -19,6 +20,9 @@ const files = {
   '/preview.js': ['preview.js', 'text/javascript'],
   '/grass-core.js': ['grass-core.js', 'text/javascript'],
   '/three.module.js': ['node_modules/three/build/three.module.js', 'text/javascript'],
+  '/GLTFLoader.js': ['node_modules/three/examples/jsm/loaders/GLTFLoader.js', 'text/javascript'],
+  '/utils/BufferGeometryUtils.js': ['node_modules/three/examples/jsm/utils/BufferGeometryUtils.js', 'text/javascript'],
+  '/Trimmer.glb': ['../Assets/PlayShift/Models/Trimmer.glb', 'model/gltf-binary'],
 };
 
 (async () => {
@@ -41,11 +45,15 @@ const files = {
 
   const stillSet = new Set(stills.split(',').filter(Boolean).map(Number));
   const t0 = Date.now();
-  let n = 0, evalMs = 0;
+  let n = 0, evalMs = 0, lastLevel = -2; const marks = [];
   for (; n < maxFrames; n++) {
     const te = Date.now(); const done = await page.evaluate(() => window.frame()); evalMs += Date.now() - te;
-    const file = path.join(framesDir, String(n).padStart(5, '0') + '.jpg');
+    const lvl = await page.evaluate(() => window.levelIndexNow);
+    if (lvl !== lastLevel) { marks.push(`${n} level${lvl + 1}`); lastLevel = lvl; fs.writeFileSync(path.join(path.dirname(out), path.basename(out, '.mp4') + '.marks'), marks.join('\n')); }
+    if (n < fromFrame) { if (done) break; continue; }
+    const file = path.join(framesDir, String(n - fromFrame).padStart(5, '0') + '.jpg');
     await page.screenshot({ path: file, type: 'jpeg', quality: 90 });
+    if (n % 30 === 0) fs.writeFileSync(path.join(path.dirname(out), path.basename(out, '.mp4') + '.progress'), String(n));
     if (stillSet.has(n)) await page.screenshot({ path: path.join(path.dirname(out), `still_${n}.png`) });
     if (n % 60 === 0) console.log(`frame ${n}  ${((Date.now() - t0) / 1000).toFixed(0)}s`);
     if (done) break;
