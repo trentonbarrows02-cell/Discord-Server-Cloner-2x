@@ -68,8 +68,8 @@ namespace PlayShift.Grass
         /// <summary>Extra height applied by gifts this level, in cm.</summary>
         public float HeightBonusCm { get; private set; }
 
-        public float CurrentMinHeightCm => Math.Min(_level.MinHeightCm + HeightBonusCm, _layout.AbsoluteMaxHeightCm);
-        public float CurrentMaxHeightCm => Math.Min(_level.MaxHeightCm + HeightBonusCm, _layout.AbsoluteMaxHeightCm);
+        public float CurrentMinHeightCm => _level == null ? 0f : Math.Min(_level.MinHeightCm + HeightBonusCm, _layout.AbsoluteMaxHeightCm);
+        public float CurrentMaxHeightCm => _level == null ? 0f : Math.Min(_level.MaxHeightCm + HeightBonusCm, _layout.AbsoluteMaxHeightCm);
 
         /// <summary>Increments on every visual change; cheap way for observers to detect changes.</summary>
         public int Version => _version;
@@ -219,9 +219,11 @@ namespace PlayShift.Grass
                 });
             }
 
-            if (left > 0)
+            // Whole lawn grown: make it denser, one base-sized layer per pass so it thickens evenly,
+            // never beyond the cap.
+            while (left > 0)
             {
-                // Whole lawn grown: make it denser, never beyond the cap.
+                long before = left;
                 left = VisitAll(left, (cell, budget) =>
                 {
                     int room = _maxUnitsPerCell - _units[cell];
@@ -230,6 +232,7 @@ namespace PlayShift.Grass
                     _units[cell] += add;
                     return add;
                 });
+                if (left == before) break; // every cell is at the cap
             }
 
             long added = amount - left;
