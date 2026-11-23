@@ -20,13 +20,14 @@ namespace PlayShift.Grass.Tests
         public void DefaultLevels_MatchSpecHeights()
         {
             var levels = GrassLevelDefinition.CreateDefaultLevels();
-            var expected = new (float min, float max)[] { (15, 25), (30, 45), (50, 70), (80, 110), (120, 150) };
+            var expected = new (float min, float max)[] { (15, 25), (35, 50), (60, 80), (90, 110), (120, 150) };
             Assert.Equal(5, levels.Count);
             for (int i = 0; i < 5; i++)
             {
                 Assert.Equal(expected[i].min, levels[i].MinHeightCm);
                 Assert.Equal(expected[i].max, levels[i].MaxHeightCm);
                 Assert.Equal(1_000_000, levels[i].StartingUnits);
+                if (i > 0) Assert.True(levels[i].BladeDensity > levels[i - 1].BladeDensity, "each level must be denser");
             }
         }
 

@@ -5,9 +5,15 @@ namespace PlayShift.Grass
 {
     public enum GiftActionType
     {
+        /// <summary>Regrows previously cut grass (units).</summary>
         AddGrass,
         RemoveGrass,
         IncreaseHeight,
+        /// <summary>Timed trimmer modifiers; Amount = magnitude, DurationSeconds = how long.</summary>
+        SpeedBoost,
+        RadiusBoost,
+        SlowTrimmer,
+        MultiBlade,
     }
 
     /// <summary>Maps one TikTok gift name to an effect on the current level.</summary>
@@ -20,16 +26,23 @@ namespace PlayShift.Grass
         /// <summary>Grass units for Add/Remove, centimetres for IncreaseHeight. Per gift.</summary>
         public double Amount;
 
-        /// <summary>When true, a combo of N gifts applies Amount N times.</summary>
+        /// <summary>When true, a combo of N gifts applies Amount N times (for modifiers: the duration N times).</summary>
         public bool ScaleByRepeatCount = true;
 
-        public GiftRule(string giftName, GiftActionType action, double amount, bool scaleByRepeatCount = true)
+        /// <summary>Duration for the timed trimmer modifiers, in seconds.</summary>
+        public float DurationSeconds = 10f;
+
+        public GiftRule(string giftName, GiftActionType action, double amount, bool scaleByRepeatCount = true, float durationSeconds = 10f)
         {
             GiftName = giftName;
             Action = action;
             Amount = amount;
             ScaleByRepeatCount = scaleByRepeatCount;
+            DurationSeconds = durationSeconds;
         }
+
+        public bool IsModifier => Action == GiftActionType.SpeedBoost || Action == GiftActionType.RadiusBoost ||
+                                  Action == GiftActionType.SlowTrimmer || Action == GiftActionType.MultiBlade;
     }
 
     /// <summary>
@@ -74,14 +87,17 @@ namespace PlayShift.Grass
         public readonly GiftActionType Action;
         public readonly double Requested;
         public readonly double Applied;
+        /// <summary>For timed modifiers: seconds applied.</summary>
+        public readonly float Duration;
 
-        public GiftApplication(GiftOutcome outcome, TikTokGiftEvent gift, GiftActionType action, double requested, double applied)
+        public GiftApplication(GiftOutcome outcome, TikTokGiftEvent gift, GiftActionType action, double requested, double applied, float duration = 0f)
         {
             Outcome = outcome;
             Gift = gift;
             Action = action;
             Requested = requested;
             Applied = applied;
+            Duration = duration;
         }
 
         public bool WasApplied => Outcome == GiftOutcome.Applied;
@@ -95,7 +111,11 @@ namespace PlayShift.Grass
             {
                 case GiftActionType.AddGrass: return $"{who} sent {what}: +{(long)Applied:N0} grass";
                 case GiftActionType.RemoveGrass: return $"{who} sent {what}: -{(long)Applied:N0} grass";
-                default: return $"{who} sent {what}: grass +{Applied:0.#} cm taller";
+                case GiftActionType.IncreaseHeight: return $"{who} sent {what}: grass +{Applied:0.#} cm taller";
+                case GiftActionType.SpeedBoost: return $"{who} sent {what}: SPEED BOOST {Duration:0}s";
+                case GiftActionType.RadiusBoost: return $"{who} sent {what}: WIDER CUT {Duration:0}s";
+                case GiftActionType.SlowTrimmer: return $"{who} sent {what}: trimmer SLOWED {Duration:0}s";
+                default: return $"{who} sent {what}: +{Applied:0} BLADE {Duration:0}s";
             }
         }
     }
@@ -104,11 +124,13 @@ namespace PlayShift.Grass
     public sealed class TikTokGiftRouter
     {
         private readonly GrassProgression _progression;
+        private readonly TrimmerModifiers _modifiers;
         private readonly Dictionary<string, GiftRule> _rules = new Dictionary<string, GiftRule>(StringComparer.OrdinalIgnoreCase);
 
-        public TikTokGiftRouter(GrassProgression progression, IEnumerable<GiftRule> rules = null)
+        public TikTokGiftRouter(GrassProgression progression, IEnumerable<GiftRule> rules = null, TrimmerModifiers modifiers = null)
         {
             _progression = progression ?? throw new ArgumentNullException(nameof(progression));
+            _modifiers = modifiers;
             SetRules(rules ?? CreateDefaultRules());
         }
 
@@ -138,6 +160,17 @@ namespace PlayShift.Grass
             if (IgnoreStreakInProgress && gift.IsStreakInProgress)
                 return new GiftApplication(GiftOutcome.IgnoredStreakInProgress, gift, rule.Action, 0, 0);
 
+            if (rule.IsModifier)
+            {
+                float duration = rule.DurationSeconds * (rule.ScaleByRepeatCount ? gift.RepeatCount : 1);
+                if (!_progression.IsPlaying)
+                    return new GiftApplication(GiftOutcome.NotPlaying, gift, rule.Action, rule.Amount, 0, duration);
+                if (_modifiers == null || rule.Amount <= 0 || duration <= 0)
+                    return new GiftApplication(GiftOutcome.NoEffect, gift, rule.Action, rule.Amount, 0, duration);
+                _modifiers.Add(ToModifier(rule.Action), (float)rule.Amount, duration);
+                return new GiftApplication(GiftOutcome.Applied, gift, rule.Action, rule.Amount, rule.Amount, duration);
+            }
+
             double requested = rule.Amount * (rule.ScaleByRepeatCount ? gift.RepeatCount : 1);
             if (!_progression.IsPlaying)
                 return new GiftApplication(GiftOutcome.NotPlaying, gift, rule.Action, requested, 0);
@@ -152,6 +185,17 @@ namespace PlayShift.Grass
 
             var outcome = applied > 0 ? GiftOutcome.Applied : GiftOutcome.NoEffect;
             return new GiftApplication(outcome, gift, rule.Action, requested, applied);
+        }
+
+        private static TrimmerModifierType ToModifier(GiftActionType a)
+        {
+            switch (a)
+            {
+                case GiftActionType.SpeedBoost: return TrimmerModifierType.SpeedBoost;
+                case GiftActionType.RadiusBoost: return TrimmerModifierType.RadiusBoost;
+                case GiftActionType.SlowTrimmer: return TrimmerModifierType.Slow;
+                default: return TrimmerModifierType.MultiBlade;
+            }
         }
 
         private static long ToUnits(double value) => value <= 0 ? 0 : (long)Math.Min(Math.Round(value), long.MaxValue / 2);
@@ -169,6 +213,10 @@ namespace PlayShift.Grass
                 new GiftRule("Ice Cream Cone", GiftActionType.RemoveGrass, 15_000),
                 new GiftRule("Perfume", GiftActionType.IncreaseHeight, 5),
                 new GiftRule("Galaxy", GiftActionType.IncreaseHeight, 20),
+                new GiftRule("Hand Hearts", GiftActionType.SpeedBoost, 0.5, durationSeconds: 15f),
+                new GiftRule("Sunglasses", GiftActionType.RadiusBoost, 0.6, durationSeconds: 15f),
+                new GiftRule("Snail", GiftActionType.SlowTrimmer, 0.4, durationSeconds: 10f),
+                new GiftRule("Corgi", GiftActionType.MultiBlade, 1, durationSeconds: 20f),
             };
         }
     }

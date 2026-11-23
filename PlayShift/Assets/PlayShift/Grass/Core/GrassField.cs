@@ -16,6 +16,7 @@ namespace PlayShift.Grass
         private readonly GrassFieldLayout _layout;
         private readonly int[] _units;
         private readonly float[] _heightsCm;
+        private readonly float[] _cutTime;
         private readonly int[] _permutation;
         private static int[] s_patchOffsetsX;
         private static int[] s_patchOffsetsZ;
@@ -37,6 +38,7 @@ namespace PlayShift.Grass
             int n = layout.CellCount;
             _units = new int[n];
             _heightsCm = new float[n];
+            _cutTime = new float[n];
             _permutation = new int[n];
             EnsurePatchOffsets();
         }
@@ -70,6 +72,15 @@ namespace PlayShift.Grass
 
         public float CurrentMinHeightCm => _level == null ? 0f : Math.Min(_level.MinHeightCm + HeightBonusCm, _layout.AbsoluteMaxHeightCm);
         public float CurrentMaxHeightCm => _level == null ? 0f : Math.Min(_level.MaxHeightCm + HeightBonusCm, _layout.AbsoluteMaxHeightCm);
+
+        /// <summary>
+        /// Game clock (seconds) stamped onto cells when they are cut, so the renderer can animate each blade
+        /// shortening over a fraction of a second. Set it every frame (e.g. to Time.time).
+        /// </summary>
+        public float Clock { get; set; }
+
+        /// <summary>Time the cell was cut (see <see cref="Clock"/>), or -1 if it is grown.</summary>
+        public float GetCutTime(int cell) => _units[cell] == 0 ? _cutTime[cell] : -1f;
 
         /// <summary>Increments on every visual change; cheap way for observers to detect changes.</summary>
         public int Version => _version;
@@ -111,6 +122,7 @@ namespace PlayShift.Grass
 
             HeightBonusCm = 0f;
             for (int i = 0; i < n; i++) _heightsCm[i] = SampleHeightCm(i % _layout.CellsX, i / _layout.CellsX);
+            for (int i = 0; i < n; i++) _cutTime[i] = -1f;
 
             InitialUnits = level.StartingUnits;
             Remaining = level.StartingUnits;
@@ -173,6 +185,7 @@ namespace PlayShift.Grass
                     if (qx * qx + qz * qz > r2) continue;
 
                     _units[i] = 0;
+                    _cutTime[i] = Clock;
                     removed += u;
                     if (i < firstTouched) firstTouched = i;
                     if (i > lastTouched) lastTouched = i;
@@ -257,6 +270,7 @@ namespace PlayShift.Grass
                 if (u == 0) return 0;
                 int t = (int)Math.Min(budget, u);
                 _units[cell] = u - t;
+                if (u - t == 0) _cutTime[cell] = Clock;
                 return t;
             };
 
@@ -306,6 +320,19 @@ namespace PlayShift.Grass
             _dirtyMin = int.MaxValue;
             _dirtyMax = -1;
             return true;
+        }
+
+        /// <summary>
+        /// Writes two floats per cell: [2i] = grown height in metres (kept after cutting, so the renderer can
+        /// animate from it), [2i+1] = cut time (see <see cref="Clock"/>) or -1 while the cell is grown.
+        /// </summary>
+        public void CopyRenderCells(float[] destination, int start, int count)
+        {
+            for (int i = start, end = start + count; i < end; i++)
+            {
+                destination[2 * i] = _heightsCm[i] * 0.01f;
+                destination[2 * i + 1] = _units[i] > 0 ? -1f : _cutTime[i];
+            }
         }
 
         /// <summary>Writes render heights in metres: blade height for grown cells, 0 for cut cells.</summary>

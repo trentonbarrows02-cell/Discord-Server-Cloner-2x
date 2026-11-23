@@ -17,12 +17,16 @@ namespace PlayShift.Grass
         public float MaxHeightCm;
         public long StartingUnits;
 
-        public GrassLevelDefinition(string displayName, float minHeightCm, float maxHeightCm, long startingUnits = DefaultStartingUnits)
+        /// <summary>Fraction (0-1] of the renderer's maximum blades per cell drawn on this level. Taller levels are thicker.</summary>
+        public float BladeDensity;
+
+        public GrassLevelDefinition(string displayName, float minHeightCm, float maxHeightCm, long startingUnits = DefaultStartingUnits, float bladeDensity = 1f)
         {
             DisplayName = displayName;
             MinHeightCm = minHeightCm;
             MaxHeightCm = maxHeightCm;
             StartingUnits = startingUnits;
+            BladeDensity = bladeDensity;
         }
 
         public void Validate()
@@ -30,6 +34,7 @@ namespace PlayShift.Grass
             if (MinHeightCm <= 0f) throw new ArgumentException($"{DisplayName}: MinHeightCm must be > 0 (was {MinHeightCm}).");
             if (MaxHeightCm < MinHeightCm) throw new ArgumentException($"{DisplayName}: MaxHeightCm ({MaxHeightCm}) must be >= MinHeightCm ({MinHeightCm}).");
             if (StartingUnits <= 0) throw new ArgumentException($"{DisplayName}: StartingUnits must be > 0 (was {StartingUnits}).");
+            if (BladeDensity <= 0f || BladeDensity > 1f) throw new ArgumentException($"{DisplayName}: BladeDensity must be in (0, 1] (was {BladeDensity}).");
         }
 
         /// <summary>The five shipped levels. Heights are defaults only; the Unity settings asset can override every value.</summary>
@@ -37,11 +42,11 @@ namespace PlayShift.Grass
         {
             return new List<GrassLevelDefinition>
             {
-                new GrassLevelDefinition("Level 1", 15f, 25f),
-                new GrassLevelDefinition("Level 2", 30f, 45f),
-                new GrassLevelDefinition("Level 3", 50f, 70f),
-                new GrassLevelDefinition("Level 4", 80f, 110f),
-                new GrassLevelDefinition("Level 5", 120f, 150f),
+                new GrassLevelDefinition("Level 1", 15f, 25f, DefaultStartingUnits, 0.62f),
+                new GrassLevelDefinition("Level 2", 35f, 50f, DefaultStartingUnits, 0.72f),
+                new GrassLevelDefinition("Level 3", 60f, 80f, DefaultStartingUnits, 0.82f),
+                new GrassLevelDefinition("Level 4", 90f, 110f, DefaultStartingUnits, 0.92f),
+                new GrassLevelDefinition("Level 5", 120f, 150f, DefaultStartingUnits, 1f),
             };
         }
     }

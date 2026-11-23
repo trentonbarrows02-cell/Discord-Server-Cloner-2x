@@ -123,7 +123,7 @@ namespace PlayShift.Grass.Tests
             ProgressionTests.MowEverything(p.Field);
             p.NextLevel();
             Assert.Equal(0f, p.Field.HeightBonusCm);
-            for (int i = 0; i < p.Field.CellCount; i++) Assert.InRange(p.Field.GetHeightCm(i), 30f, 45f);
+            for (int i = 0; i < p.Field.CellCount; i++) Assert.InRange(p.Field.GetHeightCm(i), 35f, 50f);
         }
 
         [Fact]
