@@ -7,17 +7,18 @@ Copy `Assets/PlayShift/` into the game's `Assets/` folder. The `Tests~` folder i
 
 ## Quick start: first-person test area
 
-1. Requirements:
-   - Unity 2021.3 or newer, with **URP** or the Built-in pipeline (not HDRP).
-   - uGUI and TextMeshPro (default packages).
-   - **glTFast** (Package Manager > Add package by name > `com.unity.cloud.gltfast`), so Unity can import the trimmer `.glb`.
-   - A shader model 4.5 GPU (DX11+, Metal, Vulkan).
-2. In an empty scene, run **PlayShift > Grass > Create Test Area (first-person)**. It builds:
+`PlayShift/` is a complete Unity project. To run it:
+
+1. In Unity Hub, choose **Add > Add project from disk** and select the `PlayShift` folder. Open it with **Unity 2022.3 LTS** (Unity 6 also works and upgrades the packages automatically).
+2. Unity installs the packages listed in `Packages/manifest.json`: glTFast for the trimmer `.glb`, TextMeshPro and uGUI.
+3. On first open, `FirstOpenSetup` imports TMP Essential Resources, then builds and saves `Assets/PlayShift/Scenes/GrassTestArea.unity` and opens it. The scene has:
    - a 24 x 24 m test lawn with 1,000,000 grass units, starting on Level 3 (60-80 cm)
    - a first-person player holding your trimmer (no hands, arms or body)
    - grass clippings and trimmer audio
-   - a cloud sky, a sun with soft shadows, haze, and trees and bushes around the perimeter
-3. Press Play.
+   - a cloud sky, a sun with soft shadows, a gravel path, and trees and bushes around the perimeter
+4. Press Play.
+
+To rebuild the scene later, use **PlayShift > Grass > Rebuild Test Scene**. To add the system to your own game project instead, copy `Assets/PlayShift`, install glTFast (`com.unity.cloud.gltfast`), and use **PlayShift > Grass > Create Test Area** or **Create Level Setup (existing scene)**. Requires a shader model 4.5 GPU (DX11+, Metal, Vulkan).
 
 | Control | Action |
 |---|---|
