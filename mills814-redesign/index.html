@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Mills814 — Take pride in your everyday</title>
-  <meta name="description" content="Men's lifestyle essentials for your routine, your ride, and the road ahead. Grooming, car care and outdoor gear." />
+  <meta name="description" content="Car care for your ride, plus essentials for your routine and the road ahead. Detailing, grooming and outdoor gear." />
   <meta name="theme-color" content="#080b12" />
   <link rel="icon" href="assets/mark.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -23,8 +23,8 @@
         <span class="brand__word">MILLS<span class="brand__num">814</span></span>
       </a>
       <nav class="nav__links" aria-label="Primary">
-        <a href="#shop" data-go="grooming">Grooming</a>
         <a href="#shop" data-go="car">Car Care</a>
+        <a href="#shop" data-go="grooming">Grooming</a>
         <a href="#shop" data-go="outdoor">Outdoor</a>
         <a href="#shop" data-go="all">All</a>
       </nav>
@@ -44,33 +44,43 @@
     <!-- ───────── Hero ───────── -->
     <section class="hero" aria-labelledby="heroTitle">
       <div class="hero__bg" aria-hidden="true">
-        <div class="hero__grid"></div>
+        <svg class="hero__lights" id="lights" preserveAspectRatio="none">
+          <defs>
+            <pattern id="hexTubes" width="58.89" height="102" patternUnits="userSpaceOnUse" patternTransform="scale(1.9)">
+              <path class="halo" d="M36.8 2.5L57.6 14.5M28.1 2.5L7.3 14.5M3 22L3 46M7.3 53.5L28.1 65.5M57.6 53.5L36.8 65.5M32.4 73L32.4 97" />
+              <path class="tube" d="M36.8 2.5L57.6 14.5M28.1 2.5L7.3 14.5M3 22L3 46M7.3 53.5L28.1 65.5M57.6 53.5L36.8 65.5M32.4 73L32.4 97" />
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#hexTubes)" />
+        </svg>
+        <canvas class="hero__beads" id="beads"></canvas>
         <div class="hero__glow" id="glow"></div>
         <div class="hero__noise"></div>
       </div>
 
       <div class="wrap hero__content">
-        <p class="eyebrow" data-reveal><span class="dot"></span>Men's lifestyle supply · 814</p>
+        <p class="eyebrow" data-reveal><span class="dot"></span>Car care &amp; lifestyle supply · 814</p>
         <h1 class="hero__title" id="heroTitle">
           <span class="line"><span>Take pride</span></span>
           <span class="line"><span>in your <em>everyday.</em></span></span>
         </h1>
-        <p class="hero__sub" data-reveal style="--d:.5s">Essentials for your routine, your ride, and the road ahead.</p>
+        <p class="hero__sub" data-reveal style="--d:.5s">Car care for your ride, plus essentials for your routine and the road ahead.</p>
         <div class="hero__cta" data-reveal style="--d:.65s">
-          <a class="btn btn--primary" href="#shop" data-go="grooming" data-magnetic>
-            Shop grooming
+          <a class="btn btn--primary" href="#shop" data-go="car" data-magnetic>
+            Shop car care
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
           </a>
-          <a class="btn btn--ghost" href="#shop" data-go="car" data-magnetic>Explore car care</a>
+          <a class="btn btn--ghost" href="#shop" data-go="all" data-magnetic>Shop all</a>
         </div>
       </div>
 
+      <p class="hero__hint mono" id="beadHint" aria-hidden="true">Move your cursor to wipe the beads</p>
       <div class="wrap hero__index" data-reveal style="--d:.8s">
-        <a href="#shop" data-go="grooming" class="index-row">
-          <span class="mono">01</span><span>Grooming</span><span class="mono index-row__n" data-count="grooming">0</span>
-        </a>
         <a href="#shop" data-go="car" class="index-row">
-          <span class="mono">02</span><span>Car Care</span><span class="mono index-row__n" data-count="car">0</span>
+          <span class="mono">01</span><span>Car Care</span><span class="mono index-row__n" data-count="car">0</span>
+        </a>
+        <a href="#shop" data-go="grooming" class="index-row">
+          <span class="mono">02</span><span>Grooming</span><span class="mono index-row__n" data-count="grooming">0</span>
         </a>
         <a href="#shop" data-go="outdoor" class="index-row">
           <span class="mono">03</span><span>Outdoor</span><span class="mono index-row__n" data-count="outdoor">0</span>
@@ -81,8 +91,8 @@
     <!-- ───────── Marquee ───────── -->
     <div class="marquee" aria-hidden="true">
       <div class="marquee__track">
-        <span>Beard care</span><i>✦</i><span>Natural soap</span><i>✦</i><span>Deodorant</span><i>✦</i><span>Car wash</span><i>✦</i><span>Interior</span><i>✦</i><span>Detailing tools</span><i>✦</i><span>Rooftop tents</span><i>✦</i><span>Solar power</span><i>✦</i>
-        <span>Beard care</span><i>✦</i><span>Natural soap</span><i>✦</i><span>Deodorant</span><i>✦</i><span>Car wash</span><i>✦</i><span>Interior</span><i>✦</i><span>Detailing tools</span><i>✦</i><span>Rooftop tents</span><i>✦</i><span>Solar power</span><i>✦</i>
+        <span>Foam wash</span><i>✦</i><span>Interior</span><i>✦</i><span>Glass</span><i>✦</i><span>Wheels &amp; tires</span><i>✦</i><span>Microfiber</span><i>✦</i><span>Detailing tools</span><i>✦</i><span>Beard care</span><i>✦</i><span>Natural soap</span><i>✦</i><span>Rooftop tents</span><i>✦</i><span>Solar power</span><i>✦</i>
+        <span>Foam wash</span><i>✦</i><span>Interior</span><i>✦</i><span>Glass</span><i>✦</i><span>Wheels &amp; tires</span><i>✦</i><span>Microfiber</span><i>✦</i><span>Detailing tools</span><i>✦</i><span>Beard care</span><i>✦</i><span>Natural soap</span><i>✦</i><span>Rooftop tents</span><i>✦</i><span>Solar power</span><i>✦</i>
       </div>
     </div>
 
@@ -123,8 +133,8 @@
         <div class="seg" id="seg" role="tablist" aria-label="Division">
           <span class="seg__pill" aria-hidden="true"></span>
           <button role="tab" data-div="all" aria-selected="true">All</button>
-          <button role="tab" data-div="grooming" aria-selected="false">Grooming</button>
           <button role="tab" data-div="car" aria-selected="false">Car Care</button>
+          <button role="tab" data-div="grooming" aria-selected="false">Grooming</button>
           <button role="tab" data-div="outdoor" aria-selected="false">Outdoor</button>
         </div>
         <div class="toolbar__right">
@@ -154,7 +164,7 @@
     <!-- ───────── Manifesto ───────── -->
     <section class="manifesto wrap" aria-label="About">
       <p class="eyebrow">For the way you live</p>
-      <p class="manifesto__text" id="manifesto">Men's lifestyle essentials for pride in your appearance, care for your vehicle, and getting outdoors. Products crafted for superior performance and ease.</p>
+      <p class="manifesto__text" id="manifesto">Care for your vehicle, pride in your appearance, and gear for getting outdoors. Products crafted for superior performance and ease.</p>
     </section>
 
     <!-- ───────── Verse ───────── -->
@@ -194,8 +204,8 @@
       <div class="footer__cols">
         <div>
           <p class="mono footer__label">Shop</p>
-          <a href="#shop" data-go="grooming">Grooming</a>
           <a href="#shop" data-go="car">Car Care</a>
+          <a href="#shop" data-go="grooming">Grooming</a>
           <a href="#shop" data-go="outdoor">Outdoor</a>
           <a href="#shop" data-go="all">All products</a>
         </div>

@@ -16,20 +16,20 @@
   const productUrl = (p) => `${STORE}/products/${encodeURIComponent(p.h)}`;
 
   const DIVISIONS = {
-    grooming: { name: "Grooming", blurb: "Beard care, natural soap, deodorant & skin", hero: "top-seller-family-bundle-8-pack" },
     car: { name: "Car Care", blurb: "Blackline® wash, interior & detailing tools", hero: "blackline®-foam-cannon-pro" },
+    grooming: { name: "Grooming", blurb: "Beard care, natural soap, deodorant & skin", hero: "top-seller-family-bundle-8-pack" },
     outdoor: { name: "Outdoor", blurb: "Rooftop tents & solar power", hero: "explorer-plus-rooftop-tent-hardshell-with-side-awning-air-conditioner-outlet-with-bracket-luggage-racks-replaceable-netting-rain-curtain-truck-bed-tent-for-camping-pop-up-suv-roof-top-tent" },
   };
   const FEATURED = [
-    "1776-revolutionary-bay-rum-soap-5-56-oz-natural-bar",
-    "angry-charlie-2oz-beard-balm-vanilla-and-cedarwood-cologne",
-    "angry-charlie-beard-bundle-balm-butter-oil-natural-soap",
-    "angry-charlie-beard-oil-1oz",
-    "hand-salve",
     "blackline®-ultra-foam",
+    "blackline®-foam-cannon-pro",
     "blackline®-twisted-loop-drying-towel",
     "blackline®-reset-interior-cleaner-scent-booster",
-    "natures-generator-l3600-expandable-solar-generator",
+    "blackline®-speed-gloss-quick-detailer",
+    "blackline®-crystal-glass-cleaner",
+    "1776-revolutionary-bay-rum-soap-5-56-oz-natural-bar",
+    "angry-charlie-beard-bundle-balm-butter-oil-natural-soap",
+    "hand-salve",
   ];
 
   const byHandle = new Map(ALL.map((p) => [p.h, p]));
@@ -143,7 +143,7 @@
 
   function renderChips() {
     const pool = ALL.filter((p) => state.div === "all" || p.d === state.div);
-    const ORDER = ["Beard", "Soap", "Deodorant", "Skin", "Sets", "Wash", "Interior", "Finish", "Tools", "Tents", "Solar"];
+    const ORDER = ["Wash", "Interior", "Finish", "Tools", "Beard", "Soap", "Deodorant", "Skin", "Sets", "Tents", "Solar"];
     const cats = [...new Set(pool.map((p) => p.c))].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b));
     const count = (c) => pool.filter((p) => p.c === c).length;
     $("#chips").innerHTML =
@@ -440,7 +440,7 @@
   // Manifesto: words light up as it scrolls through the viewport
   const mani = $("#manifesto");
   mani.innerHTML = mani.textContent.split(/\s+/).map((w) =>
-    `<span class="w${/appearance|vehicle|outdoors|performance/i.test(w) ? " hl" : ""}">${esc(w)}</span>`).join(" ");
+    `<span class="w${/vehicle|appearance|outdoors|performance/i.test(w) ? " hl" : ""}">${esc(w)}</span>`).join(" ");
   const words = $$(".w", mani);
 
   const nav = $("#nav"), bar = $("#progress");
@@ -464,10 +464,163 @@
   addEventListener("scroll", () => { if (!ticking) { ticking = true; requestAnimationFrame(onScroll); } }, { passive: true });
   addEventListener("resize", moveSegPill);
 
+  /* ── hero: water beading on fresh coating ─────────────────────────── */
+  // Beads sit on the "paint". A cursor wipes them like a drying towel; they
+  // bead back up a few seconds later. Big beads now and then run downhill,
+  // and a soft studio-light reflection sweeps across.
+  function initBeads() {
+    const cv = $("#beads"), hero = $(".hero");
+    if (!cv || !cv.getContext) return;
+    const ctx = cv.getContext("2d");
+    const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent-rgb").trim().split(/\s+/).join(",") || "124,156,255";
+    const sprites = new Map();
+    let W = 0, H = 0, dpr = 1, drops = [], trails = [], raf = 0, visible = true, lastT = 0, nextSlide = 0, wiped = false;
+    const rand = (a, b) => a + Math.random() * (b - a);
+    const radius = () => { const k = Math.random(); return k < 0.62 ? rand(1.1, 2.6) : k < 0.9 ? rand(2.6, 4.8) : rand(4.8, 8.5); };
+
+    function sprite(r) {
+      const key = Math.max(2, Math.round(r * 2));
+      if (sprites.has(key)) return sprites.get(key);
+      const R = key / 2, pad = 3, box = (R + pad) * 2;
+      const c = document.createElement("canvas");
+      c.width = c.height = Math.ceil(box * dpr);
+      const g = c.getContext("2d");
+      g.scale(dpr, dpr);
+      const x = R + pad, y = R + pad;
+      g.fillStyle = "rgba(0,0,0,.38)";                         // contact shadow
+      g.beginPath(); g.ellipse(x + R * 0.16, y + R * 0.3, R * 0.95, R * 0.88, 0, 0, Math.PI * 2); g.fill();
+      const body = g.createRadialGradient(x - R * 0.3, y - R * 0.35, R * 0.05, x, y, R);
+      body.addColorStop(0, "rgba(225,233,255,.16)");
+      body.addColorStop(0.65, `rgba(${accent},.07)`);
+      body.addColorStop(1, "rgba(200,214,255,.42)");
+      g.fillStyle = body;
+      g.beginPath(); g.arc(x, y, R, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = `rgba(${accent},.65)`;                    // light focused through the bead
+      g.lineWidth = Math.max(0.5, R * 0.14);
+      g.beginPath(); g.arc(x, y, R * 0.7, Math.PI * 0.18, Math.PI * 0.82); g.stroke();
+      g.fillStyle = "rgba(255,255,255,.95)";                    // specular highlight
+      g.beginPath(); g.ellipse(x - R * 0.36, y - R * 0.4, Math.max(0.5, R * 0.26), Math.max(0.4, R * 0.17), -0.6, 0, Math.PI * 2); g.fill();
+      const out = { c, box };
+      sprites.set(key, out);
+      return out;
+    }
+
+    function spawn(d = {}, now = 0, fresh = false) {
+      d.x = rand(0, W); d.y = rand(H * 0.12, H); d.r = radius();
+      d.a = fresh ? 1 : 0; d.t = 1; d.back = 0; d.vy = 0; d.slide = false;
+      d.delay = fresh ? 0 : now + rand(0, 900);
+      return d;
+    }
+
+    function size() {
+      const r = hero.getBoundingClientRect();
+      dpr = Math.min(2, window.devicePixelRatio || 1);
+      W = r.width; H = r.height;
+      cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      sprites.clear();
+      const n = Math.min(260, Math.round((W * H) / 6500));
+      drops = Array.from({ length: n }, () => spawn({}, 0, true));
+      trails = [];
+    }
+
+    function wipe(x0, y0, x1, y1, now) {
+      const dx = x1 - x0, dy = y1 - y0, len2 = dx * dx + dy * dy || 1, reach = 34;
+      for (const d of drops) {
+        if (d.t === 0) continue;
+        const k = Math.max(0, Math.min(1, ((d.x - x0) * dx + (d.y - y0) * dy) / len2));
+        const ex = x0 + k * dx - d.x, ey = y0 + k * dy - d.y;
+        if (ex * ex + ey * ey < (reach + d.r) ** 2) { d.t = 0; d.back = now + rand(2200, 5200); d.slide = false; }
+      }
+      if (!wiped) { wiped = true; $("#beadHint")?.classList.add("gone"); }
+    }
+
+    function frame(t) {
+      raf = 0;
+      const dt = Math.min(50, t - (lastT || t)) / 1000;
+      lastT = t;
+      ctx.clearRect(0, 0, W, H);
+
+      // a big bead runs downhill every few seconds, picking up the small ones in its path
+      if (!reduceMotion && t > nextSlide) {
+        const big = drops.filter((d) => d.t === 1 && d.a > 0.95 && d.r > 4.6 && !d.slide);
+        const d = big[Math.floor(Math.random() * big.length)];
+        if (d) { d.slide = true; d.vy = 6; d.trail = { pts: [[d.x, d.y]], w: d.r * 0.9, life: 1 }; trails.push(d.trail); }
+        nextSlide = t + rand(1800, 4200);
+      }
+
+      for (const d of drops) {
+        if (t < d.delay) continue;
+        if (d.t === 0 && d.back && t > d.back) { spawn(d, t); d.t = 1; }
+        d.a += (d.t - d.a) * Math.min(1, dt * (d.t ? 2.2 : 9));
+        if (d.slide) {
+          d.vy = Math.min(70, d.vy + dt * 40);
+          d.y += d.vy * dt; d.x += Math.sin(t / 380 + d.r) * 0.15;
+          d.trail.pts.push([d.x, d.y]);
+          for (const o of drops) {
+            if (o !== d && o.t === 1 && !o.slide && Math.abs(o.x - d.x) < d.r && Math.abs(o.y - d.y) < d.r + o.r) {
+              o.t = 0; o.a = 0; o.back = t + rand(2500, 6000); d.r = Math.min(10, d.r + o.r * 0.12);
+            }
+          }
+          if (d.y > H + 20) { d.slide = false; d.t = 0; d.a = 0; d.back = t + rand(800, 2000); }
+        }
+        if (d.a < 0.02) continue;
+        const s = sprite(d.r), k = 0.55 + 0.45 * d.a, b = s.box * k;
+        ctx.globalAlpha = d.a;
+        ctx.drawImage(s.c, d.x - b / 2, d.y - b / 2, b, b);
+      }
+      ctx.globalAlpha = 1;
+
+      // wet streaks left behind by running beads
+      trails = trails.filter((tr) => (tr.life -= dt * 0.12) > 0);
+      ctx.lineCap = "round";
+      for (const tr of trails) {
+        if (tr.pts.length < 2) continue;
+        ctx.strokeStyle = `rgba(190,205,255,${0.07 * tr.life})`;
+        ctx.lineWidth = tr.w;
+        ctx.beginPath(); ctx.moveTo(tr.pts[0][0], tr.pts[0][1]);
+        for (const [x, y] of tr.pts) ctx.lineTo(x, y);
+        ctx.stroke();
+      }
+
+      // studio light sweeping across the clear coat
+      if (!reduceMotion) {
+        const period = 9000, span = W + H;
+        const p = ((t % period) / period) * (span + 600) - 300;
+        const g = ctx.createLinearGradient(p - 220, 0, p + 220, H * 0.45);
+        g.addColorStop(0, "rgba(255,255,255,0)");
+        g.addColorStop(0.5, "rgba(210,222,255,.07)");
+        g.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.globalCompositeOperation = "lighter";
+        ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+        ctx.globalCompositeOperation = "source-over";
+      }
+
+      if (!reduceMotion && visible && !document.hidden) raf = requestAnimationFrame(frame);
+    }
+    const kick = () => { if (!raf) { lastT = 0; raf = requestAnimationFrame(frame); } };
+
+    size();
+    kick();
+    let rt;
+    addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { size(); kick(); }, 200); });
+    new IntersectionObserver(([e]) => { visible = e.isIntersecting; if (visible) kick(); }).observe(hero);
+    document.addEventListener("visibilitychange", kick);
+
+    let last = null;
+    hero.addEventListener("pointermove", (e) => {
+      const r = hero.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+      if (last && !reduceMotion) { wipe(last[0], last[1], x, y, performance.now()); kick(); }
+      last = [x, y];
+      if (!reduceMotion) $("#lights").style.setProperty("--lx", `${(e.clientX / innerWidth - 0.5) * -40}px`);
+    }, { passive: true });
+    hero.addEventListener("pointerleave", () => (last = null));
+  }
+
   /* ── boot ─────────────────────────────────────────────────────────── */
   $("#year").textContent = new Date().getFullYear();
   renderDivisions(); renderRail(); renderChips(); renderGrid(); renderCart();
-  observeReveals(); bindMagnetic(); onScroll();
+  observeReveals(); bindMagnetic(); onScroll(); initBeads();
   (document.fonts?.ready || Promise.resolve()).then(() => {
     moveSegPill();
     requestAnimationFrame(() => { document.documentElement.classList.add("is-loaded"); countUp(); });

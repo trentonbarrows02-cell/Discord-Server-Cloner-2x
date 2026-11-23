@@ -23,6 +23,7 @@
   --ink: #0a0e17;             /* tags + quick-add on light tiles */
   --tile: #e8ebf1;            /* product image backdrop */
   --sale: #ff7d5c;
+  --light: #e6ecff;          /* LED tube */
 
   --font: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -166,19 +167,35 @@ svg { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 1
    ========================================================================== */
 .hero { position: relative; min-height: 100svh; display: flex; flex-direction: column; justify-content: flex-end; padding: calc(var(--nav-h) + 60px) 0 40px; overflow: hidden; }
 .hero__bg { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
-.hero__grid {
-  position: absolute; left: -50%; right: -50%; bottom: -10%; height: 75%;
-  background-image:
-    linear-gradient(to right, rgb(var(--accent-rgb) / .13) 1px, transparent 1px),
-    linear-gradient(to bottom, rgb(var(--accent-rgb) / .13) 1px, transparent 1px);
-  background-size: 64px 64px;
-  transform: perspective(600px) rotateX(62deg);
-  transform-origin: center top;
-  mask-image: linear-gradient(to bottom, transparent, #000 30%, #000 60%, transparent);
-  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 30%, #000 60%, transparent);
-  animation: grid-move 3.2s linear infinite;
+/* Detailing-bay ceiling: hexagon LED tubes seen in perspective, reflected in the paint */
+.hero__lights {
+  position: absolute; left: -40%; top: -4%; width: 180%; height: 52%;
+  stroke-linecap: round; fill: none;
+  transform: perspective(520px) rotateX(-66deg) translate3d(var(--lx, 0px), 0, 0);
+  transform-origin: center bottom;
+  will-change: transform, opacity;
+  mask-image: radial-gradient(70% 120% at 68% 0%, #000 25%, rgb(0 0 0 / .35) 55%, transparent 80%);
+  -webkit-mask-image: radial-gradient(70% 120% at 68% 0%, #000 25%, rgb(0 0 0 / .35) 55%, transparent 80%);
+  opacity: 0;
+  transition: transform 1.4s var(--ease);
 }
-@keyframes grid-move { to { background-position: 0 64px; } }
+.is-loaded .hero__lights { animation: lights-on 1.6s steps(1, end) .15s forwards; }
+.hero__lights .tube { stroke: var(--light); stroke-width: 2.6; }
+.hero__lights .halo { stroke: rgb(var(--accent-rgb) / .22); stroke-width: 9; }
+@keyframes lights-on {
+  0% { opacity: 0; } 8% { opacity: .4; } 12% { opacity: .05; } 20% { opacity: .5; }
+  24% { opacity: .1; } 30% { opacity: .32; } 34% { opacity: .15; } 46%, 100% { opacity: .32; }
+}
+/* Water beading on a coated surface */
+.hero__beads { position: absolute; inset: 0; width: 100%; height: 100%; }
+.hero__hint {
+  position: absolute; right: max(var(--gutter), calc((100vw - var(--wrap)) / 2 + var(--gutter))); bottom: 150px;
+  margin: 0; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim);
+  display: none; align-items: center; gap: 10px; transition: opacity .6s;
+}
+.hero__hint::before { content: ""; width: 22px; height: 1px; background: currentColor; }
+.hero__hint.gone { opacity: 0; }
+@media (hover: hover) and (pointer: fine) { .hero__hint { display: inline-flex; } }
 .hero__glow {
   position: absolute; width: 60vmax; height: 60vmax; left: 50%; top: 40%;
   translate: -50% -50%;
@@ -549,4 +566,5 @@ body.locked { overflow: hidden; }
   [data-reveal] { opacity: 1; transform: none; }
   .hero__title .line > span { transform: none; }
   .hero__title em { background-position: 0 0; }
+  .hero__lights { opacity: .32; }
 }
