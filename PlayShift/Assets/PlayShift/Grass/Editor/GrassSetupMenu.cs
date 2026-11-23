@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -42,7 +41,7 @@ namespace PlayShift.Grass.Editor
             int group = Undo.GetCurrentGroup();
 
             // Lighting: bright daytime sun with soft shadows, cloud sky, light haze.
-            var sun = UnityEngine.Object.FindObjectsOfType<Light>().FirstOrDefault(l => l.type == LightType.Directional);
+            var sun = SceneComponents<Light>().FirstOrDefault(l => l.type == LightType.Directional);
             if (sun == null)
             {
                 sun = new GameObject("Sun").AddComponent<Light>();
@@ -82,7 +81,7 @@ namespace PlayShift.Grass.Editor
             Set(env, "manager", manager);
 
             // First-person player: camera + floating trimmer, no body or hands.
-            foreach (var cam in UnityEngine.Object.FindObjectsOfType<Camera>())
+            foreach (var cam in SceneComponents<Camera>())
                 if (cam.CompareTag("MainCamera")) { Undo.RecordObject(cam.gameObject, "Disable camera"); cam.gameObject.SetActive(false); }
 
             var player = new GameObject("Player");
@@ -155,6 +154,11 @@ namespace PlayShift.Grass.Editor
                       "GrassCutter (plus TrimmerBlades/TrimmerViewmodel for first-person) to the player.", root);
         }
 
+        /// <summary>Components in the active scene (avoids Find* APIs, whose signatures keep changing across Unity versions).</summary>
+        private static T[] SceneComponents<T>() where T : Component =>
+            UnityEngine.SceneManagement.SceneManager.GetActiveScene().GetRootGameObjects()
+                .SelectMany(go => go.GetComponentsInChildren<T>(true)).ToArray();
+
         private static Material GrassMaterial()
         {
             string shaderName = GrassFieldRenderer.DefaultShaderName;
@@ -207,20 +211,16 @@ namespace PlayShift.Grass.Editor
         /// <summary>Imports TMP Essential Resources non-interactively if the project lacks them.</summary>
         private static void EnsureTmpEssentials()
         {
-            if (TMPro.TMP_Settings.defaultFontAsset != null) return;
-            var importer = AppDomain.CurrentDomain.GetAssemblies()
-                .Select(a => a.GetType("TMPro.TMP_PackageResourceImporter", false))
-                .FirstOrDefault(t => t != null);
-            var method = importer?.GetMethod("ImportResources", BindingFlags.Public | BindingFlags.Static);
-            if (method != null && method.GetParameters().Length == 3)
-            {
-                method.Invoke(null, new object[] { true, false, false });
+            // Don't touch TMP_Settings.defaultFontAsset here: with no settings asset it throws (Unity 6 / uGUI 2.x).
+            if (Resources.Load<TMPro.TMP_Settings>("TMP Settings") != null) return;
+            // The project ships TMP Essential Resources in Assets/TextMesh Pro; this is only a fallback if they were deleted.
+            // (In Unity 6 this import is asynchronous, so it completes after this call returns.)
+            TMPro.TMP_PackageResourceImporter.ImportResources(true, false, false);
+            AssetDatabase.Refresh();
+            if (Resources.Load<TMPro.TMP_Settings>("TMP Settings") != null)
                 Debug.Log("[PlayShift Grass] Imported TextMeshPro Essential Resources.");
-            }
             else
-            {
                 Debug.LogWarning("[PlayShift Grass] TextMeshPro Essential Resources are missing. Import them via Window > TextMeshPro > Import TMP Essential Resources.");
-            }
         }
     }
 }

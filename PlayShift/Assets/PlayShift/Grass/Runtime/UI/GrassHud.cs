@@ -69,7 +69,7 @@ namespace PlayShift.Grass
             BuildClearedOverlay();
             BuildVictoryOverlay();
             HideOverlays();
-            if (TMP_Settings.defaultFontAsset == null)
+            if (Resources.Load<TMP_Settings>("TMP Settings") == null || TMP_Settings.defaultFontAsset == null)
                 Debug.LogError("[PlayShift Grass] TextMeshPro has no default font. Import 'TMP Essential Resources' " +
                                "(Window > TextMeshPro) or run PlayShift > Grass > Create Level Setup.", this);
         }

@@ -157,7 +157,7 @@ namespace PlayShift.Grass
         private static T FindExisting<T>() where T : UnityEngine.Object
         {
 #if UNITY_2023_1_OR_NEWER
-            return FindFirstObjectByType<T>();
+            return FindAnyObjectByType<T>();
 #else
             return FindObjectOfType<T>();
 #endif

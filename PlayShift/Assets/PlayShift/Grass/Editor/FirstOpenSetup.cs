@@ -55,6 +55,8 @@ namespace PlayShift.Grass.Editor
                 if (Shader.Find(name) == null) { Debug.LogError($"[PlayShift Grass] Shader '{name}' missing or failed to compile."); ok = false; }
             BuildTestScene(askToSave: false);
             if (!File.Exists(ScenePath)) { Debug.LogError("[PlayShift Grass] Test scene was not saved."); ok = false; }
+            if (Resources.Load<TMPro.TMP_Settings>("TMP Settings") == null)
+            { Debug.LogError("[PlayShift Grass] TextMeshPro Essential Resources were not imported (HUD text would be missing)."); ok = false; }
             Debug.Log(ok ? "[PlayShift Grass] BATCH SETUP OK" : "[PlayShift Grass] BATCH SETUP FAILED");
             if (Application.isBatchMode) EditorApplication.Exit(ok ? 0 : 1);
         }
