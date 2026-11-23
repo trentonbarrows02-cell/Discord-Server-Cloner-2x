@@ -25,8 +25,9 @@ namespace PlayShift.Grass
         [SerializeField] private float modelScale = 1.85f;
         [Tooltip("Lengthens only the shaft (model Z) so it reaches from the head on the ground up to the bottom-right corner. The cutting head keeps its real size.")]
         [SerializeField] private float shaftStretch = 1.7f;
-        [Tooltip("Use the body mesh without the loop handle (Resources/TrimmerBody_NoHandle, built by TrimmerMeshTools).")]
-        [SerializeField] private bool hideHandle = true;
+        [Tooltip("Hide the loop handle (Resources/TrimmerBody_NoHandle). Off by default: owner wants the handle. Either way the " +
+                 "loose blade fragment is dropped (Resources/TrimmerBody_Clean). Both built by TrimmerMeshTools.")]
+        [SerializeField] private bool hideHandle;
 
         [Header("Operating position (player space, metres/degrees)")]
         [Tooltip("Head position: x = right, z = forward.")]
@@ -91,7 +92,7 @@ namespace PlayShift.Grass
                 model.transform.localRotation = Quaternion.identity;
                 model.transform.localScale = new Vector3(modelScale, modelScale, modelScale * shaftStretch);
                 foreach (var c in model.GetComponentsInChildren<Collider>()) Destroy(c);
-                if (hideHandle) SwapBodyWithoutHandle(model.transform);
+                SwapBody(model.transform, hideHandle ? "TrimmerBody_NoHandle" : "TrimmerBody_Clean");
                 _mainSpinner = FindDeep(model.transform, cutterHeadName);
                 if (_mainSpinner != null)
                 {
@@ -174,13 +175,13 @@ namespace PlayShift.Grass
         /// the head is still level, from the renderers' world bounds; the head only spins about its vertical axis, so
         /// this holds at every blade angle. Tilt from vibration is tiny and covered by <see cref="headHeight"/>.
         /// </summary>
-        /// <summary>Replaces the body mesh with the pre-built version that has no loop handle (and no loose blade fragment).</summary>
-        private void SwapBodyWithoutHandle(Transform model)
+        /// <summary>Replaces the body mesh with a pre-built cleaned version (no loose blade fragment; optionally no handle).</summary>
+        private void SwapBody(Transform model, string resourceName)
         {
-            var noHandle = Resources.Load<Mesh>("TrimmerBody_NoHandle");
-            if (noHandle == null) { Debug.LogWarning("[PlayShift Grass] TrimmerBody_NoHandle mesh missing; showing the handle.", this); return; }
+            var body = Resources.Load<Mesh>(resourceName);
+            if (body == null) { Debug.LogWarning($"[PlayShift Grass] {resourceName} mesh missing; using the original body.", this); return; }
             foreach (var mf in model.GetComponentsInChildren<MeshFilter>(true))
-                if (mf.sharedMesh != null && mf.sharedMesh.name == "TrimmerBody") mf.sharedMesh = noHandle;
+                if (mf.sharedMesh != null && mf.sharedMesh.name == "TrimmerBody") mf.sharedMesh = body;
         }
 
         private static float LowestPointBelowPivot(Transform head)

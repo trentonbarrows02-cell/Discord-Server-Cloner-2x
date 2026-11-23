@@ -97,9 +97,8 @@ namespace PlayShift.Grass
             if (_root == null) return;
             IsOpen = open;
             _root.SetActive(open);
-            var player = FindAnyObjectByType<FirstPersonController>();
-            // The title screen keeps its own blur when settings close over it.
-            MenuBlurEffect.Set(player != null && player.Camera != null ? player.Camera : Camera.main, open || MainMenu.IsOpen);
+            // Blur whatever the player is looking at: the first-person view, or the map on the title screen.
+            MenuBlurEffect.Set(MainMenu.ActiveCamera, open);
             if (open)
             {
                 _resolutions = GameSettings.AvailableResolutions(); // monitor may have changed

@@ -91,7 +91,12 @@ namespace PlayShift.Grass.Dev
             if (MainMenu.IsOpen && MainMenu.Instance != null)
             {
                 yield return GameWait(1.0f); // let the background pan a little
+                // The title screen is seen through the orbiting map camera: render that one for this shot.
+                var playerCam = _cam;
+                var mapCam = MainMenu.Instance.MenuCamera;
+                if (mapCam != null) { _cam = mapCam; _cam.targetTexture = _rt; }
                 yield return Shot("00_main_menu");
+                if (mapCam != null) { _cam.targetTexture = null; _cam = playerCam; }
                 _report.AppendLine($"Title screen: level timer held at {manager.Progression.ElapsedSeconds:F2} s (should be 0)");
                 MainMenu.Instance.Play();
                 yield return GameWait(0.6f);

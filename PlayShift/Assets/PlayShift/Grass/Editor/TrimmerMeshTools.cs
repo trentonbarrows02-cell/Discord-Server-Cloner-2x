@@ -116,7 +116,17 @@ namespace PlayShift.Grass.Editor
         /// </summary>
         public static readonly Vector3 HandleBox = new Vector3(-0.29f, -0.07f, 0.358f);
 
-        public static Mesh Build(HashSet<int> remove, Vector3 handleBox)
+        public const string CleanPath = "Assets/PlayShift/Grass/Resources/TrimmerBody_Clean.asset"; // handle kept
+
+        /// <summary>Body with the handle but without the loose blade fragment (the default trimmer look).</summary>
+        public static void BuildCleanForBatch()
+        {
+            var mesh = Build(new HashSet<int>(RemovedIslands), new Vector3(1f, 0f, 0f) /* empty box: keep the handle */, CleanPath);
+            Debug.Log(mesh != null ? "[PlayShift Trimmer] CLEAN MESH OK" : "[PlayShift Trimmer] CLEAN MESH FAILED");
+            Exit(mesh != null ? 0 : 1);
+        }
+
+        public static Mesh Build(HashSet<int> remove, Vector3 handleBox, string outputPath = OutputPath)
         {
             var src = LoadBodyMesh();
             if (src == null) return null;
@@ -138,13 +148,13 @@ namespace PlayShift.Grass.Editor
             Debug.Log($"[PlayShift Trimmer] handle box cut {cut} tris");
 
             var mesh = Object.Instantiate(src);
-            mesh.name = "TrimmerBody_NoHandle";
+            mesh.name = Path.GetFileNameWithoutExtension(outputPath);
             mesh.subMeshCount = 1;
             mesh.SetTriangles(keep, 0);
             mesh.RecalculateBounds();
             MeshUtility.Optimize(mesh); // drops the now-unused vertices
-            AssetDatabase.DeleteAsset(OutputPath);
-            AssetDatabase.CreateAsset(mesh, OutputPath);
+            AssetDatabase.DeleteAsset(outputPath);
+            AssetDatabase.CreateAsset(mesh, outputPath);
             AssetDatabase.SaveAssets();
             Debug.Log($"[PlayShift Trimmer] removed islands {string.Join(",", remove)}: {src.triangles.Length / 3} -> {keep.Count / 3} tris");
             return mesh;

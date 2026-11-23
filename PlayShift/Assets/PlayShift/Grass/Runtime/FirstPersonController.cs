@@ -37,8 +37,6 @@ namespace PlayShift.Grass
         [Tooltip("Upper limit for the vertical FOV on very tall screens. The FOV itself comes from GameSettings (horizontal, 60-120).")]
         [SerializeField] private float maxVerticalFov = 130f;
         private bool _pitchTouched;
-        [Tooltip("Slow camera pan behind the title screen (degrees per second).")]
-        [SerializeField] private float titlePanDegreesPerSecond = 4f;
 
         private CharacterController _cc;
         private Vector3 _velocity;
@@ -83,7 +81,6 @@ namespace PlayShift.Grass
             // Settings page open: the player stands still (the level keeps running so gifts still land on stream).
             bool menus = GameSettingsMenu.IsOpen || MainMenu.IsOpen;
             var input = InputOverride != null && !MainMenu.IsOpen ? InputOverride() : menus ? default : ReadInput();
-            if (MainMenu.IsOpen) input.Look.x = titlePanDegreesPerSecond * Time.deltaTime; // slow pan behind the title screen
             float dt = Time.deltaTime;
 
             UpdateFieldOfView();

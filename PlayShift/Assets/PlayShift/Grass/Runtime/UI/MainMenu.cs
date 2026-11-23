@@ -29,19 +29,96 @@ namespace PlayShift.Grass
         private RectTransform _content;
         private Canvas _canvas;
 
+        [Header("Map view behind the title")]
+        [Tooltip("Degrees per second the camera circles the map.")]
+        [SerializeField] private float orbitSpeed = 3f;
+        [Tooltip("Orbit radius as a multiple of the lawn size (plus a margin), i.e. how far zoomed out.")]
+        [SerializeField] private float orbitDistance = 1.15f;
+        [SerializeField] private float orbitHeight = 0.55f;
+        [SerializeField] private float orbitFov = 50f;
+
+        private Camera _menuCam, _playerCam;
+        private float _orbitAngle = 35f;
+
+        /// <summary>Camera the player currently sees: the map camera on the title screen, else the first-person one.</summary>
+        public static Camera ActiveCamera
+        {
+            get
+            {
+                if (IsOpen && Instance != null && Instance._menuCam != null) return Instance._menuCam;
+                var player = FindAnyObjectByType<FirstPersonController>();
+                return player != null && player.Camera != null ? player.Camera : Camera.main;
+            }
+        }
+
+        public Camera MenuCamera => _menuCam;
+
         private void Update()
         {
-            // Wide (landscape) screens: the tall layout is scaled to fit the height. Panning view behind the menu.
-            if (_canvas == null) return;
-            var r = _canvas.pixelRect;
-            float s = r.height > r.width ? 1f : 0.68f;
-            if (!Mathf.Approximately(_content.localScale.x, s)) _content.localScale = new Vector3(s, s, 1f);
+            // Wide (landscape) screens: the tall layout is scaled to fit the height.
+            if (_canvas != null)
+            {
+                var r = _canvas.pixelRect;
+                float s = r.height > r.width ? 1f : 0.68f;
+                if (!Mathf.Approximately(_content.localScale.x, s)) _content.localScale = new Vector3(s, s, 1f);
+            }
+            if (IsOpen) Orbit(Time.unscaledDeltaTime);
+        }
+
+        /// <summary>Wide view of the whole map: a camera circling high above the lawn.</summary>
+        private void Orbit(float dt)
+        {
+            if (_menuCam == null) return;
+            _orbitAngle += orbitSpeed * dt;
+            var m = GrassLevelManager.Instance;
+            Vector2 size = m != null && m.Settings != null ? m.Settings.fieldSizeMeters : new Vector2(24f, 24f);
+            Vector3 origin = m != null ? m.FieldTransform.position : Vector3.zero;
+            Vector3 centre = origin + new Vector3(size.x * 0.5f, 0f, size.y * 0.5f);
+            float radius = Mathf.Max(size.x, size.y) * orbitDistance + 8f;
+            float a = _orbitAngle * Mathf.Deg2Rad;
+            _menuCam.transform.position = centre + new Vector3(Mathf.Sin(a) * radius, radius * orbitHeight, Mathf.Cos(a) * radius);
+            // Aim a little past the centre so the lawn sits in the lower half, under the title.
+            _menuCam.transform.LookAt(centre + new Vector3(0f, radius * 0.18f, 0f));
+        }
+
+        private void EnsureMenuCamera()
+        {
+            if (_menuCam != null) return;
+            _playerCam = ActiveCamera;
+            var go = new GameObject("MenuCamera");
+            go.tag = "MainCamera"; // so Camera.main (grass LOD/culling) follows it while the player camera is off
+            _menuCam = go.AddComponent<Camera>();
+            if (_playerCam != null)
+            {
+                _menuCam.clearFlags = _playerCam.clearFlags;
+                _menuCam.backgroundColor = _playerCam.backgroundColor;
+                _menuCam.cullingMask = _playerCam.cullingMask;
+            }
+            _menuCam.fieldOfView = orbitFov;
+            _menuCam.nearClipPlane = 0.3f;
+            _menuCam.farClipPlane = 900f;
+            _menuCam.enabled = false;
+        }
+
+        /// <summary>Switches between the map camera (title screen) and the first-person camera.</summary>
+        private void UseMenuCamera(bool menu)
+        {
+            EnsureMenuCamera();
+            if (_playerCam == null)
+            {
+                var player = FindAnyObjectByType<FirstPersonController>();
+                _playerCam = player != null ? player.Camera : null;
+            }
+            if (menu) Orbit(0f);
+            _menuCam.enabled = menu;
+            if (_playerCam != null) _playerCam.enabled = !menu; // AudioListener on its GameObject stays active
         }
 
         public void Build(RectTransform canvasRoot)
         {
             Instance = this;
-            var dim = GrassUiFactory.Panel("MainMenu", canvasRoot, new Color(0.02f, 0.01f, 0.08f, 0.35f), rounded: false, raycast: true);
+            // Light tint only: the map behind is the backdrop, the chunky outlined title reads over it.
+            var dim = GrassUiFactory.Panel("MainMenu", canvasRoot, new Color(0.02f, 0.01f, 0.08f, 0.15f), rounded: false, raycast: true);
             GrassUiFactory.Stretch(dim.rectTransform);
             _root = dim.gameObject;
             // All content in one container: laid out for a tall (vertical) screen, scaled down on wide screens.
@@ -72,6 +149,7 @@ namespace PlayShift.Grass
             var m = GrassLevelManager.Instance;
             bool midLevel = m != null && m.Progression != null && m.Progression.ElapsedSeconds > 0.5;
             _playLabel.text = midLevel ? "CONTINUE" : "PLAY";
+            UseMenuCamera(true);
             Apply(true);
         }
 
@@ -80,6 +158,7 @@ namespace PlayShift.Grass
             if (_root == null) return;
             IsOpen = false;
             _root.SetActive(false);
+            UseMenuCamera(false);
             Apply(false);
         }
 
@@ -102,9 +181,8 @@ namespace PlayShift.Grass
         {
             var m = GrassLevelManager.Instance;
             if (m != null) m.HoldTimer = menuOpen;
-            var player = FindAnyObjectByType<FirstPersonController>();
-            var cam = player != null && player.Camera != null ? player.Camera : Camera.main;
-            MenuBlurEffect.Set(cam, menuOpen || GameSettingsMenu.IsOpen);
+            // The map is shown sharp; blur only when the settings page is open over it.
+            MenuBlurEffect.Set(ActiveCamera, GameSettingsMenu.IsOpen);
             Cursor.lockState = menuOpen ? CursorLockMode.None : CursorLockMode.Locked;
             Cursor.visible = menuOpen;
         }
