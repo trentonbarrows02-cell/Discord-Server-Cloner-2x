@@ -35,11 +35,11 @@ namespace PlayShift.Grass.Tests
         }
 
         [Fact]
-        public void AddGrass_ScatteredCuts_AllRegrownThroughTileFallback()
+        public void AddGrass_ScatteredCuts_AllRegrown()
         {
             var p = Playing();
             var f = p.Field;
-            // Many small cuts all over the lawn: patches alone cannot reach them all (more than MaxPatchRounds).
+            // Many small cuts all over the lawn: more than MaxPatchRounds patches can reach; the last patch keeps growing.
             for (int i = 0; i < 60; i++) f.CutCircle(2f + (i * 7.3f) % 46f, 2f + (i * 3.1f) % 46f, 0.4f);
             long missing = f.InitialUnits - f.Remaining;
             Assert.True(missing > 0);
@@ -100,6 +100,47 @@ namespace PlayShift.Grass.Tests
             int minX = cut.Min(i => i % p.Field.CellsX), maxX = cut.Max(i => i % p.Field.CellsX);
             int minZ = cut.Min(i => i / p.Field.CellsX), maxZ = cut.Max(i => i / p.Field.CellsX);
             Assert.True(maxX - minX < 40 && maxZ - minZ < 40, "gift removal should be one compact patch");
+        }
+
+        /// <summary>Connected groups of cut cells (4-neighbour flood fill).</summary>
+        private static int CutBlobs(GrassField f)
+        {
+            int w = f.CellsX, h = f.CellsZ;
+            var seen = new bool[f.CellCount];
+            var stack = new System.Collections.Generic.Stack<int>();
+            int blobs = 0;
+            for (int i = 0; i < f.CellCount; i++)
+            {
+                if (seen[i] || !f.IsCellCut(i)) continue;
+                blobs++;
+                seen[i] = true;
+                stack.Push(i);
+                while (stack.Count > 0)
+                {
+                    int c = stack.Pop(), x = c % w, z = c / w;
+                    void Try(int nx, int nz)
+                    {
+                        if (nx < 0 || nz < 0 || nx >= w || nz >= h) return;
+                        int n = nz * w + nx;
+                        if (seen[n] || !f.IsCellCut(n)) return;
+                        seen[n] = true;
+                        stack.Push(n);
+                    }
+                    Try(x + 1, z); Try(x - 1, z); Try(x, z + 1); Try(x, z - 1);
+                }
+            }
+            return blobs;
+        }
+
+        [Fact]
+        public void RemoveGrass_BigGift_StaysAFewRoundPatches_NoScatteredTiles()
+        {
+            // More than the round patches hold: the rest must keep growing as a round patch, not fill square tiles
+            // dotted around the lawn (those show as rectangles).
+            var p = Playing();
+            Assert.Equal(250_000, p.RemoveGrass(250_000));
+            int blobs = CutBlobs(p.Field);
+            Assert.True(blobs <= 9, $"expected at most 9 round patches, got {blobs} separate cut areas");
         }
 
         [Fact]

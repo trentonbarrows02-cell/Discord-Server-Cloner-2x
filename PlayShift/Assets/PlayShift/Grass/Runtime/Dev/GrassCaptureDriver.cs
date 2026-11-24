@@ -102,6 +102,12 @@ namespace PlayShift.Grass.Dev
                 MainMenu.Instance.Play();
                 yield return GameWait(0.6f);
             }
+            if (Array.IndexOf(args, "-captureGrid") >= 0)
+            {
+                yield return GridDiagnostics(cutter, manager, fieldRenderer);
+                Finish();
+                yield break;
+            }
             _report.AppendLine("Player position after settling: " + fp.transform.position.ToString("F2"));
             yield return Shot("01_uncut_trimmer_off");
 
@@ -798,6 +804,156 @@ namespace PlayShift.Grass.Dev
             manager.StartLevel(keepLevel);
             yield return Frames(5);
             Step("cutting quality done");
+        }
+
+        /// <summary>
+        /// Where do square / rectangular artifacts and dark patches come from? Cuts straight, diagonal, curved and
+        /// circular paths on a fresh lawn, then photographs them from above and from first person with: everything on,
+        /// grass shadows off, blades off (ground only), the cut mask vs the 10 cm cells, and blades tinted by detail
+        /// level. Then simulates a loaded save (mask rebuilt from the cells) and sends gifts, and photographs the
+        /// whole lawn's cut state from above. Run alone with -captureGrid.
+        /// </summary>
+        private IEnumerator GridDiagnostics(GrassCutter cutter, GrassLevelManager manager, GrassFieldRenderer fr)
+        {
+            var vm = FindAnyObjectByType<TrimmerViewmodel>();
+            if (vm == null || cutter == null || fr == null) { _report.AppendLine("grid diagnostics: player parts missing"); yield break; }
+            _probeVm = vm; _probeCutter = cutter; _probeManager = manager;
+            var player = vm.transform;
+            var cc = player.GetComponent<CharacterController>();
+            manager.StartLevel(1);
+            yield return Frames(5);
+            var f = manager.Field;
+            Vector2 size = new Vector2(f.CellsX * f.CellSizeX, f.CellsZ * f.CellSizeZ);
+            Vector3 origin = manager.FieldTransform.position;
+            Vector3 c = origin + new Vector3(size.x * 0.5f, 0f, size.y * 0.5f);
+            _report.AppendLine("Grid artifact diagnostics (level 1, fresh lawn):");
+            Time.captureFramerate = 30;
+
+            IEnumerator Go(Vector3 p, float yaw)
+            {
+                _input.TrimmerHeld = false;
+                yield return Frames(6);
+                if (cc != null) cc.enabled = false;
+                player.position = new Vector3(p.x, player.position.y, p.z);
+                if (cc != null) cc.enabled = true;
+                _input.Look = new Vector2(Mathf.DeltaAngle(player.eulerAngles.y, yaw), 0f);
+                yield return null;
+                _input.Look = Vector2.zero;
+                yield return Frames(4);
+            }
+            IEnumerator Cut(int frames, Vector2 move, Func<int, float> turn)
+            {
+                _input.TrimmerHeld = true;
+                yield return Frames(6);
+                for (int i = 0; i < frames; i++) { _input.Move = move; _input.Look = new Vector2(turn(i), 0f); yield return null; }
+                _input.Move = Vector2.zero; _input.Look = Vector2.zero;
+                _input.TrimmerHeld = false;
+                yield return Frames(6);
+            }
+
+            // Paths, side by side (the head runs ~3 m ahead of the player).
+            yield return Go(c + new Vector3(-6f, 0f, -3f), 0f);
+            yield return Cut(60, new Vector2(0f, 0.6f), i => 0f);                            // straight
+            yield return Go(c + new Vector3(-3.5f, 0f, -3f), 40f);
+            yield return Cut(60, new Vector2(0f, 0.6f), i => 0f);                            // diagonal
+            yield return Go(c + new Vector3(1.5f, 0f, -3f), 0f);
+            yield return Cut(90, new Vector2(0f, 0.6f), i => 4.5f * Mathf.Sin(i * 0.09f));   // S-curve
+            yield return Go(c + new Vector3(6f, 0f, -2f), 0f);
+            yield return Cut(64, new Vector2(0f, 0.5f), i => 5.8f);                          // circle
+            yield return Go(c + new Vector3(0f, 0f, -6.5f), 0f);                             // stand behind the paths
+            yield return Frames(20);
+            _report.AppendLine($"  paths cut: {f.CutByMower:N0} units");
+
+            var playerCam = _cam;
+            IEnumerator View(Vector3 pos, Quaternion rot, bool ortho, float orthoSize, float fov, string name)
+            {
+                var go = new GameObject("DiagCamera");
+                var cam = go.AddComponent<Camera>();
+                cam.CopyFrom(playerCam);
+                cam.orthographic = ortho;
+                if (ortho) cam.orthographicSize = orthoSize; else cam.fieldOfView = fov;
+                cam.nearClipPlane = 0.1f;
+                cam.transform.SetPositionAndRotation(pos, rot);
+                cam.targetTexture = _rt;
+                fr.LodCamera = cam;
+                _cam = cam;
+                yield return Frames(2);
+                yield return Shot(name);
+                _cam = playerCam;
+                fr.LodCamera = null;
+                Destroy(go);
+            }
+            IEnumerator Variants(string prefix, Vector3 pos, Quaternion rot, bool ortho, float orthoSize, float fov, bool all)
+            {
+                yield return View(pos, rot, ortho, orthoSize, fov, prefix + "_a_normal");
+                GrassFieldRenderer.DebugNoBladeShadows = true;
+                yield return View(pos, rot, ortho, orthoSize, fov, prefix + "_b_no_grass_shadows");
+                GrassFieldRenderer.DebugNoBladeShadows = false;
+                GrassFieldRenderer.DebugView = 2;
+                yield return View(pos, rot, ortho, orthoSize, fov, prefix + "_c_detail_levels");
+                GrassFieldRenderer.DebugView = 0;
+                if (!all) yield break;
+                GrassFieldRenderer.DebugHideBlades = true;
+                yield return View(pos, rot, ortho, orthoSize, fov, prefix + "_d_ground_only");
+                GrassFieldRenderer.DebugHideBlades = false;
+                GrassFieldRenderer.DebugView = 1;
+                yield return View(pos, rot, ortho, orthoSize, fov, prefix + "_e_cut_mask_vs_cells");
+                GrassFieldRenderer.DebugView = 0;
+            }
+
+            Quaternion down = Quaternion.Euler(90f, 0f, 0f);
+            Vector3 topPos = c + new Vector3(0f, 7f, 1.5f);
+            Vector3 fpPos = c + new Vector3(0f, 1.95f, -6.5f);
+            Quaternion fpRot = Quaternion.Euler(35f, 0f, 0f);
+            yield return Variants("G1_top", topPos, down, true, 5.5f, 60f, true);
+            yield return Variants("G2_fp", fpPos, fpRot, false, 0f, playerCam.fieldOfView, true);
+            // Wide view across the lawn (detail-level bands at 13 / 28 m on High).
+            yield return Variants("G3_wide", c + new Vector3(0f, 3.2f, -16f), Quaternion.Euler(14f, 0f, 0f), false, 0f, 62f, false);
+
+            // A loaded save / new level rebuilds the fine mask from the 10 cm cells.
+            fr.DebugRebuildMask();
+            yield return Frames(3);
+            GrassFieldRenderer.DebugView = 1;
+            yield return View(topPos, down, true, 5.5f, 60f, "G4_top_after_reload_e_cut_mask_vs_cells");
+            GrassFieldRenderer.DebugView = 0;
+            yield return View(topPos, down, true, 5.5f, 60f, "G4_top_after_reload_a_normal");
+            yield return View(fpPos, fpRot, false, 0f, playerCam.fieldOfView, "G4_fp_after_reload_a_normal");
+
+            // Gifts as on a live: two "Ice Cream Cone" removals, a partial "Finger Heart" regrow, then one huge removal
+            // (more than the round patches hold). Whole lawn from above (cut state) plus a close-up of a gift patch.
+            Vector3 PatchSpot()
+            {
+                Vector3 best = c;
+                float bestD = -1f;
+                for (int i = 0; i < f.CellCount; i += 97)
+                {
+                    if (!f.IsCellCut(i)) continue;
+                    Vector3 w = origin + new Vector3((i % f.CellsX + 0.5f) * f.CellSizeX, 0f, (i / f.CellsX + 0.5f) * f.CellSizeZ);
+                    float d = Vector3.Distance(w, c);
+                    if (d > 14f && (bestD < 0f || d < bestD)) { bestD = d; best = w; }
+                }
+                return best;
+            }
+            IEnumerator Lawn(string name)
+            {
+                yield return Frames(30);
+                GrassFieldRenderer.DebugView = 1;
+                yield return View(c + new Vector3(0f, 60f, 0f), down, true, size.y * 0.52f, 60f, name + "_whole_lawn_cut_state");
+                Vector3 spot = PatchSpot();
+                yield return View(spot + new Vector3(0f, 9f, 0f), down, true, 6f, 60f, name + "_patch_cut_state");
+                GrassFieldRenderer.DebugView = 0;
+                yield return View(spot + new Vector3(0f, 9f, 0f), down, true, 6f, 60f, name + "_patch_normal");
+                yield return View(spot + new Vector3(0f, 1.95f, -6f), Quaternion.Euler(30f, 0f, 0f), false, 0f, playerCam.fieldOfView, name + "_patch_first_person");
+            }
+            long r1 = manager.RemoveGrass(15000), r2 = manager.RemoveGrass(15000);
+            yield return Lawn("G5a_after_two_removals");
+            long a1 = manager.AddGrass(10000);
+            yield return Lawn("G5b_after_partial_regrow");
+            long r3 = manager.RemoveGrass(250000);
+            yield return Lawn("G5c_after_huge_removal");
+            _report.AppendLine($"  gifts: removed {r1:N0} + {r2:N0}, regrew {a1:N0}, then removed {r3:N0} at once");
+            Time.captureFramerate = 0;
+            Step("grid diagnostics done");
         }
 
         private IEnumerator CutAccuracyTest(GrassCutter cutter, GrassLevelManager manager)

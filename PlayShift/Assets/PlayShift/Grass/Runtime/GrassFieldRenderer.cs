@@ -120,6 +120,23 @@ namespace PlayShift.Grass
         private static readonly int FieldSizeId = Shader.PropertyToID("_FieldSize");
         private static readonly int WorldToFieldId = Shader.PropertyToID("_WorldToField");
         private static readonly int GrassFadeId = Shader.PropertyToID("_GrassFade");
+        private static readonly int GrassDebugId = Shader.PropertyToID("_GrassDebug");
+        private static readonly int GrassLodId = Shader.PropertyToID("_GrassLod");
+        private static readonly int GrassLodFracId = Shader.PropertyToID("_GrassLodFrac");
+        private static readonly int ChunkCountId = Shader.PropertyToID("_ChunkCount");
+
+        // ---- Diagnostics (capture tool / dev only; all off in the game) ----
+        /// <summary>0 = normal; 1 = the ground shows the cut state (white = fine mask and cells agree, red = cell only,
+        /// cyan = mask only), blades hidden; 2 = blades tinted by detail level (red full, green mid, blue far).</summary>
+        public static int DebugView;
+        /// <summary>Grass casts no shadows (to see what darkening comes from grass shadows).</summary>
+        public static bool DebugNoBladeShadows;
+        /// <summary>No blades drawn: only the ground shader.</summary>
+        public static bool DebugHideBlades;
+        /// <summary>Camera that drives culling and detail levels (null = the target camera / main camera).</summary>
+        public Camera LodCamera { get; set; }
+        /// <summary>Rebuilds the fine cut mask from the cells, as a loaded save or a new level does.</summary>
+        public void DebugRebuildMask() { if (_mask != null && _field != null) _mask.RebuildFromCells(_field); }
 
         public GrassField Field => _field;
         /// <summary>Blades the whole field has at full detail for the current quality (before the level's density).</summary>
@@ -309,8 +326,10 @@ namespace PlayShift.Grass
             else UploadTiles(maxTileUploadsPerFrame);
 
             _mask?.Update(_field, GrassCutter.FrameStrokes);
-            var cam = targetCamera != null ? targetCamera : Camera.main;
+            var cam = LodCamera != null ? LodCamera : targetCamera != null ? targetCamera : Camera.main;
             UpdateShaderGlobals();
+            Shader.SetGlobalFloat(GrassDebugId, DebugView);
+            if (DebugHideBlades || DebugView == 1) { LastDrawnBlades = 0; LastDrawCalls = 0; return; }
             DrawChunks(cam);
         }
 
@@ -359,6 +378,10 @@ namespace PlayShift.Grass
             }
             int layer = gameObject.layer;
             int drawn = 0, calls = 0;
+            // Per-blade detail falloff (GrassBlade.hlsl): each chunk draws enough blades for its nearest point; blades
+            // farther in the chunk collapse in the shader, so density changes smoothly, never chunk by chunk.
+            grassMaterial.SetVector(GrassLodId, cull ? new Vector4(q.fullDetailDistance, q.midDetailDistance, q.maxDrawDistance, 0f) : Vector4.zero);
+            grassMaterial.SetVector(GrassLodFracId, new Vector4(midDetailFraction, farDetailFraction, 0f, 0f));
 
             // Only the chunks within draw distance of the camera are visited (O(visible), not O(field)): on a big
             // map most of the field is drawn by the ground shader, not by blades.
@@ -392,23 +415,35 @@ namespace PlayShift.Grass
                     // Chunks behind the camera can still cast shadows into view: those are drawn shadow-only.
                     visible = GeometryUtility.TestPlanesAABB(_frustum, world);
                     if (!visible && dist > q.shadowCastDistance) continue;
-                    if (dist > q.midDetailDistance) { fraction = farDetailFraction; mesh = _bladeMeshFar; }
-                    else if (dist > q.fullDetailDistance) { fraction = midDetailFraction; mesh = _bladeMeshMid; }
+                    fraction = LodFraction(q, dist);
+                    if (dist > q.midDetailDistance) mesh = _bladeMeshFar;
+                    else if (dist > q.fullDetailDistance) mesh = _bladeMeshMid;
                 }
 
-                int count = Mathf.Max(1, Mathf.CeilToInt(c.Count * density * fraction));
+                float full = c.Count * density;
+                int count = Mathf.Max(1, Mathf.CeilToInt(full * fraction));
                 drawn += count;
                 calls++;
                 _mpb.SetVector(ChunkRectId, new Vector4(c.LocalMin.x, c.LocalMin.z, c.LocalMax.x - c.LocalMin.x, c.LocalMax.z - c.LocalMin.z));
                 _mpb.SetFloat(ChunkSeedId, c.Seed);
-                // Fewer, wider blades far away keep the same ground coverage.
-                _mpb.SetFloat(LodWidthScaleId, Mathf.Min(2.5f, 1f / Mathf.Sqrt(fraction)));
-                var shadows = !visible ? ShadowCastingMode.ShadowsOnly
+                _mpb.SetFloat(ChunkCountId, full);
+                _mpb.SetFloat(LodWidthScaleId, 1f);
+                if (!visible && DebugNoBladeShadows) continue;
+                var shadows = DebugNoBladeShadows ? ShadowCastingMode.Off : !visible ? ShadowCastingMode.ShadowsOnly
                     : dist < q.shadowCastDistance ? ShadowCastingMode.On : ShadowCastingMode.Off;
                 Graphics.DrawMeshInstancedProcedural(mesh, 0, grassMaterial, world, count, _mpb, shadows, true, layer, targetCamera);
             }
             LastDrawnBlades = drawn;
             LastDrawCalls = calls;
+        }
+
+        /// <summary>Fraction of blades kept at a distance (same curve as the shader's per-blade falloff).</summary>
+        private float LodFraction(QualityPreset q, float d)
+        {
+            if (d <= q.fullDetailDistance) return 1f;
+            float half = 0.5f * (q.fullDetailDistance + q.midDetailDistance);
+            if (d <= half) return Mathf.Lerp(1f, midDetailFraction, (d - q.fullDetailDistance) / Mathf.Max(half - q.fullDetailDistance, 1e-3f));
+            return Mathf.Lerp(midDetailFraction, farDetailFraction, (d - half) / Mathf.Max(q.midDetailDistance - half, 1e-3f));
         }
 
         private static Bounds TransformBounds(Matrix4x4 m, Bounds b)

@@ -7,8 +7,10 @@ namespace PlayShift.Grass
     /// Fine, GPU-only mask of where the grass looks cut (R8 render texture over the lawn, ~2.4 cm per texel on a
     /// 100 m lawn at 4096). The trimmer's strokes are drawn into it as exact swept circles every frame, so cut paths
     /// are round and smooth instead of following the 10 cm logical cells. Cells changed by anything else (gifts adding
-    /// or removing grass, a new level, a loaded save) are copied in from the cell grid. The grass counter is untouched:
-    /// it still counts cells. No CPU readback; only small GL quads are drawn, and only where something changed.
+    /// or removing grass, a new level, a loaded save) are rebuilt from the cell grid with a smooth reconstruction
+    /// (Gaussian over the nearest cells, then a soft threshold), so they never show the grid's 10 cm stair steps. The
+    /// grass counter is untouched: it still counts cells. No CPU readback; only small GL quads are drawn, and only
+    /// where something changed.
     /// </summary>
     public sealed class GrassCutMask
     {
@@ -17,6 +19,10 @@ namespace PlayShift.Grass
         private static readonly int ValueId = Shader.PropertyToID("_Value");
         private static readonly int GlobalMaskId = Shader.PropertyToID("_CutMask");
         private static readonly int GlobalParamsId = Shader.PropertyToID("_CutMaskParams");
+        private static readonly int MainTexId = Shader.PropertyToID("_MainTex");
+        private static readonly int OldMaskId = Shader.PropertyToID("_OldMask");
+        private const int TileCells = 32;
+        private const int SeamCells = 3; // reconstruction reaches 2 cells; one more for the soft seam
 
         private RenderTexture _rt;
         private Material _mat;
@@ -25,6 +31,7 @@ namespace PlayShift.Grass
         private Vector2 _size;
         private int _cellsX, _cellsZ;
         private readonly List<int> _scratch = new List<int>();
+        private readonly HashSet<int> _tiles = new HashSet<int>();
 
         public RenderTexture Texture => _rt;
         public int Width => _rt != null ? _rt.width : 0;
@@ -53,28 +60,30 @@ namespace PlayShift.Grass
             };
             _rt.Create();
             _mat = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
-            _cellTex = new Texture2D(_cellsX, _cellsZ, TextureFormat.R8, false, true)
+            // R = cut, G = changed by a gift since the last stamp. Read at exact cell centres (point sampling).
+            _cellTex = new Texture2D(_cellsX, _cellsZ, TextureFormat.RG16, false, true)
             {
                 name = "GrassCutCells", filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp,
             };
-            _cellBytes = new byte[_cellsX * _cellsZ];
+            _cellBytes = new byte[_cellsX * _cellsZ * 2];
             Shader.SetGlobalTexture(GlobalMaskId, _rt);
             Shader.SetGlobalVector(GlobalParamsId, new Vector4(1f / _size.x, 1f / _size.y, 1f, 0f));
             return true;
         }
 
-        /// <summary>Whole mask from the cell grid (new level, loaded save, fresh mask).</summary>
+        /// <summary>Whole mask from the cell grid (new level, loaded save, fresh mask), smoothly reconstructed.</summary>
         public void RebuildFromCells(GrassField field)
         {
             if (_rt == null) return;
-            for (int i = 0; i < _cellBytes.Length; i++) _cellBytes[i] = field.IsCellCut(i) ? (byte)255 : (byte)0;
+            int n = _cellsX * _cellsZ;
+            for (int i = 0; i < n; i++) { _cellBytes[2 * i] = field.IsCellCut(i) ? (byte)255 : (byte)0; _cellBytes[2 * i + 1] = 0; }
             _cellTex.SetPixelData(_cellBytes, 0);
             _cellTex.Apply(false, false);
             Graphics.Blit(_cellTex, _rt, _mat, 1);
         }
 
         /// <summary>
-        /// Per frame: copies cells changed by gifts into the mask (whole cells), then draws this frame's trimmer strokes
+        /// Per frame: blends cells changed by gifts into the mask (smoothly), then draws this frame's trimmer strokes
         /// (exact swept circles). Strokes go last so a cut made this frame is never undone by a gift in the same frame.
         /// </summary>
         public void Update(GrassField field, IReadOnlyList<GrassCutter.CutStroke> strokes)
@@ -113,44 +122,61 @@ namespace PlayShift.Grass
             RenderTexture.active = prev;
         }
 
-        /// <summary>Changed cells as whole-cell quads, merged into row runs of equal state (a gift patch is a few
-        /// hundred quads, not tens of thousands).</summary>
+        /// <summary>
+        /// Cells changed by gifts: marked in the cell texture (G), then the smooth reconstruction is blended over the old
+        /// mask on the 32x32-cell tiles they touch (plus a small seam), only where cells changed. Gift patches get round,
+        /// smooth edges; trimmer-cut edges next to them keep their exact circles.
+        /// </summary>
         private void StampCells(GrassField field)
         {
-            _scratch.Sort();
+            _tiles.Clear();
+            int tilesX = (_cellsX + TileCells - 1) / TileCells;
+            for (int k = 0; k < _scratch.Count; k++)
+            {
+                int i = _scratch[k];
+                _cellBytes[2 * i] = field.IsCellCut(i) ? (byte)255 : (byte)0;
+                _cellBytes[2 * i + 1] = 255;
+                _tiles.Add((i / _cellsX / TileCells) * tilesX + (i % _cellsX) / TileCells);
+            }
+            // The trimmer's cuts never go through these bytes: refresh the cut state around the stamped tiles so the
+            // reconstruction sees today's neighbours, not the state of the last rebuild.
+            foreach (int t in _tiles)
+            {
+                int x0 = Mathf.Max(0, (t % tilesX) * TileCells - SeamCells - 2), z0 = Mathf.Max(0, (t / tilesX) * TileCells - SeamCells - 2);
+                int x1 = Mathf.Min(_cellsX, (t % tilesX + 1) * TileCells + SeamCells + 2), z1 = Mathf.Min(_cellsZ, (t / tilesX + 1) * TileCells + SeamCells + 2);
+                for (int z = z0; z < z1; z++)
+                    for (int x = x0; x < x1; x++)
+                    {
+                        int i = z * _cellsX + x;
+                        _cellBytes[2 * i] = field.IsCellCut(i) ? (byte)255 : (byte)0;
+                    }
+            }
+            _cellTex.SetPixelData(_cellBytes, 0);
+            _cellTex.Apply(false, false);
+
+            var old = RenderTexture.GetTemporary(_rt.width, _rt.height, 0, RenderTextureFormat.R8, RenderTextureReadWrite.Linear);
+            Graphics.CopyTexture(_rt, old);
+            _mat.SetTexture(MainTexId, _cellTex);
+            _mat.SetTexture(OldMaskId, old);
             var prev = RenderTexture.active;
             Graphics.SetRenderTarget(_rt);
             GL.PushMatrix();
             GL.LoadOrtho();
+            _mat.SetPass(3);
+            GL.Begin(GL.QUADS);
             float cx = 1f / _cellsX, cz = 1f / _cellsZ;
-            for (int pass = 0; pass < 2; pass++)
+            foreach (int t in _tiles)
             {
-                float value = pass == 0 ? 0f : 1f;
-                _mat.SetFloat(ValueId, value);
-                _mat.SetPass(2);
-                GL.Begin(GL.QUADS);
-                int k = 0;
-                while (k < _scratch.Count)
-                {
-                    int i = _scratch[k];
-                    bool cut = field.IsCellCut(i);
-                    if (cut != (pass == 1)) { k++; continue; }
-                    int row = i / _cellsX, x0 = i % _cellsX, x1 = x0;
-                    int j = k + 1;
-                    while (j < _scratch.Count)
-                    {
-                        int n = _scratch[j];
-                        if (n == i) { j++; continue; } // duplicates
-                        if (n / _cellsX != row || n % _cellsX != x1 + 1 || field.IsCellCut(n) != cut) break;
-                        x1++; i = n; j++;
-                    }
-                    QuadNoBegin(x0 * cx, row * cz, (x1 + 1) * cx, (row + 1) * cz);
-                    k = j;
-                }
-                GL.End();
+                int x0 = (t % tilesX) * TileCells - SeamCells, z0 = (t / tilesX) * TileCells - SeamCells;
+                int x1 = x0 + TileCells + 2 * SeamCells, z1 = z0 + TileCells + 2 * SeamCells;
+                QuadNoBegin(Mathf.Max(0, x0) * cx, Mathf.Max(0, z0) * cz, Mathf.Min(_cellsX, x1) * cx, Mathf.Min(_cellsZ, z1) * cz);
             }
+            GL.End();
             GL.PopMatrix();
             RenderTexture.active = prev;
+            RenderTexture.ReleaseTemporary(old);
+            // These cells are now in the mask; clear their "changed" mark for the next stamp (uploaded with it).
+            for (int k = 0; k < _scratch.Count; k++) _cellBytes[2 * _scratch[k] + 1] = 0;
         }
 
         private static void Quad(float x0, float z0, float x1, float z1)

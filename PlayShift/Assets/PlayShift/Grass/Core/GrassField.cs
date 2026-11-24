@@ -574,7 +574,9 @@ namespace PlayShift.Grass
 
         /// <summary>
         /// Spends a gift's budget as round patches around random matching cells, up to <see cref="MaxPatchRounds"/>
-        /// patches, then whole tiles. Cost is bounded by patches + tiles, never by the number of cells on the lawn.
+        /// patches; the last one keeps growing ring by ring beyond the patch radius until the budget is spent, so even a
+        /// huge gift stays round (filling whole tiles here used to leave square blocks dotted around the lawn). Cost is
+        /// bounded by the patches plus, at worst, one pass over the lawn's cells.
         /// </summary>
         private long Spend(long budget, bool cutCells, Func<int, long, int> visit)
         {
@@ -583,8 +585,52 @@ namespace PlayShift.Grass
                 int centre = FindRandomCell(cutCells);
                 if (centre < 0) return budget;
                 budget = VisitPatch(centre, budget, visit);
+                if (round == MaxPatchRounds - 1 && budget > 0) budget = VisitRings(centre, budget, PatchRadiusCells, visit);
             }
-            return VisitTiles(budget, cutCells, visit);
+            return VisitTiles(budget, cutCells, visit); // safety net only: the rings above reach every cell
+        }
+
+        /// <summary>
+        /// Continues a patch outward: visits every cell with fromRadius &lt; distance &lt;= r for r = fromRadius + 1, ...
+        /// (one-cell-thick rings, the same circles as the patch table) until the budget is spent or the rings cover the
+        /// lawn. Returns budget left.
+        /// </summary>
+        private long VisitRings(int centre, long budget, int fromRadius, Func<int, long, int> visit)
+        {
+            int w = _layout.CellsX, h = _layout.CellsZ;
+            int ccx = centre % w, ccz = centre / w;
+            long fx = Math.Max(ccx, w - 1 - ccx), fz = Math.Max(ccz, h - 1 - ccz);
+            int maxR = (int)Math.Ceiling(Math.Sqrt(fx * fx + fz * fz)) + 1;
+            for (int r = fromRadius + 1; r <= maxR && budget > 0; r++)
+            {
+                long outer = (long)r * r, inner = (long)(r - 1) * (r - 1);
+                int dz0 = Math.Max(-r, -ccz), dz1 = Math.Min(r, h - 1 - ccz);
+                for (int dz = dz0; dz <= dz1 && budget > 0; dz++)
+                {
+                    long dz2 = (long)dz * dz;
+                    int xo = ISqrt(outer - dz2);                              // |dx| <= xo: inside radius r
+                    int xi = inner - dz2 < 0 ? -1 : ISqrt(inner - dz2);       // |dx| <= xi: already visited
+                    int cz = ccz + dz;
+                    for (int dx = xi + 1; dx <= xo && budget > 0; dx++)
+                    {
+                        int cx = ccx + dx;
+                        if (cx < w) { int got = visit(cz * w + cx, budget); if (got != 0) { budget -= got; MarkCellDirty(cx, cz); } }
+                        if (dx == 0 || budget <= 0) continue;
+                        cx = ccx - dx;
+                        if (cx >= 0) { int got = visit(cz * w + cx, budget); if (got != 0) { budget -= got; MarkCellDirty(cx, cz); } }
+                    }
+                }
+            }
+            return budget;
+        }
+
+        /// <summary>Largest integer whose square is &lt;= v (v &gt;= 0).</summary>
+        private static int ISqrt(long v)
+        {
+            long r = (long)Math.Sqrt(v);
+            while (r * r > v) r--;
+            while ((r + 1) * (r + 1) <= v) r++;
+            return (int)r;
         }
 
         /// <summary>A random cut (or grown) cell, found via the per-tile counts: O(tiles + tile size). -1 if none.</summary>

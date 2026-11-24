@@ -35,7 +35,14 @@ float4 _ChunkRect;                  // x0, z0, sizeX, sizeZ (field-local metres)
 float _ChunkSeed;
 
 float4x4 _FieldToWorld;
-float _LodWidthScale;
+float _LodWidthScale;               // unused since per-blade LOD (kept so old materials/blocks stay valid)
+// Detail falloff per blade (not per chunk, which showed as square bands): x = full-detail distance, y = mid distance,
+// z = draw end; _GrassLodFrac x = blade fraction kept at mid distance, y = at the draw end. _ChunkCount = this chunk's
+// blades at full detail (the draw may include more than a blade's own distance keeps; the rest collapse).
+float4 _GrassLod;
+float4 _GrassLodFrac;
+float _ChunkCount;
+float _GrassDebug;                  // global, diagnostics only (GrassFieldRenderer.DebugView)
 float4 _GrassFade;                  // global: x = blade fade start, y = blade draw end (m from camera); the ground
                                     // shader (GrassGround) shows grown grass beyond, from the same cell data
 float4 _HeightClamp;                // x = min, y = max (metres)
@@ -116,6 +123,30 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
         blade.xy = tc + tufted * (1.0 - _TuftPull);
         tufted /= _TuftSize; // -1..1-ish offset from the tuft centre
     }
+    float3 root = mul(_FieldToWorld, float4(blade.x, 0.0, blade.y, 1.0)).xyz;
+
+    // Per-blade detail: the fraction of blades kept falls off smoothly with this blade's own distance, and blade i of
+    // the chunk's uniform sequence is kept while i / count is below it (shrinking away over the last 20%). Kept blades
+    // widen to hold the same coverage. No chunk-shaped bands or squares.
+    float lodF = 1.0, lodKeep = 1.0;
+    if (_ChunkCount > 0.5 && _GrassLod.y > 0.0)
+    {
+        float dl = distance(root, _WorldSpaceCameraPos);
+        // Full detail to x; down to the mid fraction halfway to y; the far fraction from y on (same blade budget as
+        // the old per-chunk steps, without the steps).
+        float half = 0.5 * (_GrassLod.x + _GrassLod.y);
+        lodF = dl <= _GrassLod.x ? 1.0
+             : dl <= half ? lerp(1.0, _GrassLodFrac.x, (dl - _GrassLod.x) / max(half - _GrassLod.x, 1e-3))
+             : lerp(_GrassLodFrac.x, _GrassLodFrac.y, saturate((dl - half) / max(_GrassLod.y - half, 1e-3)));
+        float rank = ((float)instanceID + 0.5) / _ChunkCount;
+        lodKeep = saturate((lodF - rank) / (0.2 * lodF));
+    }
+    if (lodKeep <= 0.0)
+    {
+        // Not kept at this distance: a zero-area blade, skipping the rest of the work.
+        o.positionWS = root; o.normalWS = float3(0, 1, 0); o.color = 0; o.t = uv.y; o.cut = 1.0;
+        return o;
+    }
     float2 jit = float2(PsHash(blade.w * 1000.0 + 81.3), PsHash(blade.w * 1000.0 + 97.9)) - 0.5;
     float2 cell = PsCellAt(blade.xy + jit * _CutEdgeJitter / _CellGrid.zw);
     if (_CutMaskParams.z > 0.5)
@@ -132,7 +163,6 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
     float r1 = PsHash(s + 1.7), r2 = PsHash(s + 11.3), r3 = PsHash(s + 23.9);
     float r4 = PsHash(s + 37.1), r5 = PsHash(s + 51.7), r6 = PsHash(s + 63.2);
 
-    float3 root = mul(_FieldToWorld, float4(blade.x, 0.0, blade.y, 1.0)).xyz;
     float t = uv.y;
     float side = uv.x * 2.0 - 1.0;
 
@@ -142,7 +172,7 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
     float k = cutAge < 0.0 ? 0.0 : saturate(cutAge / max(_CutAnim, 1e-3));
     float ease = 1.0 - pow(1.0 - k, 3.0);
     float stub = _StubbleHeight * (0.65 + 0.7 * r5);
-    float h = lerp(full, stub, ease);
+    float h = lerp(full, stub, ease) * lodKeep;
     // Distance fade: blades sink smoothly into the ground-shaded grass before the draw distance (no hard edge).
     if (_GrassFade.y > 0.0)
         h *= 1.0 - smoothstep(_GrassFade.x, _GrassFade.y, distance(root.xz, _WorldSpaceCameraPos.xz));
@@ -204,10 +234,11 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
     // Varied widths; taller levels have thicker blades. Tapers to a point.
     float w = _BladeWidth * (0.55 + 0.9 * r4)
             * (1.0 + _WidthGrowth * (sqrt(max(full, 0.05) / 0.2) - 1.0))
-            * lerp(1.0, 1.35, ease) * _LodWidthScale;
+            * lerp(1.0, 1.35, ease) * min(2.5, rsqrt(lodF));
     w *= 1.0 - pow(t, 1.25) * 0.97; // natural taper to a fine (not needle-sharp) tip
     // With no stubble (_StubbleHeight 0) a cut blade collapses completely: no sliver, no shadow, just lawn.
     w *= lerp(1.0, step(1e-4, _StubbleHeight), ease);
+    w *= step(1e-4, lodKeep);
 
     float3 wax = float3(wdir.x, 0.0, wdir.y);
     o.positionWS = root + float3(dir.x * along, up, dir.y * along) + wax * side * w;
@@ -222,12 +253,19 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
     // Mostly yellow-green and golden-green, with darker and fresh greens mixed through.
     float3 tip = r6 < 0.35 ? _ColYellowGreen.rgb : r6 < 0.6 ? _ColGoldenGreen.rgb : r6 < 0.78 ? _ColDarkGreen.rgb : _ColFreshGreen.rgb;
     tip = lerp(tip, _ColDry.rgb, saturate(_DryAmount * (smoothstep(0.66, 0.9, dryPatch) * (0.3 + 0.4 * r5) + 0.08 * step(0.95, r1))));
-    float3 rootC = tip * float3(0.35, 0.42, 0.3);
+    float3 rootC = tip * float3(0.56, 0.63, 0.47); // not near-black: the base of a lawn is green, not a dark hole
     float3 grown = lerp(rootC, tip, smoothstep(0.0, 0.85, t)) * (0.85 + 0.3 * r2);
     // Light golden tips over the green (the classic sunny long-grass look).
     grown = lerp(grown, lerp(tip, _ColGoldenGreen.rgb * 1.3, 0.6) * (0.9 + 0.2 * r3), smoothstep(0.6, 1.0, t) * _TipGold);
     float3 stubC = lerp(_StubbleColor.rgb, _StubbleTipColor.rgb, smoothstep(0.3, 1.0, t)) * (0.85 + 0.3 * r1);
-    o.color = lerp(grown, stubC, ease) * lerp(0.55, 1.0, smoothstep(0.0, 0.7, t));
+    o.color = lerp(grown, stubC, ease) * lerp(0.74, 1.0, smoothstep(0.0, 0.7, t));
+    if (_GrassDebug > 1.5)
+    {
+        // Diagnostics: red = full detail, green = mid, blue = far (continuous).
+        float t1 = saturate((lodF - _GrassLodFrac.y) / max(_GrassLodFrac.x - _GrassLodFrac.y, 1e-3));
+        float t2 = saturate((lodF - _GrassLodFrac.x) / max(1.0 - _GrassLodFrac.x, 1e-3));
+        o.color = lerp(lerp(float3(0.15, 0.3, 0.95), float3(0.15, 0.8, 0.15), t1), float3(0.9, 0.15, 0.1), t2);
+    }
     return o;
 }
 

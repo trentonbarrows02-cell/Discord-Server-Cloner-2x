@@ -11,7 +11,7 @@ Shader "PlayShift/GrassGround"
     {
         _MainTex ("Lawn texture", 2D) = "white" {}
         _Tiling ("Lawn texture tiles per metre", Float) = 0.66
-        _UnderColor ("Ground under tall grass (multiplies lawn)", Color) = (0.55, 0.62, 0.38, 1)
+        _UnderColor ("Ground under tall grass (multiplies lawn)", Color) = (0.62, 0.72, 0.44, 1)
         _FarYellow ("Far grass: yellow-green", Color) = (0.56, 0.66, 0.2, 1)
         _FarGolden ("Far grass: golden", Color) = (0.66, 0.62, 0.24, 1)
         _FarDark ("Far grass: dark", Color) = (0.28, 0.42, 0.11, 1)
@@ -102,6 +102,15 @@ Shader "PlayShift/GrassGround"
                                        PsCellAt((g0 + float2(0.5, 1.5)) * cs).y, PsCellAt((g0 + float2(1.5, 1.5)) * cs).y);
                     float4 isCut = step(0.0, cy) * step(_CutAnim, _GrassTime - cy);
                     float cutAmt = lerp(lerp(isCut.x, isCut.y, gf.x), lerp(isCut.z, isCut.w, gf.x), gf.y);
+                    if (_GrassDebug > 0.5 && _GrassDebug < 1.5)
+                    {
+                        // Diagnostics: R = the exact 10 cm cell is cut, G/B = the fine mask. White = both, red = cell
+                        // only, cyan = mask only, black = grown.
+                        float2 ce = PsCellAt(f);
+                        float cellCut = ce.y >= 0.0 ? 1.0 : 0.0;
+                        float mk = _CutMaskParams.z > 0.5 ? _CutMask.SampleLevel(sampler_CutMask, f * _CutMaskParams.xy, 0).r : cellCut;
+                        return fixed4(cellCut * 0.85 + 0.1, mk * 0.85 + 0.1, mk * 0.85 + 0.1, 1);
+                    }
                     if (_CutMaskParams.z > 0.5) cutAmt = _CutMask.SampleLevel(sampler_CutMask, f * _CutMaskParams.xy, 0).r;
                     // Gently wavy edge (low-frequency noise), like a trimmer line, not jagged.
                     float wave = ((PsNoise(f * 5.0) - 0.5) * 0.35 + (PsNoise(f * 17.0) - 0.5) * 0.12) * (_CutMaskParams.z > 0.5 ? 0.25 : 1.0);
