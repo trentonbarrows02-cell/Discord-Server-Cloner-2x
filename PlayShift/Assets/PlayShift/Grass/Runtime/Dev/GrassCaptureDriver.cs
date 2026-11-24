@@ -16,7 +16,7 @@ namespace PlayShift.Grass.Dev
     /// <summary>
     /// Play-mode driver added by <see cref="PlayShift.Grass.Editor.GrassCaptureTool"/>. Drives the first-person player
     /// through <see cref="FirstPersonController.InputOverride"/>: uncut grass, trimmer spinning, GPU frame time per
-    /// quality preset, a ~5 s walk-and-cut clip, then turns around to show the cut path. Exits Play mode when done.
+    /// quality preset, a ~10 s walk-and-cut clip, then turns around to show the cut path. Exits Play mode when done.
     ///
     /// Frames are rendered by calling Camera.Render() into a fixed 1920x1080 target (HUD switched to camera space),
     /// so capture works even when the editor's Game view is hidden or not focused.
@@ -27,7 +27,7 @@ namespace PlayShift.Grass.Dev
         // Portrait by default (vertical TikTok streams); -captureSize 1920x1080 for landscape.
         private static int Width = 1080, Height = 1920;
         private const int ClipFps = 30;
-        private const float ClipSeconds = 5f;
+        private const float ClipSeconds = 10f;
         private static int ClipWidth => Width;   // full res: downscaling thin grass blades makes the clip look soft
         private static int ClipHeight => Height;
 
@@ -110,16 +110,28 @@ namespace PlayShift.Grass.Dev
 
             if (fieldRenderer != null)
             {
+                string[] statNames = { "Draw Calls Count", "SetPass Calls Count", "Triangles Count", "Shadow Casters Count" };
+                var stats = new Unity.Profiling.ProfilerRecorder[statNames.Length];
+                for (int i = 0; i < stats.Length; i++)
+                    stats[i] = Unity.Profiling.ProfilerRecorder.StartNew(Unity.Profiling.ProfilerCategory.Render, statNames[i]);
                 foreach (var q in new[] { GrassQuality.Low, GrassQuality.Medium, GrassQuality.High, GrassQuality.Ultra })
                 {
                     fieldRenderer.Quality = q;
                     yield return Frames(5);
+                    var baseline = new long[stats.Length];
+                    for (int i = 0; i < stats.Length; i++) baseline[i] = stats[i].LastValue;
                     _measureRequested = true;
                     while (_measureRequested) yield return null;
+                    var per = new long[stats.Length];
+                    for (int i = 0; i < stats.Length; i++) per[i] = Math.Max(0, stats[i].LastValue - baseline[i]) / 31;
                     _report.AppendLine($"Quality {q}: {_probeMs:F2} ms per 1080p frame (~{1000f / _probeMs:F0} FPS render-bound), " +
                                        $"{fieldRenderer.LastDrawnBlades:N0} blades drawn in {fieldRenderer.LastDrawCalls} draws, " +
-                                       $"grass CPU {fieldRenderer.LastCpuMs:F3} ms, field total {fieldRenderer.TotalBlades:N0} blades");
+                                       $"grass CPU {fieldRenderer.LastCpuMs:F3} ms, field total {fieldRenderer.TotalBlades:N0} blades; " +
+                                       $"per frame {per[0]:N0} draw calls, {per[1]:N0} set-pass, {per[2] / 1000:N0}k tris, {per[3]:N0} shadow casters; " +
+                                       $"shadows {QualitySettings.shadows} x{QualitySettings.shadowCascades} to {QualitySettings.shadowDistance:0} m, LOD bias {QualitySettings.lodBias:0.##}");
+                    yield return Shot("09_quality_" + q.ToString().ToLowerInvariant());
                 }
+                foreach (var r in stats) r.Dispose();
                 fieldRenderer.Quality = GrassQuality.High;
                 _report.AppendLine($"Grass GPU memory: {fieldRenderer.GpuBytes / 1048576.0:F2} MB (cells only; blades are procedural)");
                 Step("frame times measured");
@@ -178,8 +190,12 @@ namespace PlayShift.Grass.Dev
                 for (int f = 0; f < total; f++)
                 {
                     float t = f / (float)ClipFps;
-                    _input.Move = new Vector2(0f, 0.55f);
-                    _input.Look = new Vector2(Mathf.Cos(t * Mathf.PI) * 14f * Mathf.PI / ClipFps, 0f);
+                    // 7 s walking and cutting with a gentle side-to-side look, then a slow 120 deg turn while still
+                    // cutting so the clip also shows the cut path and the forest round the yard.
+                    bool turn = t >= 7f;
+                    _input.Move = new Vector2(0f, turn ? 0.3f : 0.55f);
+                    _input.Look = turn ? new Vector2(40f / ClipFps, 0f)
+                                       : new Vector2(Mathf.Cos(t * Mathf.PI) * 14f * Mathf.PI / ClipFps, 0f);
                     yield return Grab();
                     if (fieldRenderer != null)
                     {
@@ -188,6 +204,7 @@ namespace PlayShift.Grass.Dev
                         sumGrassCpu += fieldRenderer.LastCpuMs;
                     }
                     if (f == total / 2) File.WriteAllBytes(Path.Combine(_dir, "03_cutting.jpg"), _frame.EncodeToJPG(92));
+                    if (f == 45 || f == 255 || f == total - 1) File.WriteAllBytes(Path.Combine(_dir, $"clip_frame_{f:000}.jpg"), _frame.EncodeToJPG(85));
                     encoder.AddFrame(ToClipFrame());
                 }
                 _report.AppendLine($"While cutting: max {maxTiles} tiles uploaded in a frame ({maxTiles * 8} KB), " +

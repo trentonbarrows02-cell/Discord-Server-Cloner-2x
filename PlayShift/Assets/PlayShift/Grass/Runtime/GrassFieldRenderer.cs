@@ -124,6 +124,7 @@ namespace PlayShift.Grass
             {
                 if (quality == value) return;
                 quality = value;
+                GraphicsProfile.Apply(value); // shadows and LOD distance follow the preset
                 RebuildChunksIfNeeded(); // procedural blades: changing quality is free (no buffers to rebuild)
             }
         }
@@ -403,6 +404,7 @@ namespace PlayShift.Grass
 
         private void OnEnable()
         {
+            GraphicsProfile.Apply(quality);
             if (_field != null && _cellBuffer == null && grassMaterial != null)
             {
                 EnsureCellBuffer();
