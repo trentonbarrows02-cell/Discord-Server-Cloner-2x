@@ -185,6 +185,8 @@ namespace PlayShift.Grass.Dev
                 bitRateMode = VideoBitrateMode.High
             };
             var vm = FindAnyObjectByType<TrimmerViewmodel>();
+            var clipPs = FindAnyObjectByType<GrassClippings>()?.GetComponent<ParticleSystem>();
+            int maxClippings = 0;
             var spin = FindAnyObjectByType<TrimmerBlades>();
             Vector3 hMin = Vector3.positiveInfinity, hMax = Vector3.negativeInfinity;
             float housingTurn = 0f;
@@ -212,6 +214,7 @@ namespace PlayShift.Grass.Dev
                         if (housing == null) { housing = vm.transform; housing0 = vm.HousingRotationFromPlayer; }
                         housingTurn = Mathf.Max(housingTurn, Quaternion.Angle(housing0, vm.HousingRotationFromPlayer));
                     }
+                    if (clipPs != null) maxClippings = Mathf.Max(maxClippings, clipPs.particleCount);
                     if (fieldRenderer != null)
                     {
                         maxTiles = Mathf.Max(maxTiles, fieldRenderer.LastTilesUploaded);
@@ -225,6 +228,7 @@ namespace PlayShift.Grass.Dev
                 _report.AppendLine($"While cutting: max {maxTiles} tiles uploaded in a frame ({maxTiles * 8} KB), " +
                                    $"grass CPU avg {sumGrassCpu / total:F3} ms, max {maxGrassCpu:F3} ms");
             }
+            _report.AppendLine($"Clippings in the air while cutting: max {maxClippings} (system playing: {(clipPs != null && clipPs.isPlaying)})");
             if (spin != null && spin.Spinners.Count > 0 && spin.Spinners[0] != null)
                 _report.AppendLine($"Trimmer head while walking and cutting: spinning part '{spin.Spinners[0].name}' (only the blades should spin); " +
                                    $"head moved {(hMax.x - hMin.x) * 100f:F1} cm sideways, {(hMax.y - hMin.y) * 100f:F1} cm up/down, " +

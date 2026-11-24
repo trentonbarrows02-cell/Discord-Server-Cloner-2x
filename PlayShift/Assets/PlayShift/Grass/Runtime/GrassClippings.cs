@@ -7,7 +7,9 @@ namespace PlayShift.Grass
     /// GameObjects per particle). Small green/yellow slivers are thrown tangentially off the spinning blade,
     /// plus the head's own movement; more for dense, tall grass, few for short grass. They come off the front of
     /// the blade disc (where it bites into uncut grass) while the head moves, all round it when standing still.
-    /// A mix of fine bits and longer slivers; they tumble, fall and fade quickly. No smoke, snow or large debris.
+    /// Chunky and readable on a phone screen: leafy flakes, chopped bits and long slivers in greens with some
+    /// darker olive/brown, sprayed up and back toward the player as well as sideways off the blades. They tumble,
+    /// fall and fade quickly. No smoke or snow.
     /// </summary>
     [RequireComponent(typeof(ParticleSystem))]
     public sealed class GrassClippings : MonoBehaviour
@@ -15,10 +17,10 @@ namespace PlayShift.Grass
         [SerializeField] private GrassCutter cutter;
         [Tooltip("Particle material (unlit, vertex colour). Created at runtime when empty.")]
         [SerializeField] private Material clippingMaterial;
-        [SerializeField] private int maxParticles = 900;
+        [SerializeField] private int maxParticles = 1200;
         [Tooltip("Particles per 100 grass units cut, before the height factor.")]
-        [SerializeField] private float perHundredUnits = 1.3f;
-        [SerializeField] private int maxPerFrame = 55;
+        [SerializeField] private float perHundredUnits = 40f;
+        [SerializeField] private int maxPerFrame = 70;
         [Tooltip("-1 = clockwise seen from above, which matches TrimmerBlades rotating about +Y in Unity.")]
         [SerializeField] private float spinDirection = -1f;
 
@@ -26,7 +28,10 @@ namespace PlayShift.Grass
         {
             new Color32(93, 154, 44, 255), new Color32(122, 181, 58, 255), new Color32(167, 194, 74, 255),
             new Color32(201, 180, 90, 255), new Color32(63, 122, 34, 255),
+            new Color32(58, 70, 22, 255), new Color32(84, 58, 30, 255), new Color32(38, 72, 20, 255), new Color32(66, 40, 26, 255),
         };
+
+        private Transform _cam;
 
         private ParticleSystem _ps;
         private float _carry;
@@ -115,6 +120,15 @@ namespace PlayShift.Grass
             var flat = new Vector2(headVel.x, headVel.z);
             float lead = Mathf.Atan2(flat.y, flat.x);
             float spread = flat.magnitude > 0.25f ? 1.25f : Mathf.PI;
+            // Part of the spray comes back toward the player (string trimmers throw debris at the operator).
+            if (_cam == null && Camera.main != null) _cam = Camera.main.transform;
+            Vector3 toPlayer = Vector3.zero;
+            if (_cam != null)
+            {
+                toPlayer = _cam.position - head;
+                toPlayer.y = 0f;
+                toPlayer = toPlayer.sqrMagnitude > 1e-4f ? toPlayer.normalized : Vector3.zero;
+            }
             for (int i = 0; i < n; i++)
             {
                 float phi = lead + Random.Range(-spread, spread);
@@ -123,12 +137,15 @@ namespace PlayShift.Grass
                 var tangent = new Vector3(-dir.z, 0f, dir.x) * spinDirection;
                 float sp = Random.Range(2.2f, 5.4f);
                 p.position = head + dir * rr + Vector3.up * Random.Range(0.04f, 0.06f + 0.4f * tall);
-                p.velocity = tangent * sp + dir * 0.8f + Vector3.up * Random.Range(1.2f, 3.8f) + headVel * 0.6f;
-                bool fine = Random.value < 0.55f; // fine chopped bits and longer slivers
-                p.startSize3D = fine ? new Vector3(0.007f, len * Random.Range(0.25f, 0.45f), 1f)
-                                     : new Vector3(0.009f, len * Random.Range(0.7f, 1.3f), 1f);
+                p.velocity = tangent * sp + dir * 0.8f + Vector3.up * Random.Range(1.4f, 4.2f) + headVel * 0.6f
+                             + toPlayer * Random.Range(0.8f, 3.2f);
+                // Leafy flakes, chopped bits and long slivers, big enough to read at stream resolution.
+                float kind = Random.value;
+                p.startSize3D = kind < 0.35f ? new Vector3(Random.Range(0.05f, 0.09f), Random.Range(0.05f, 0.095f), 1f)
+                              : kind < 0.7f ? new Vector3(0.02f, len * Random.Range(0.8f, 1.3f), 1f)
+                                            : new Vector3(0.016f, len * Random.Range(1.6f, 2.6f), 1f);
                 p.rotation3D = new Vector3(Random.value * 360f, Random.value * 360f, Random.value * 360f);
-                p.startColor = Palette[Random.Range(0, Palette.Length)];
+                p.startColor = Random.value < 0.5f ? Palette[Random.Range(5, Palette.Length)] : Palette[Random.Range(0, 5)];
                 p.startLifetime = Random.Range(0.55f, 1.15f);
                 _ps.Emit(p, 1);
             }

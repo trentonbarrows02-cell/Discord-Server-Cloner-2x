@@ -75,15 +75,15 @@ namespace PlayShift.Grass.Editor
                 Undo.RegisterCreatedObjectUndo(sun.gameObject, "Create Sun");
             }
             Undo.RecordObject(sun.transform, "Sun");
-            sun.transform.rotation = Quaternion.Euler(38f, 135f, 0f);
-            sun.intensity = PipelineMaterials.IsUrp ? 2.2f : 1.25f;
+            sun.transform.rotation = Quaternion.Euler(34f, 135f, 0f); // lowish sun: longer, crisper shadows
+            sun.intensity = PipelineMaterials.IsUrp ? 2.4f : 1.35f;
             sun.color = new Color(1f, 0.95f, 0.86f);
             sun.shadows = LightShadows.Soft;
-            sun.shadowStrength = 0.85f;
+            sun.shadowStrength = 0.95f;
             RenderSettings.sun = sun;
             if (sky != null) RenderSettings.skybox = sky;
             RenderSettings.ambientMode = AmbientMode.Skybox;
-            RenderSettings.ambientIntensity = 1.1f;
+            RenderSettings.ambientIntensity = 1.0f;
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;
             RenderSettings.fogColor = new Color(0.81f, 0.88f, 0.94f);

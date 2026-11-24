@@ -23,7 +23,7 @@ RenderSettings:
   m_AmbientSkyColor: {r: 0.212, g: 0.227, b: 0.259, a: 1}
   m_AmbientEquatorColor: {r: 0.114, g: 0.125, b: 0.133, a: 1}
   m_AmbientGroundColor: {r: 0.047, g: 0.043, b: 0.035, a: 1}
-  m_AmbientIntensity: 1.1
+  m_AmbientIntensity: 1
   m_AmbientMode: 0
   m_SubtractiveShadowColor: {r: 0.42, g: 0.478, b: 0.627, a: 1}
   m_SkyboxMaterial: {fileID: 2100000, guid: 7a79fc6dc1ec16945af2222f9f5ac3ad, type: 2}
@@ -270,7 +270,7 @@ Light:
   serializedVersion: 13
   m_Type: 1
   m_Color: {r: 1, g: 0.95, b: 0.86, a: 1}
-  m_Intensity: 1.25
+  m_Intensity: 1.35
   m_Range: 10
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
@@ -279,7 +279,7 @@ Light:
     m_Type: 2
     m_Resolution: -1
     m_CustomResolution: -1
-    m_Strength: 0.85
+    m_Strength: 0.95
     m_Bias: 0.05
     m_NormalBias: 0.4
     m_NearPlane: 0.2
@@ -332,7 +332,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 486565495}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.12458954, y: 0.8735453, z: -0.30078575, w: 0.36183432}
+  m_LocalRotation: {x: 0.11188, y: 0.88351, z: -0.27012, w: 0.36596}
   m_LocalPosition: {x: 0, y: 3, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -690,9 +690,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayShift.Grass.GrassClippings
   cutter: {fileID: 1903568458}
   clippingMaterial: {fileID: 2100000, guid: 292170866def04544a1b66be1aaabb9f, type: 2}
-  maxParticles: 900
-  perHundredUnits: 1.3
-  maxPerFrame: 55
+  maxParticles: 1200
+  perHundredUnits: 40
+  maxPerFrame: 70
   spinDirection: -1
 --- !u!199 &1827985367
 ParticleSystemRenderer:
@@ -3091,14 +3091,14 @@ MonoBehaviour:
   handleSwing: 34
   cuttingHeight: 0.04
   groundFollow: 1
-  workReach: 1.9
-  workRight: 0.12
+  workReach: 3.3
+  workRight: 0
   groundMask:
     serializedVersion: 2
     m_Bits: 4294967291
   groundFollowRate: 18
   maxGroundTilt: 20
-  hipGrip: {x: 0.45, y: 0.8, z: 0.1}
+  hipGrip: {x: 0.85, y: 0.8, z: 0.2}
   obstacleMask:
     serializedVersion: 2
     m_Bits: 4294967291
@@ -3133,7 +3133,7 @@ MonoBehaviour:
   invertY: 0
   minPitch: -75
   maxPitch: 55
-  startPitch: -18
+  startPitch: -14
   thickGrassResistance: 0.35
   cutter: {fileID: 1903568458}
   blades: {fileID: 1903568459}
@@ -3174,13 +3174,13 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayShift.Grass.TrimmerBlades
   spinners: []
-  maxRps: 7
+  maxRps: 9.5
   spinUpTime: 1.1
   spinDownTime: 1.9
   startOn: 0
   motionBlurRing: 1
   blurRadius: 0.65
-  blurOpacity: 0.9
+  blurOpacity: 0.3
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

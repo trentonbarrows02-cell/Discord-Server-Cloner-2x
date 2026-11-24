@@ -8,7 +8,7 @@ namespace PlayShift.Grass
     /// LOD bias 2, so a low-end PC on "Low" still paid for full sun shadows (shadow maps plus the camera depth pass that
     /// screen-space shadows need, which draws the grass a second time) and kept the forest on its full models far out.
     ///  - Low: no sun shadows, trees switch to lighter models / cards sooner.
-    ///  - Medium: hard shadows, 1 cascade, 25 m.  High: soft, 2 cascades, 45 m.  Ultra: soft, 4 cascades, 100 m.
+    ///  - Medium: hard shadows, 1 cascade, 30 m.  High: soft, 2 cascades, 50 m, high-res maps.  Ultra: soft, 4 cascades, 100 m.
     /// </summary>
     public static class GraphicsProfile
     {
@@ -22,10 +22,10 @@ namespace PlayShift.Grass
                     Set(ShadowQuality.Disable, ShadowResolution.Low, 1, 20f, 0.75f, 1);
                     break;
                 case GrassQuality.Medium:
-                    Set(ShadowQuality.HardOnly, ShadowResolution.Low, 1, 25f, 1f, 1);
+                    Set(ShadowQuality.HardOnly, ShadowResolution.Medium, 1, 30f, 1f, 1);
                     break;
                 case GrassQuality.High:
-                    Set(ShadowQuality.All, ShadowResolution.Medium, 2, 45f, 1.25f, 2);
+                    Set(ShadowQuality.All, ShadowResolution.High, 2, 50f, 1.25f, 2);
                     break;
                 default:
                     Set(ShadowQuality.All, ShadowResolution.High, 4, 100f, 2f, 4);

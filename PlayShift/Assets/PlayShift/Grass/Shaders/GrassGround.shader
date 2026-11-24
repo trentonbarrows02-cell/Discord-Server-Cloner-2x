@@ -16,6 +16,9 @@ Shader "PlayShift/GrassGround"
         _FarGolden ("Far grass: golden", Color) = (0.66, 0.62, 0.24, 1)
         _FarDark ("Far grass: dark", Color) = (0.28, 0.42, 0.11, 1)
         _FarStart ("Far colour starts at (x blade fade start)", Range(0, 1)) = 0.55
+        _CutTint ("Fresh-cut turf tint (multiplies lawn)", Color) = (1.08, 1.16, 0.86, 1)
+        _CutFine ("Fresh-cut turf: fine detail mix", Range(0, 1)) = 0.5
+        _EdgeShade ("Shade on the cut lawn along the uncut grass", Range(0, 1)) = 0.35
     }
 
     SubShader
@@ -40,8 +43,8 @@ Shader "PlayShift/GrassGround"
 
             sampler2D _MainTex;
             float _Tiling;
-            float4 _UnderColor, _FarYellow, _FarGolden, _FarDark;
-            float _FarStart;
+            float4 _UnderColor, _FarYellow, _FarGolden, _FarDark, _CutTint;
+            float _FarStart, _CutFine, _EdgeShade;
             float4x4 _WorldToField;   // global
             float4 _FieldSize;        // global: x, z (m)
 
@@ -67,7 +70,11 @@ Shader "PlayShift/GrassGround"
             fixed4 frag(v2f i) : SV_Target
             {
                 float3 lawn = tex2D(_MainTex, i.worldPos.xz * _Tiling).rgb;
-                float3 col = lawn;
+                // Fresh-cut turf: the lawn texture mixed with a finer copy of itself (dense short turf), brighter
+                // and more saturated.
+                float3 fine = tex2D(_MainTex, i.worldPos.zx * (_Tiling * 3.7) + 0.37).rgb;
+                float3 turf = lerp(lawn, fine, _CutFine) * _CutTint.rgb;
+                float3 col = turf;
 
                 float2 f = mul(_WorldToField, float4(i.worldPos, 1.0)).xz;
                 if (f.x >= 0.0 && f.y >= 0.0 && f.x < _FieldSize.x && f.y < _FieldSize.y && _CellGrid.x > 0.0)
@@ -81,14 +88,18 @@ Shader "PlayShift/GrassGround"
                                        PsCellAt((g0 + float2(0.5, 1.5)) * cs).y, PsCellAt((g0 + float2(1.5, 1.5)) * cs).y);
                     float4 isCut = step(0.0, cy) * step(_CutAnim, _GrassTime - cy);
                     float cutAmt = lerp(lerp(isCut.x, isCut.y, gf.x), lerp(isCut.z, isCut.w, gf.x), gf.y);
-                    float edge = smoothstep(0.3, 0.7, cutAmt + (PsNoise(f * 23.0) - 0.5) * 0.45);
+                    // Gently wavy edge (low-frequency noise), like a trimmer line, not jagged.
+                    float wave = (PsNoise(f * 5.0) - 0.5) * 0.35 + (PsNoise(f * 17.0) - 0.5) * 0.12;
+                    float edge = smoothstep(0.35, 0.65, cutAmt + wave);
+                    // The uncut grass wall shades the cut lawn right next to it.
+                    col *= 1.0 - _EdgeShade * edge * (1.0 - smoothstep(0.55, 1.0, cutAmt + wave * 0.5));
                     if (edge < 0.999)
                     {
                         float d = distance(_WorldSpaceCameraPos.xz, i.worldPos.xz);
                         float far = _GrassFade.y > 0.0 ? smoothstep(_GrassFade.x * _FarStart, _GrassFade.y, d) : 1.0;
                         float n1 = PsNoise(f * 0.35 + 3.1), n2 = PsNoise(f * 1.7 - 7.3);
                         float3 grass = lerp(lerp(_FarYellow.rgb, _FarGolden.rgb, smoothstep(0.55, 0.9, n1)), _FarDark.rgb, n2 * 0.45);
-                        col = lerp(lerp(lawn * _UnderColor.rgb, grass, far), lawn, edge);
+                        col = lerp(lerp(lawn * _UnderColor.rgb, grass, far), col, edge);
                     }
                 }
 

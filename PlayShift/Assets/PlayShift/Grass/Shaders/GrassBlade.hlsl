@@ -3,12 +3,15 @@
 // belongs to (_Cells: x = grown height in metres, y = time the cell was cut, or -1 while grown).
 //
 //  * Cut animation: when a cell is cut, its blades are sliced down over _CutAnim seconds with a small kick away
-//    from the cutting head, leaving short fresh stubble (_StubbleHeight; 0 = they vanish and the lawn shows).
+//    from the cutting head; with _StubbleHeight 0 (default) they vanish and the fresh-cut turf of the ground
+//    shader shows (a positive _StubbleHeight leaves short stubble instead).
 //    Each blade reads its cut state from a point jittered by up to ~half a cell (_CutEdgeJitter), so a cut path
 //    has a ragged, natural edge instead of 10 cm stair steps (the cutting logic still uses the exact cells).
 //  * Interaction: uncut blades near a cutting head lean away from it (more for tall grass and while the
 //    blades spin). Roots never move: every blade is a constant-length arc rooted at its anchor.
 //  * Wind: rolling gusts; taller grass sways more.
+//  * Tufts: blades are pulled toward jittered tuft centres (_TuftSize grid) and fan out from them, so the long grass
+//    grows in full, fluffy clumps; tips turn light golden (_TipGold).
 //  * Variety: height, width, lean and colour vary per blade (yellow-green, olive, dark green, fresh green,
 //    dry golden patches).
 #ifndef PLAYSHIFT_GRASS_BLADE_INCLUDED
@@ -41,6 +44,7 @@ float _Spin;                        // 0..1 blade speed
 float4 _ColYellowGreen, _ColGoldenGreen, _ColDarkGreen, _ColFreshGreen, _ColDry;
 float4 _StubbleColor, _StubbleTipColor;
 float _DryAmount, _BladeWidth, _WidthGrowth, _StubbleHeight, _LeanAmount, _CutEdgeJitter;
+float _TuftSize, _TuftPull, _TuftFan, _TipGold;
 float4 _WindDirection;
 float _WindStrength, _WindSpeed;
 
@@ -97,6 +101,17 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
 {
     GrassBlade o;
     float4 blade = PsProceduralBlade(instanceID);
+    // Tufts: pull toward the jittered centre of this blade's tuft cell (stays inside the cell).
+    float2 tufted = 0;
+    if (_TuftSize > 0.0)
+    {
+        float2 tg = floor(blade.xy / _TuftSize);
+        // Centre anywhere in the cell (a partly jittered grid lines up into visible rows in the distance).
+        float2 tc = (tg + float2(PsHash(tg.x * 17.3 + tg.y * 311.7), PsHash(tg.x * 91.1 + tg.y * 47.9 + 5.3))) * _TuftSize;
+        tufted = blade.xy - tc;
+        blade.xy = tc + tufted * (1.0 - _TuftPull);
+        tufted /= _TuftSize; // -1..1-ish offset from the tuft centre
+    }
     float2 jit = float2(PsHash(blade.w * 1000.0 + 81.3), PsHash(blade.w * 1000.0 + 97.9)) - 0.5;
     float2 cell = PsCellAt(blade.xy + jit * _CutEdgeJitter / _CellGrid.zw);
     cell.x += _HeightBonus;
@@ -123,9 +138,16 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
     float facing = r2 * 6.2831853;
     float2 wdir = float2(cos(facing), sin(facing));
     float2 bdir = float2(-wdir.y, wdir.x);
+    // Blades of a tuft fan outward from its centre (blade face across the bend, like a ribbon).
+    float tl = length(tufted);
+    if (tl > 1e-3)
+    {
+        bdir = normalize(lerp(bdir, tufted / tl, _TuftFan));
+        wdir = float2(bdir.y, -bdir.x);
+    }
 
     // Mostly upright so tall grass keeps its height; a few blades lean or flop.
-    float arc = _LeanAmount * (0.08 + 0.22 * r3 * r3 + 0.12 * tall * r6);
+    float arc = _LeanAmount * (0.08 + 0.22 * r3 * r3 + 0.12 * tall * r6 + 0.18 * _TuftFan * saturate(tl));
 
     float2 windDir = normalize(_WindDirection.xz + 1e-5);
     float ph = dot(root.xz, windDir) * 0.9 - _GrassTime * _WindSpeed;
@@ -185,6 +207,8 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
     tip = lerp(tip, _ColDry.rgb, saturate(_DryAmount * (smoothstep(0.66, 0.9, dryPatch) * (0.3 + 0.4 * r5) + 0.08 * step(0.95, r1))));
     float3 rootC = tip * float3(0.35, 0.42, 0.3);
     float3 grown = lerp(rootC, tip, smoothstep(0.0, 0.85, t)) * (0.85 + 0.3 * r2);
+    // Light golden tips over the green (the classic sunny long-grass look).
+    grown = lerp(grown, lerp(tip, _ColGoldenGreen.rgb * 1.3, 0.6) * (0.9 + 0.2 * r3), smoothstep(0.6, 1.0, t) * _TipGold);
     float3 stubC = lerp(_StubbleColor.rgb, _StubbleTipColor.rgb, smoothstep(0.3, 1.0, t)) * (0.85 + 0.3 * r1);
     o.color = lerp(grown, stubC, ease) * lerp(0.55, 1.0, smoothstep(0.0, 0.7, t));
     return o;

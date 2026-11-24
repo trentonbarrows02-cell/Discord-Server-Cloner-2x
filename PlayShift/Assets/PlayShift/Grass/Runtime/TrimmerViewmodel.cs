@@ -55,9 +55,9 @@ namespace PlayShift.Grass
         [SerializeField] private bool groundFollow = true;
         [Tooltip("How far ahead of the player the head's centre works (metres). Far enough that the blades are in view " +
                  "with the normal, slightly lowered look.")]
-        [SerializeField] private float workReach = 1.9f;
+        [SerializeField] private float workReach = 3.3f;
         [Tooltip("Head offset to the right of the player's centre line (metres).")]
-        [SerializeField] private float workRight = 0.12f;
+        [SerializeField] private float workRight = 0f;
         [Tooltip("Ground the head follows (everything but the player's Ignore Raycast layer; the grass has no colliders).")]
         [SerializeField] private LayerMask groundMask = ~(1 << 2);
         [Tooltip("How quickly the head settles onto a new ground height (1/s). Higher = tighter, lower = smoother.")]
@@ -66,7 +66,10 @@ namespace PlayShift.Grass
         [SerializeField] private float maxGroundTilt = 20f;
         [Tooltip("Where the trimmer is held, relative to the player's feet (x right, y up, z forward): the right hip. The " +
                  "shaft always runs back towards it, out of the bottom-right of the view.")]
-        [SerializeField] private Vector3 hipGrip = new Vector3(0.45f, 0.8f, 0.1f);
+        [SerializeField] private Vector3 hipGrip = new Vector3(0.85f, 0.8f, 0.2f);
+        [Tooltip("Shaft length of the trimmer model at stretch 1 (m, world) and its built-in rise from the head (deg).")]
+        [SerializeField] private float shaftLength = 2.2f;
+        [SerializeField] private float shaftBuiltInRise = 22.5f;
         [Tooltip("Keeps the head out of walls/hedges (everything but the player's Ignore Raycast layer).")]
         [SerializeField] private LayerMask obstacleMask = ~(1 << 2);
         [Tooltip("Cut radius = the measured blade tips (so grass only goes where the blades reach).")]
@@ -90,7 +93,7 @@ namespace PlayShift.Grass
         [SerializeField] private float extraHeadSpacing = 1.4f;
         [SerializeField] private Material crossbarMaterial;
 
-        private Transform _rig, _bodyPivot, _mainHeadRoot, _mainSpinner, _mainBlades;
+        private Transform _rig, _bodyPivot, _mainHeadRoot, _mainSpinner, _mainBlades, _model;
         private readonly List<Transform> _extraRoots = new List<Transform>();
         private readonly List<Transform> _extraSpinners = new List<Transform>();
         private float _yaw, _sweepPhase, _sweep, _walkPhase;
@@ -132,6 +135,7 @@ namespace PlayShift.Grass
             {
                 var model = trimmerModel.scene.IsValid() ? trimmerModel : Instantiate(trimmerModel);
                 model.name = "TrimmerModel";
+                _model = model.transform;
                 model.transform.SetParent(_bodyPivot, false);
                 model.transform.localPosition = Vector3.zero;
                 model.transform.localRotation = Quaternion.identity;
@@ -354,16 +358,21 @@ namespace PlayShift.Grass
             var headRot = tilt * flatRot;
             _mainHeadRoot.SetPositionAndRotation(head, headRot);
 
-            // Shaft: held at the right hip. It runs from the head back towards the hip grip (off-screen, bottom-right),
-            // with the classic shallow rise (shaftPitch) while the head is on the lawn; when the head is lifted it
-            // slopes down to the hip instead, so the shaft never ends in mid-air.
-            Vector3 hip = transform.TransformPoint(hipGrip);
-            Vector3 toHip = hip - head;
-            Vector3 toHipFlat = new Vector3(toHip.x, 0f, toHip.z);
-            float swing = toHipFlat.sqrMagnitude > 1e-4f ? -Vector3.SignedAngle(-flatDir, toHipFlat, Vector3.up) : handleSwing;
-            swing = Mathf.Clamp(Mathf.Max(swing, handleSwing), 12f, 55f);
-            float riseToHip = Mathf.Atan2(toHip.y, Mathf.Max(0.05f, toHipFlat.magnitude)) * Mathf.Rad2Deg;
-            float rise = Mathf.Min(shaftPitch, riseToHip);
+            // Shaft: runs from the head straight back to the grip at the player's right side (off-screen, so it comes
+            // into view from the bottom-right corner). The model is stretched along its length to span the distance:
+            // stretching by k along the model's z gives length L*sqrt(sin^2 a + k^2 cos^2 a) at rise atan(tan a / k).
+            Vector3 grip = transform.TransformPoint(hipGrip);
+            Vector3 toGrip = grip - head;
+            Vector3 toGripFlat = new Vector3(toGrip.x, 0f, toGrip.z);
+            float swing = toGripFlat.sqrMagnitude > 1e-4f ? -Vector3.SignedAngle(-flatDir, toGripFlat, Vector3.up) : handleSwing;
+            swing = Mathf.Clamp(swing, 0f, 60f);
+            float riseToGrip = Mathf.Atan2(toGrip.y, Mathf.Max(0.05f, toGripFlat.magnitude)) * Mathf.Rad2Deg;
+            float a0 = shaftBuiltInRise * Mathf.Deg2Rad;
+            float sin0 = Mathf.Sin(a0), cos0 = Mathf.Cos(a0);
+            float need = toGrip.magnitude / Mathf.Max(0.1f, shaftLength);
+            float stretch = Mathf.Clamp(Mathf.Sqrt(Mathf.Max(0f, need * need - sin0 * sin0)) / cos0, 0.6f, 2.5f);
+            if (_model != null) _model.localScale = new Vector3(modelScale, modelScale, modelScale * stretch);
+            float rise = riseToGrip - Mathf.Atan(Mathf.Tan(a0) / stretch) * Mathf.Rad2Deg;
             _bodyPivot.SetPositionAndRotation(head, flatRot * Quaternion.Euler(rise, -swing, 0f));
 
             for (int i = 0; i < _extraRoots.Count; i++)

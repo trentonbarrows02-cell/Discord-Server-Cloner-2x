@@ -25,22 +25,26 @@ Material:
     m_TexEnvs: []
     m_Ints: []
     m_Floats:
-    - _BladeWidth: 0.0062
+    - _BladeWidth: 0.0074
     - _CutAnim: 0.12
-    - _CutEdgeJitter: 0.9
+    - _CutEdgeJitter: 0.5
     - _DryAmount: 0.8
     - _LeanAmount: 1
-    - _StubbleHeight: 0.035
+    - _StubbleHeight: 0
+    - _TipGold: 0.6
     - _Translucency: 0.9
+    - _TuftFan: 0.6
+    - _TuftPull: 0.35
+    - _TuftSize: 0.14
     - _WidthGrowth: 0.45
     - _WindSpeed: 1.5
     - _WindStrength: 0.17
     m_Colors:
     - _ColDarkGreen: {r: 0.16, g: 0.32, b: 0.08, a: 1}
     - _ColDry: {r: 0.74, g: 0.64, b: 0.3, a: 1}
-    - _ColFreshGreen: {r: 0.33, g: 0.55, b: 0.14, a: 1}
+    - _ColFreshGreen: {r: 0.3, g: 0.6, b: 0.1, a: 1}
     - _ColGoldenGreen: {r: 0.66, g: 0.62, b: 0.22, a: 1}
-    - _ColYellowGreen: {r: 0.55, g: 0.66, b: 0.18, a: 1}
+    - _ColYellowGreen: {r: 0.52, g: 0.7, b: 0.13, a: 1}
     - _StubbleColor: {r: 0.17, g: 0.42, b: 0.07, a: 1}
     - _StubbleTipColor: {r: 0.5, g: 0.74, b: 0.24, a: 1}
     - _WindDirection: {r: 0.86, g: 0, b: 0.5, a: 0}

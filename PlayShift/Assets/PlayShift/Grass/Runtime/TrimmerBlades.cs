@@ -15,7 +15,7 @@ namespace PlayShift.Grass
         [Tooltip("Spinning parts (the CutterHead of each head). TrimmerViewmodel fills this at runtime.")]
         [SerializeField] private List<Transform> spinners = new List<Transform>();
         [Tooltip("Visual spin speed at full power, revolutions per second.")]
-        [SerializeField] private float maxRps = 7f;
+        [SerializeField] private float maxRps = 9.5f;
         [Tooltip("Seconds to reach ~95% speed.")]
         [SerializeField] private float spinUpTime = 1.1f;
         [Tooltip("Seconds to coast down to ~5%.")]
@@ -24,10 +24,11 @@ namespace PlayShift.Grass
         [Header("Motion blur")]
         [SerializeField] private bool motionBlurRing = true;
         [SerializeField] private float blurRadius = 0.65f;
-        [Range(0f, 1f)] [SerializeField] private float blurOpacity = 0.9f;
+        [Range(0f, 1f)] [SerializeField] private float blurOpacity = 0.3f;
 
-        [Tooltip("Above this speed (0..1) the solid blades are hidden and only the blur disc shows.")]
-        [Range(0f, 1f)] [SerializeField] private float hideBladesAbove = 0.62f;
+        [Tooltip("Above this speed (0..1) the solid blades are hidden and only the blur disc shows. Above 1 = the " +
+                 "blades always show, with a faint blur disc under them (the look we want).")]
+        [Range(0f, 1.01f)] [SerializeField] private float hideBladesAbove = 1.01f;
 
         private readonly List<Renderer> _blurRings = new List<Renderer>();
         private readonly List<Renderer> _bladeRenderers = new List<Renderer>();
@@ -98,7 +99,7 @@ namespace PlayShift.Grass
             {
                 if (_mpb == null) _mpb = new MaterialPropertyBlock();
                 // Blur builds up with speed and is full by the time the solid blades are hidden.
-                float a = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.15f, hideBladesAbove, Rpm01)) * blurOpacity;
+                float a = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.15f, Mathf.Min(1f, hideBladesAbove), Rpm01)) * blurOpacity;
                 foreach (var r in _blurRings)
                 {
                     if (r == null) continue;

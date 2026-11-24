@@ -23,7 +23,11 @@ Shader "PlayShift/InstancedGrass"
         _LeanAmount ("Natural lean", Range(0, 2)) = 1
         _StubbleHeight ("Cut stubble height (m), 0 = cut grass vanishes", Float) = 0
         _CutAnim ("Cut animation (s)", Range(0.05, 0.5)) = 0.12
-        _CutEdgeJitter ("Ragged cut edge (cells)", Range(0, 1.5)) = 0.9
+        _CutEdgeJitter ("Ragged cut edge (cells)", Range(0, 1.5)) = 0.5
+        _TuftSize ("Tuft spacing (m), 0 = no tufts", Range(0, 0.4)) = 0.14
+        _TuftPull ("Tuft: how tightly blades gather", Range(0, 0.9)) = 0.45
+        _TuftFan ("Tuft: how far blades fan out", Range(0, 1)) = 0.6
+        _TipGold ("Golden tips", Range(0, 1)) = 0.6
 
         [Header(Wind)]
         _WindDirection ("Wind direction (XZ)", Vector) = (0.86, 0, 0.5, 0)
