@@ -58,6 +58,7 @@ float _GrassTime;                   // same clock the logic stamps cut times wit
 float _CutAnim;                     // seconds for a cut blade to shorten
 float4 _Cutters[PLAYSHIFT_MAX_CUTTERS]; // xyz = head centre (world), w = radius
 float4 _CutterShape[PLAYSHIFT_MAX_CUTTERS]; // x = world height of the head's underside, yzw = shaft direction (unit)
+float4 _CutterRotor[PLAYSHIFT_MAX_CUTTERS]; // x = blade axis angle (deg, world), y = blade half width, z = hub radius, w = spinning
 float _CutterCount;
 float _Spin;                        // 0..1 blade speed
 
@@ -245,7 +246,7 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
         // like trampled grass well outside the blades), and none while the head is lifted off the lawn.
         float lifted = saturate((_Cutters[c].y - root.y - 0.12) / 0.25);
         float infl = active * (1.0 - lifted) * (1.0 - smoothstep(_Cutters[c].w * 0.9, _Cutters[c].w * 1.35, dist));
-        push += n * infl * (0.2 + 0.3 * _Spin) * (0.6 + 0.9 * tall);
+        // (No lean-away field: grass outside the blades stays upright until the blades reach it.)
         if (active > 0.5 && dist < nearest) { nearest = dist; kickDir = n; }
     }
     push *= 1.0 - ease;
@@ -260,12 +261,22 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
         if (c2 >= (int)_CutterCount || _CutterShape[c2].x < -999.0) continue;
         float2 away2 = root.xz - _Cutters[c2].xz;
         float d2 = length(away2);
-        float under = 1.0 - smoothstep(_Cutters[c2].w, _Cutters[c2].w + 0.08, d2);
         float below = max(0.0, _CutterShape[c2].x - root.y - 0.008);
+        // Solid steel only: the hub/plate always; the four blade strips only while the blades stand still (spinning,
+        // the whole disc is being cut anyway). A narrow 2 cm edge, so no ring of flattened grass around the head.
+        float4 rot = _CutterRotor[c2];
+        float under = 1.0 - smoothstep(rot.z, rot.z + 0.02, d2);
+        if (rot.w < 0.5 && rot.y > 0.0 && d2 < _Cutters[c2].w + 0.02)
+        {
+            float a = atan2(away2.y, away2.x) - radians(rot.x);
+            float q = abs(fmod(abs(a), 1.5707963) - 0.7853982); // 0.785 on a blade axis, 0 halfway between
+            float perp = d2 * sin(0.7853982 - q);                // distance from the nearest blade axis
+            under = max(under, 1.0 - smoothstep(rot.y, rot.y + 0.02, perp));
+        }
         if (under > 0.0)
         {
             hCap = min(hCap, lerp(1e4, below, under));
-            push += (d2 > 1e-3 ? away2 / d2 : bdir) * under * 0.9;
+            push += (d2 > 1e-3 ? away2 / d2 : bdir) * under * 0.35;
         }
         float3 sd = _CutterShape[c2].yzw;
         float lh = length(sd.xz);

@@ -68,16 +68,6 @@ namespace PlayShift.Grass
                  "with it, at the cutting height: looking up never lifts it and looking down never pushes it in.")]
         [SerializeField, Range(0f, 1f)] private float pitchFollow = 0f;
 
-        [Header("Lift when looking up")]
-        [Tooltip("Vertical trimmer movement influence: looking above the default camera angle swings the trimmer up about " +
-                 "the hip grip by this fraction of the extra angle (0 = stays on the ground, 1 = follows the camera fully). " +
-                 "Looking down to the default angle or below lowers it back onto the ground at the cutting height.")]
-        [SerializeField, Range(0f, 1f)] private float liftInfluence = 0.7f;
-        [Tooltip("Maximum trimmer lift height (metres above its cutting height).")]
-        [SerializeField, Range(0f, 1.5f)] private float maxLiftHeight = 0.6f;
-        [Tooltip("Trimmer movement responsiveness: how fast the lift follows the look (per second; 30 = settles in ~0.1 s, " +
-                 "no spring, no overshoot). Higher = more direct.")]
-        [SerializeField, Range(5f, 80f)] private float liftResponsiveness = 30f;
         [Tooltip("Nearest and furthest the head works on the ground (metres ahead of the player).")]
         [SerializeField] private float minReach = 1.2f;
         [SerializeField] private float maxReach = 8f;
@@ -148,11 +138,9 @@ namespace PlayShift.Grass
         /// <summary>World position of the main cutting head (on the ground).</summary>
         public Vector3 HeadPosition => _mainHeadRoot != null ? _mainHeadRoot.position : transform.position;
         /// <summary>How high the trimmer is lifted above its cutting height right now (metres; 0 = on the ground).</summary>
-        public float LiftHeight { get; private set; }
+        public float LiftHeight => 0f; // the trimmer never lifts (tests read it)
         /// <summary>The main cutting head (level blade disc; tests read its tilt).</summary>
         public Transform HeadRoot => _mainHeadRoot;
-        private float _liftDeg;
-        private bool _liftInit;
         /// <summary>Head position relative to the player in the player's turn frame, as placed this frame.</summary>
         public Vector3 HeadOffsetFromPlayer { get; private set; }
         /// <summary>The fixed housing's rotation relative to the player's turn frame (changes only with ground tilt).</summary>
@@ -418,30 +406,8 @@ namespace PlayShift.Grass
             _groundInit = true;
             head.y = Mathf.Max(_groundY, groundY) + clearance;
 
-            // Lifting with the look: above the default camera angle the trimmer swings up about the hip grip (like
-            // raising a held tool), capped at Max Lift Height; at or below the default it rests on the ground. The head
-            // stays level (blades horizontal); only the shaft's angle changes. Never below the ground clearance.
-            {
-                var rigL = controller != null ? controller.Rig : null;
-                float upDeg = rigL != null ? Mathf.Max(0f, rigL.Pitch - rigL.DefaultPitch) * liftInfluence : 0f;
-                float kl = _liftInit ? 1f - Mathf.Exp(-liftResponsiveness * dt) : 1f;
-                _liftDeg = Mathf.Lerp(_liftDeg, upDeg, kl);
-                _liftInit = true;
-                if (_liftDeg > 0.01f)
-                {
-                    Vector3 pivot = transform.TransformPoint(hipGrip);
-                    Vector3 raised = pivot + Quaternion.AngleAxis(-_liftDeg, right) * (head - pivot);
-                    float liftRise = raised.y - head.y;
-                    if (liftRise > maxLiftHeight && liftRise > 1e-4f)
-                    {
-                        // Same arc, stopped at the height limit.
-                        float a = _liftDeg * maxLiftHeight / liftRise;
-                        raised = pivot + Quaternion.AngleAxis(-a, right) * (head - pivot);
-                    }
-                    if (raised.y > head.y) head = raised;
-                }
-                LiftHeight = Mathf.Max(0f, head.y - (Mathf.Max(_groundY, groundY) + clearance));
-            }
+            // No lifting: the head stays at the cutting height over the ground whatever the camera does (permanent
+            // design decision; the camera's up/down look never moves the tool or the cut).
             head += right * (sway + jx) + Vector3.up * lift; // walk sway + motor hum (lift only: never into the lawn)
             var flatRot = Quaternion.LookRotation(flatDir, Vector3.up);
             var tilt = Quaternion.FromToRotation(Vector3.up, Vector3.RotateTowards(Vector3.up, _groundN, maxGroundTilt * Mathf.Deg2Rad, 0f));

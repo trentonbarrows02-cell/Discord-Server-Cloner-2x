@@ -19,7 +19,7 @@ namespace PlayShift.Grass
         [SerializeField] private Material clippingMaterial;
         [SerializeField] private int maxParticles = 700;
         [Tooltip("Particles per 100 grass units cut, before the height factor.")]
-        [SerializeField] private float perHundredUnits = 22f;
+        [SerializeField] private float perHundredUnits = 16f;
         [SerializeField] private int maxPerFrame = 40;
         [Tooltip("-1 = clockwise seen from above, which matches TrimmerBlades rotating about +Y in Unity.")]
         [SerializeField] private float spinDirection = -1f;
@@ -89,13 +89,47 @@ namespace PlayShift.Grass
 
             var r = GetComponent<ParticleSystemRenderer>();
             r.renderMode = ParticleSystemRenderMode.Mesh;
-            r.mesh = Resources.GetBuiltinResource<Mesh>("Quad.fbx");
+            // A real grass-blade shape (tapered, slightly curved strip), not the built-in Quad: with an untextured
+            // material the quad drew every clipping as a solid green square or rectangle.
+            r.mesh = BladeMesh();
             r.alignment = ParticleSystemRenderSpace.Local;
             r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             r.receiveShadows = false;
             if (clippingMaterial == null) clippingMaterial = PipelineMaterials.CreateParticleUnlit("GrassClippings");
             r.sharedMaterial = clippingMaterial;
             _ps.Play();
+        }
+
+        private static Mesh s_blade;
+
+        /// <summary>One grass blade: a strip 1 long (y) and 1 wide at the base (x), tapering to a point and curving a
+        /// little out of plane (z). Particle sizes scale it to real clippings.</summary>
+        private static Mesh BladeMesh()
+        {
+            if (s_blade != null) return s_blade;
+            const int seg = 5;
+            var v = new Vector3[(seg + 1) * 2];
+            var n = new Vector3[v.Length];
+            var uv = new Vector2[v.Length];
+            for (int i = 0; i <= seg; i++)
+            {
+                float t = i / (float)seg;
+                float w = 0.5f * (1f - Mathf.Pow(t, 1.4f) * 0.95f);
+                float y = t - 0.5f, z = 0.18f * t * t - 0.06f;
+                v[i * 2] = new Vector3(-w, y, z); v[i * 2 + 1] = new Vector3(w, y, z);
+                n[i * 2] = n[i * 2 + 1] = new Vector3(0f, -0.36f * t, 1f).normalized;
+                uv[i * 2] = new Vector2(0f, t); uv[i * 2 + 1] = new Vector2(1f, t);
+            }
+            var tri = new int[seg * 6];
+            for (int i = 0; i < seg; i++)
+            {
+                int a = i * 2;
+                tri[i * 6] = a; tri[i * 6 + 1] = a + 2; tri[i * 6 + 2] = a + 1;
+                tri[i * 6 + 3] = a + 1; tri[i * 6 + 4] = a + 2; tri[i * 6 + 5] = a + 3;
+            }
+            s_blade = new Mesh { name = "GrassClippingBlade", vertices = v, normals = n, uv = uv, triangles = tri };
+            s_blade.RecalculateBounds();
+            return s_blade;
         }
 
         private void OnGrassCut(Vector3 head, Vector3 headVel, long units, float grassHeightM, float radius)
@@ -115,7 +149,10 @@ namespace PlayShift.Grass
             if (n <= 0) return;
 
             var p = new ParticleSystem.EmitParams();
-            float len = Mathf.Lerp(0.03f, 0.06f, tall);
+            float len = Mathf.Lerp(0.05f, 0.11f, tall);
+            // The colour of the grass being cut (the blades' average colour), varied a little per clipping.
+            Color grass = Shader.GetGlobalColor("_PsGrassAvg");
+            if (grass.maxColorComponent < 0.01f) grass = new Color(0.3f, 0.5f, 0.15f);
             // Leading edge: the side of the disc moving into uncut grass.
             var flat = new Vector2(headVel.x, headVel.z);
             float lead = Mathf.Atan2(flat.y, flat.x);
@@ -140,13 +177,13 @@ namespace PlayShift.Grass
                 // Flung out off the blade tips: along the blade's path and outward from the head, a little up.
                 p.velocity = tangent * sp + dir * Random.Range(1.4f, 2.6f) + Vector3.up * Random.Range(1.0f, 3.0f) + headVel * 0.6f
                              + toPlayer * Random.Range(0.2f, 0.9f);
-                // Leafy flakes, chopped bits and long slivers, big enough to read at stream resolution.
-                float kind = Random.value;
-                p.startSize3D = kind < 0.35f ? new Vector3(Random.Range(0.05f, 0.09f), Random.Range(0.05f, 0.095f), 1f)
-                              : kind < 0.7f ? new Vector3(0.02f, len * Random.Range(0.8f, 1.3f), 1f)
-                                            : new Vector3(0.016f, len * Random.Range(1.6f, 2.6f), 1f);
+                // Chopped blade pieces: thin, tapered, a few centimetres long, varied in size and shade.
+                p.startSize3D = new Vector3(Random.Range(0.007f, 0.013f), len * Random.Range(0.6f, 1.5f), Random.Range(0.8f, 1.2f));
                 p.rotation3D = new Vector3(Random.value * 360f, Random.value * 360f, Random.value * 360f);
-                p.startColor = Random.value < 0.5f ? Palette[Random.Range(5, Palette.Length)] : Palette[Random.Range(0, 5)];
+                float shade = Random.Range(0.8f, 1.25f);
+                var c = new Color(grass.r * shade * Random.Range(0.92f, 1.08f), grass.g * shade, grass.b * shade * Random.Range(0.85f, 1.15f), 1f);
+                if (Random.value < 0.15f) c = Color.Lerp(c, new Color(0.62f, 0.6f, 0.3f), 0.35f); // a few drier bits
+                p.startColor = c;
                 p.startLifetime = Random.Range(0.55f, 1.15f);
                 _ps.Emit(p, 1);
             }

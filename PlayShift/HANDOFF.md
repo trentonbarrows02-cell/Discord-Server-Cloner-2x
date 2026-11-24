@@ -62,6 +62,16 @@ Owner's non-negotiables (from their brief):
   reference for the look: VM head offset (0.05 right, 1.4 m ahead), shaft pitch 17°, handle swing 34°, shaft
   stretch 1.7, trimmer scale 1.85, cut radius 0.65 m, cut animation 0.18 s, stubble 4 cm.
 
+## Permanent design decisions
+
+These are owner decisions; keep them (details in the repo-root `CLAUDE.md`):
+- The trimmer never lifts off the ground; camera pitch never moves the tool, the cutting height or the radius.
+- Camera: default -29 deg is the lowest look, up to -14 deg, 360 deg yaw, eye 2.28 m.
+- No sprint; walk 7.2 m/s.
+- Grass bends only under solid steel (hub, shaft, stopped blades); no circular "force field".
+- Clippings are thin blade-shaped mesh particles, only when grass is cut.
+- Title screen uses its own shell-grass lawn (`MenuLawn`), capped at 60 FPS.
+
 ## Status
 - Verified: Core logic + tests; all C# compiles against UnityEngine 2021.3 reference assemblies (stubs for UI/TMP).
 - **Never run inside Unity.** Shaders, scene setup, lighting, glTF import, input, audio and real-time feel are

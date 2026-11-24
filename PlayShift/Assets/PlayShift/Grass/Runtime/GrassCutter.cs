@@ -14,6 +14,9 @@ namespace PlayShift.Grass
         public float BottomY;
         /// <summary>Unit vector from the head toward the handle (the shaft), world space.</summary>
         public Vector3 Shaft;
+        /// <summary>Solid rotor parts: x = world angle of a blade axis (deg), y = blade half width (m), z = hub radius
+        /// (m), w = 1 while the blades spin (then the whole disc is being cut, nothing is pressed but the hub).</summary>
+        public Vector4 Rotor;
     }
 
     /// <summary>
@@ -128,10 +131,14 @@ namespace PlayShift.Grass
             float spin = blades != null ? blades.Rpm01 : 1f;
             float radius = CutRadius;
             var list = (List<CutterHeadState>)ActiveHeads;
+            Vector4 rotorShape = new Vector4(0f, 0f, 0f, 1f);
+            if (blades != null && blades.TryGetRotorShape(out float ba, out float bw, out float hr))
+                rotorShape = new Vector4(ba, bw, hr, blades.Rpm01 > 0.3f ? 1f : 0f);
             foreach (var h in heads)
                 if (h != null && h.gameObject.activeInHierarchy)
                     list.Add(new CutterHeadState { Position = h.position, Radius = radius, Spin = spin,
-                                                   BottomY = h.position.y - HeadDepth, Shaft = list.Count == 0 ? ShaftDirection : Vector3.zero });
+                                                   BottomY = h.position.y - HeadDepth, Shaft = list.Count == 0 ? ShaftDirection : Vector3.zero,
+                                                   Rotor = rotorShape });
 
             if (m == null || m.Progression == null || !m.Progression.IsPlaying) { ResetSweep(); DecayLoad(0f); return; }
             if (_lastLevel != m.Progression.CurrentLevelIndex)

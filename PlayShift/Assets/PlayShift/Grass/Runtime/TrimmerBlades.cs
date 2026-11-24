@@ -24,7 +24,7 @@ namespace PlayShift.Grass
         [Header("Motion blur")]
         [SerializeField] private bool motionBlurRing = true;
         [SerializeField] private float blurRadius = 0.65f;
-        [Range(0f, 1f)] [SerializeField] private float blurOpacity = 0.3f;
+        [Range(0f, 1f)] [SerializeField] private float blurOpacity = 0.42f;
 
         [Tooltip("Above this speed (0..1) the solid blades are hidden and only the blur disc shows. Above 1 = the " +
                  "blades always show, with a faint blur disc under them (the look we want).")]
@@ -44,9 +44,9 @@ namespace PlayShift.Grass
 
         private readonly List<Quaternion> _baseRotations = new List<Quaternion>();
         private float _angle, _degPerSec, _loadSmoothed;
-        private const float MaxVisibleStepDeg = 22f; // well under 45 (half the 4-blade repeat): always reads as forward
+        private const float MaxVisibleStepDeg = 26f; // well under 45 (half the 4-blade repeat): always reads as forward
         [Tooltip("How fast the blades are drawn turning at full speed (rev/s). The blur disc shows the real speed.")]
-        [SerializeField] private float visibleRps = 2.5f;
+        [SerializeField] private float visibleRps = 3.6f;
         private readonly List<Vector3> _basePositions = new List<Vector3>();
 
         /// <summary>Spin the rotor slowly to check it by eye (also used by the capture test).</summary>
@@ -84,6 +84,40 @@ namespace PlayShift.Grass
         public float Load { get; set; }
 
         public IReadOnlyList<Transform> Spinners => spinners;
+
+        /// <summary>
+        /// The solid parts of the main rotor for the grass (so grass bends only where steel actually is): world angle
+        /// (deg, about +Y from +X) of one blade's axis, blade half width (m), hub/plate radius (m). False when unknown.
+        /// </summary>
+        public bool TryGetRotorShape(out float bladeAngleDeg, out float bladeHalfWidth, out float hubRadius)
+        {
+            bladeAngleDeg = 0f; bladeHalfWidth = 0.05f; hubRadius = 0.12f;
+            if (spinners.Count == 0 || spinners[0] == null) return false;
+            var rotor = spinners[0];
+            Transform blade = null, plate = null;
+            foreach (Transform c in rotor)
+            {
+                if (blade == null && c.name.StartsWith("Blade")) blade = c;
+                if (plate == null && c.name.StartsWith("CentralMountingPlate")) plate = c;
+            }
+            if (blade == null) return false;
+            var mf = blade.GetComponent<MeshFilter>();
+            if (mf == null || mf.sharedMesh == null) return false;
+            var b = mf.sharedMesh.bounds;
+            Vector3 dir = blade.TransformPoint(b.center) - rotor.position;
+            dir.y = 0f;
+            if (dir.sqrMagnitude < 1e-8f) return false;
+            bladeAngleDeg = Mathf.Atan2(dir.z, dir.x) * Mathf.Rad2Deg;
+            // Width across the blade: the smaller horizontal extent of its own mesh (blades lie along a local axis).
+            Vector3 sz = Vector3.Scale(b.size, blade.lossyScale);
+            bladeHalfWidth = 0.5f * Mathf.Min(Mathf.Abs(sz.x), Mathf.Abs(sz.z));
+            if (plate != null && plate.TryGetComponent<MeshFilter>(out var pf) && pf.sharedMesh != null)
+            {
+                Vector3 ps = Vector3.Scale(pf.sharedMesh.bounds.size, plate.lossyScale);
+                hubRadius = 0.5f * Mathf.Max(Mathf.Abs(ps.x), Mathf.Abs(ps.z));
+            }
+            return true;
+        }
 
         private void Awake() => On = startOn;
 
