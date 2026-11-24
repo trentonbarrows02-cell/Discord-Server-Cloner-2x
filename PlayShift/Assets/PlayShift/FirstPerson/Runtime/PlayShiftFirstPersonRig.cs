@@ -40,8 +40,8 @@ namespace PlayShift.FirstPerson
         [SerializeField] private float verticalSensitivity = 0.8f;
         [Tooltip("Camera angle at the start (degrees, negative = looking down). Looks down onto the cutting head: the head sits about half way down the screen.")]
         [SerializeField, Range(-60f, 20f)] private float defaultPitch = -39f;
-        [Tooltip("Highest the player can look (degrees, negative = still below the horizon). Kept close to Default Pitch (5 deg) so the cutting head never slides off the bottom of the screen.")]
-        [SerializeField, Range(-60f, 60f)] private float maxLookUp = -34f;
+        [Tooltip("Highest the player can look (degrees, negative = still below the horizon). Looking above Default Pitch lifts the trimmer (see Lift on the trimmer) so it stays in view.")]
+        [SerializeField, Range(-60f, 60f)] private float maxLookUp = -22f;
         [Tooltip("Lowest the player can look (degrees below the horizon). Keeps the view off the trimmer's underside and " +
                  "the player's own feet.")]
         [SerializeField, Range(0f, 89f)] private float maxLookDown = 43f;

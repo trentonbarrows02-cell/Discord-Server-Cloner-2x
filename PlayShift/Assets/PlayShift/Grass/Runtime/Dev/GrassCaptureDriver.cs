@@ -1082,6 +1082,42 @@ namespace PlayShift.Grass.Dev
                 }
                 for (int i = 0; i < 10; i++) { _input.Look = new Vector2(0f, (def - fpc.Pitch) / (10 - i)); yield return null; }
                 _input.Look = Vector2.zero;
+
+                // 3a) Lift sweep: every 2-3 degrees from max down to max up. At each angle: where the head shows on
+                //     screen, how high it is lifted, whether the blade disc is level and fully in view, and whether it
+                //     cuts while walking (it must stop cutting once lifted out of the grass).
+                if (rig != null)
+                {
+                    _report.AppendLine("  lift sweep (camera deg: head centre from screen top, lowest blade point above screen bottom, lift cm, disc tilt deg, cut while walking):");
+                    var camL = Camera.main;
+                    float rad = _probeCutter != null ? _probeCutter.CutRadius : 0.5f;
+                    int steps = 10;
+                    for (int s = 0; s <= steps; s++)
+                    {
+                        float target = Mathf.Lerp(down, up, s / (float)steps);
+                        for (int i = 0; i < 8; i++) { _input.Look = new Vector2(0f, (target - fpc.Pitch) / (8 - i)); yield return null; }
+                        _input.Look = Vector2.zero;
+                        for (int i = 0; i < 12; i++) yield return null; // let the lift settle (no input)
+                        Vector3 hp = _probeVm.HeadPosition;
+                        Vector3 vpC = camL.WorldToViewportPoint(hp);
+                        float lowest = 1f;
+                        for (int k = 0; k < 16; k++)
+                        {
+                            float a = k * Mathf.PI / 8f;
+                            Vector3 rimP = hp + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * rad;
+                            lowest = Mathf.Min(lowest, camL.WorldToViewportPoint(rimP).y);
+                        }
+                        float tilt = _probeVm.HeadRoot != null ? Vector3.Angle(_probeVm.HeadRoot.up, Vector3.up) : float.NaN;
+                        long before = f.Remaining;
+                        for (int i = 0; i < 15; i++) { _input.Move = new Vector2(0f, 0.6f); yield return null; }
+                        _input.Move = Vector2.zero;
+                        _report.AppendLine($"    {fpc.Pitch,6:F1}: head {(1f - vpC.y) * 100f:F0}% down, lowest blade {lowest * 100f:F0}% up, lift {_probeVm.LiftHeight * 100f:F0} cm, " +
+                                           $"tilt {tilt:F1}, cut {before - f.Remaining:N0}");
+                        if (s == steps / 2) yield return Shot("15c_look_middle_up");
+                    }
+                    for (int i = 0; i < 10; i++) { _input.Look = new Vector2(0f, (def - fpc.Pitch) / (10 - i)); yield return null; }
+                    _input.Look = Vector2.zero;
+                }
             }
 
             // 3b) Blade rotor: spin slowly, then at full speed. The rotor must turn rigidly about the head's axis: no

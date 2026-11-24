@@ -36,6 +36,9 @@ namespace PlayShift.Grass
         [Tooltip("The blades cut only while their lowest point is within this distance of the lawn (metres): a lifted " +
                  "trimmer (looking up) cuts nothing.")]
         [SerializeField] private float bladeContactTolerance = 0.05f;
+        [Tooltip("Cutting height tolerance: a lifted trimmer still cuts while its blades reach at least this far down into " +
+                 "the grass (metres below the shortest grass of the level). Above that it cuts nothing.")]
+        [SerializeField, Range(0f, 0.5f)] private float cuttingHeightTolerance = 0.05f;
 
         /// <summary>One frame of one head's cut: a swept circle from A to B (field-local metres, x/z).</summary>
         public struct CutStroke
@@ -145,8 +148,11 @@ namespace PlayShift.Grass
                 Vector3 local = m.FieldTransform.InverseTransformPoint(world);
                 var now = new Vector2(local.x, local.z);
                 // Blades must be down at the lawn (a lifted head cuts nothing).
-                bool onLawn = (maxHeightAboveLawn <= 0f || local.y <= maxHeightAboveLawn) &&
-                              local.y - HeadClearance <= bladeContactTolerance;
+                // The blades cut while they are down at the lawn, or still inside the grass when lifted: their lowest
+                // point at least Cutting Height Tolerance below the shortest grass of the level.
+                float bladeBottom = local.y - HeadClearance;
+                float reach = Mathf.Max(bladeContactTolerance, field.CurrentMinHeightCm * 0.01f - cuttingHeightTolerance);
+                bool onLawn = (maxHeightAboveLawn <= 0f || local.y <= maxHeightAboveLawn) && bladeBottom <= reach;
 
                 long cut = 0;
                 if (cutting && onLawn)

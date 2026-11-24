@@ -20,7 +20,7 @@ namespace PlayShift.Grass
         [SerializeField] private Camera playerCamera;
         [Header("Built-in movement (used only without the Easy Peasy controller)")]
         [SerializeField] private float eyeHeight = 1.7f;
-        [SerializeField] private float walkSpeed = 3.5f;
+        [SerializeField] private float walkSpeed = 5.5f; // = sprint speed: normal movement at the sprint pace
         [SerializeField] private float sprintSpeed = 5.5f;
         [SerializeField] private float acceleration = 14f;
         [SerializeField] private float mouseSensitivity = 0.12f;

@@ -3126,7 +3126,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayShift.Grass.FirstPersonController
   playerCamera: {fileID: 1903568453}
   eyeHeight: 1.7
-  walkSpeed: 3.5
+  walkSpeed: 5.5
   sprintSpeed: 5.5
   acceleration: 14
   mouseSensitivity: 0.12
