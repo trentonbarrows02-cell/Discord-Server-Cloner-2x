@@ -168,6 +168,11 @@ namespace PlayShift.Grass
         /// <summary>Opens the title screen (start of game, or MAIN MENU from settings).</summary>
         public void Show()
         {
+            {
+                // The title screen's own lawn (shell grass), independent of the gameplay grass and its save.
+                var lm = GrassLevelManager.Instance;
+                if (lm != null && lm.Settings != null) MenuLawn.Show(lm.FieldTransform.position, lm.Settings.fieldSizeMeters);
+            }
             if (menuFrameRate > 0 && !_fpsCapped)
             {
                 _fpsCapped = true;
@@ -196,6 +201,7 @@ namespace PlayShift.Grass
 
         public void Play()
         {
+            MenuLawn.Hide();
             RestoreFrameRate();
             if (_root == null) return;
             IsOpen = false;

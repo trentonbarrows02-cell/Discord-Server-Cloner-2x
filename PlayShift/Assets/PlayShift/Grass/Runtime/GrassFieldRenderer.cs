@@ -361,7 +361,9 @@ namespace PlayShift.Grass
                 Shader.SetGlobalVector(PsLodDistId, new Vector4(q0.fullDetailDistance, q0.midDetailDistance, q0.maxDrawDistance, q0.maxDrawDistance * 0.72f));
                 Shader.SetGlobalVector(PsChunkId, new Vector4(chunkMeters, _field.CurrentMaxHeightCm * 0.013f + 0.1f, 0f, 0f));
             }
-            if (DebugHideBlades || DebugView == 1 || DebugView == 3) { LastDrawnBlades = 0; LastDrawCalls = 0; return; }
+            // Title screen: the menu lawn (MenuLawn, shell grass) stands in for the blades; no gameplay blades drawn.
+            bool title = MainMenu.IsOpen && titleScreenGrassProfile;
+            if (DebugHideBlades || DebugView == 1 || DebugView == 3 || title) { LastDrawnBlades = 0; LastDrawCalls = 0; return; }
             DrawChunks(cam);
         }
 
