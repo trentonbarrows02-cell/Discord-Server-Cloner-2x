@@ -3034,7 +3034,7 @@ MonoBehaviour:
   portraitHeadRight: -0.12
   shaftPitch: 0
   handleSwing: 34
-  cuttingHeight: 0.04
+  cuttingHeight: 0.03
   groundFollow: 1
   workReach: 3.3
   workRight: 0
@@ -3043,7 +3043,7 @@ MonoBehaviour:
     m_Bits: 4294967291
   groundFollowRate: 18
   maxGroundTilt: 20
-  hipGrip: {x: 0.82, y: 0.85, z: 0.45}
+  hipGrip: {x: 0.82, y: 1.1, z: 0.45}
   obstacleMask:
     serializedVersion: 2
     m_Bits: 4294967291

@@ -45,7 +45,7 @@ namespace PlayShift.Grass
         [SerializeField] private float handleSwing = 34f;
         [Tooltip("Minimum blade ground clearance (cutting height): gap between the lowest point of the cutting head " +
                  "(blades included) and the ground (3-8 cm). The trimmer is never lowered below it.")]
-        [SerializeField, Range(0.03f, 0.08f)] private float cuttingHeight = 0.04f;
+        [SerializeField, Range(0.03f, 0.08f)] private float cuttingHeight = 0.03f;
 
         [Header("Ground-following tool")]
         [Tooltip("On (default): the cutting head works on the ground at a fixed spot ahead of the player. It follows the " +
@@ -72,7 +72,7 @@ namespace PlayShift.Grass
         [Tooltip("Vertical trimmer movement influence: looking above the default camera angle swings the trimmer up about " +
                  "the hip grip by this fraction of the extra angle (0 = stays on the ground, 1 = follows the camera fully). " +
                  "Looking down to the default angle or below lowers it back onto the ground at the cutting height.")]
-        [SerializeField, Range(0f, 1f)] private float liftInfluence = 0f;
+        [SerializeField, Range(0f, 1f)] private float liftInfluence = 0.7f;
         [Tooltip("Maximum trimmer lift height (metres above its cutting height).")]
         [SerializeField, Range(0f, 1.5f)] private float maxLiftHeight = 0.6f;
         [Tooltip("Trimmer movement responsiveness: how fast the lift follows the look (per second; 30 = settles in ~0.1 s, " +
@@ -106,7 +106,7 @@ namespace PlayShift.Grass
         [SerializeField] private float maxGroundTilt = 20f;
         [Tooltip("Where the trimmer is held, relative to the player's feet (x right, y up, z forward): the right hip. The " +
                  "shaft always runs back towards it, out of the bottom-right of the view.")]
-        [SerializeField] private Vector3 hipGrip = new Vector3(0.82f, 0.85f, 0.45f);
+        [SerializeField] private Vector3 hipGrip = new Vector3(0.82f, 1.1f, 0.45f);
         [Tooltip("Shaft length of the trimmer model at stretch 1 (m, world) and its built-in rise from the head (deg).")]
         [SerializeField] private float shaftLength = 2.2f;
         [SerializeField] private float shaftBuiltInRise = 22.5f;

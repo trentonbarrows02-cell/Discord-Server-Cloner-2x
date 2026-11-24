@@ -44,7 +44,9 @@ namespace PlayShift.Grass
 
         private readonly List<Quaternion> _baseRotations = new List<Quaternion>();
         private float _angle, _degPerSec, _loadSmoothed;
-        private const float MaxVisibleStepDeg = 30f; // < 90/3: the 4-blade pattern always reads as turning forward
+        private const float MaxVisibleStepDeg = 22f; // well under 45 (half the 4-blade repeat): always reads as forward
+        [Tooltip("How fast the blades are drawn turning at full speed (rev/s). The blur disc shows the real speed.")]
+        [SerializeField] private float visibleRps = 2.5f;
         private readonly List<Vector3> _basePositions = new List<Vector3>();
 
         /// <summary>Spin the rotor slowly to check it by eye (also used by the capture test).</summary>
@@ -164,8 +166,12 @@ namespace PlayShift.Grass
             // left/right made the blades look like they stopped or ran backwards. The step per frame is also capped
             // below a third of the 90 deg repeat, so the blades always read as spinning forward at any frame rate (the
             // blur disc carries the speed). Load still drives the sound and vibration.
+            // Drawn at a steady visibleRps (2.5 rev/s = 15 deg per frame at 60 fps): four identical blades turning
+            // 30+ deg per frame read as stepping or stalling, especially while the view moves. The real speed (9.5
+            // rev/s) drives the blur disc, sound and cutting.
             _degPerSec = Rpm01 * maxRps * SpeedMultiplier * 360f * (slowSpinPreview ? slowSpinScale : 1f);
-            float step = Mathf.Min(_degPerSec * dt, MaxVisibleStepDeg);
+            float shown = Rpm01 * visibleRps * 360f * (slowSpinPreview ? slowSpinScale * maxRps / Mathf.Max(0.1f, visibleRps) : 1f);
+            float step = Mathf.Min(shown * dt, MaxVisibleStepDeg);
             _angle = Mathf.Repeat(_angle + step, 360f);
             var spin = Quaternion.Euler(0f, _angle, 0f);
             for (int i = 0; i < spinners.Count; i++)
