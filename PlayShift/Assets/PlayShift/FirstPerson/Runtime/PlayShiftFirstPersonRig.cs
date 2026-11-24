@@ -28,24 +28,38 @@ namespace PlayShift.FirstPerson
         [SerializeField] private Camera playerCamera;
         [Tooltip("Camera-relative point where a held tool's grip sits (bottom-right of the view).")]
         [SerializeField] private Transform toolAnchor;
-        [Tooltip("Controller look speed at sensitivity 1 (Easy Peasy units: degrees per 20 px of mouse movement).")]
-        [SerializeField] private float baseMouseSensitivity = 2f;
-        [Tooltip("Look limits in degrees (negative = down).")]
-        [SerializeField] private float minPitch = -80f, maxPitch = 60f;
         [Tooltip("Turns off the controller's walking head bob so the view stays perfectly steady.")]
         [SerializeField] private bool steadyCamera = true;
-        [Header("Fixed vertical look")]
-        [Tooltip("On: mouse up/down does nothing; the camera always looks Fixed Look Down below the horizon. Left/right " +
-                 "turning stays free (full 360).")]
-        [SerializeField] private bool lockVerticalLook = true;
-        [Tooltip("How far the camera looks down below the horizon (degrees) while the vertical look is locked.")]
-        [SerializeField, Range(0f, 60f)] private float fixedLookDown = 20f;
+
+        [Header("Look")]
+        [Tooltip("Left/right look speed at sensitivity 1 (degrees per 20 px of mouse movement). The game's mouse " +
+                 "sensitivity setting multiplies it.")]
+        [UnityEngine.Serialization.FormerlySerializedAs("baseMouseSensitivity")]
+        [SerializeField] private float horizontalSensitivity = 2f;
+        [Tooltip("Up/down look speed at sensitivity 1 (same units).")]
+        [SerializeField] private float verticalSensitivity = 2f;
+        [Tooltip("Camera angle at the start (degrees, negative = looking down).")]
+        [SerializeField, Range(-60f, 20f)] private float defaultPitch = -20f;
+        [Tooltip("Highest the player can look (degrees above the horizon).")]
+        [SerializeField, Range(-30f, 60f)] private float maxLookUp = 10f;
+        [Tooltip("Lowest the player can look (degrees below the horizon). Keeps the view off the trimmer's underside and " +
+                 "the player's own feet.")]
+        [SerializeField, Range(0f, 89f)] private float maxLookDown = 35f;
+        [Tooltip("On: mouse up/down does nothing; the camera stays at Default Pitch. Left/right stays free (360).")]
+        [SerializeField] private bool lockVerticalLook;
 
         public bool VerticalLookLocked => lockVerticalLook;
-        /// <summary>Downward look angle in degrees while locked (changeable at runtime, e.g. by tests or settings).</summary>
-        public float FixedLookDown { get => fixedLookDown; set => fixedLookDown = Mathf.Clamp(value, 0f, 60f); }
-        /// <summary>The locked pitch (negative = down).</summary>
-        public float LockedPitch => -fixedLookDown;
+        /// <summary>Starting pitch (negative = down); also the locked pitch.</summary>
+        public float DefaultPitch { get => defaultPitch; set => defaultPitch = Mathf.Clamp(value, -maxLookDown, maxLookUp); }
+        public float LockedPitch => defaultPitch;
+        /// <summary>The look pitch the rig holds (negative = down). Use this during Update: the controller writes its own
+        /// unlimited value into the camera then, which the rig replaces in LateUpdate.</summary>
+        public float LookPitch => lockVerticalLook ? defaultPitch : _pitchInit ? _pitch : defaultPitch;
+        public float MaxLookUp { get => maxLookUp; set => maxLookUp = value; }
+        public float MaxLookDown { get => maxLookDown; set => maxLookDown = value; }
+
+        private float _pitch;
+        private bool _pitchInit;
 
         /// <summary>Set once by the game: true while menus are open (movement and look paused).</summary>
         public static Func<bool> InputBlocked;
@@ -66,8 +80,8 @@ namespace PlayShift.FirstPerson
         public Transform ToolAnchor => toolAnchor;
         public bool HasController => _ext != null;
         public float Yaw => transform.eulerAngles.y;
-        public float MinPitch => minPitch;
-        public float MaxPitch => maxPitch;
+        public float MinPitch => -maxLookDown;
+        public float MaxPitch => maxLookUp;
 
         /// <summary>Horizontal velocity (m/s) the character controller moved with last frame.</summary>
         public Vector3 Velocity { get; private set; }
@@ -80,8 +94,8 @@ namespace PlayShift.FirstPerson
             get => playerCamera != null ? -Mathf.DeltaAngle(0f, playerCamera.transform.localEulerAngles.x) : 0f;
             set
             {
-                float p = Mathf.Clamp(value, minPitch, maxPitch);
-                if (_ext != null) _fPitch.SetValue(_ext, -p);
+                float p = Mathf.Clamp(value, -maxLookDown, maxLookUp);
+                _pitch = p; _pitchInit = true;
                 if (playerCamera != null) playerCamera.transform.localRotation = Quaternion.Euler(-p, 0f, 0f);
             }
         }
@@ -160,7 +174,7 @@ namespace PlayShift.FirstPerson
                 _fNormalFov.SetValue(_ext, fov);
                 _fSprintFov.SetValue(_ext, fov); // no sprint zoom
             }
-            float sens = baseMouseSensitivity * MouseSensitivityScale;
+            float sens = horizontalSensitivity * MouseSensitivityScale;
             if (sens != _sentSens)
             {
                 _sentSens = sens;
@@ -188,20 +202,36 @@ namespace PlayShift.FirstPerson
 
         private void LateUpdate()
         {
-            // Fixed vertical look: after every Update (the controller's mouse look included) and before anything that
-            // places a tool or renders, the camera is put back at the fixed angle, so mouse Y never shows. Roll is zeroed
-            // too. Also applies while scripted control (captures) drives the camera.
-            if (lockVerticalLook)
+            // Up/down look is owned here (the controller only turns left/right): after every Update and before anything
+            // places a tool or renders, the camera pitch is set from our own value, moved by this frame's mouse Y at the
+            // vertical sensitivity and held inside the look limits. No smoothing (no input delay), no roll.
+            // (The controller's own pitch value is left alone: writing it via reflection would allocate every frame,
+            // and whatever it holds is overwritten here before anything uses or draws the camera.)
+            if (playerCamera == null) return;
+            if (!_pitchInit) { _pitch = defaultPitch; _pitchInit = true; }
+            if (lockVerticalLook) _pitch = defaultPitch;
+            else if (Suspended || _ext == null || !_ext.enabled)
             {
-                // (The controller's own pitch value is left alone: writing it via reflection would allocate every frame,
-                // and whatever it holds is overwritten here before anything uses or draws the camera.)
-                if (playerCamera != null) playerCamera.transform.localRotation = Quaternion.Euler(fixedLookDown, 0f, 0f);
-                return;
+                // Scripted control (captures) or the game's built-in movement turned the camera itself: keep it in limits.
+                bool blocked = InputBlocked != null && InputBlocked();
+                if (Suspended || _ext == null || !blocked) _pitch = Pitch;
             }
-            // Game look limits (the controller allows +-90): keeps held tools reachable on screen.
-            if (_ext == null || !_ext.enabled) return;
-            float p = Pitch;
-            if (p < minPitch - 0.01f || p > maxPitch + 0.01f) Pitch = p;
+            else _pitch += ReadMouseY() * 0.05f * verticalSensitivity * MouseSensitivityScale;
+            _pitch = Mathf.Clamp(_pitch, -maxLookDown, maxLookUp);
+            playerCamera.transform.localRotation = Quaternion.Euler(-_pitch, 0f, 0f);
+        }
+
+        /// <summary>This frame's vertical mouse movement in pixels (up = positive), same source the controller uses.</summary>
+        private static float ReadMouseY()
+        {
+#if ENABLE_INPUT_SYSTEM
+            var mouse = UnityEngine.InputSystem.Mouse.current;
+            return mouse != null ? mouse.delta.ReadValue().y : 0f;
+#elif ENABLE_LEGACY_INPUT_MANAGER
+            return Input.GetAxisRaw("Mouse Y") * 20f;
+#else
+            return 0f;
+#endif
         }
 
         private void OnDisable()

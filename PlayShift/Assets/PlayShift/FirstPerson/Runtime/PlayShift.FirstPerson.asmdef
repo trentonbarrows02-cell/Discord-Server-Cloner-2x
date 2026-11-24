@@ -1,7 +1,9 @@
 {
     "name": "PlayShift.FirstPerson",
     "rootNamespace": "PlayShift.FirstPerson",
-    "references": [],
+    "references": [
+        "Unity.InputSystem"
+    ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,

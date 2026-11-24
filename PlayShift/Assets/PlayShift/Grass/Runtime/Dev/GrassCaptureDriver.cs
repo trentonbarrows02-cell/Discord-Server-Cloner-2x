@@ -550,32 +550,36 @@ namespace PlayShift.Grass.Dev
             _input.Look = Vector2.zero; _probeActive = false;
             _report.AppendLine($"  fast turn 360 deg/s: {ProbeSummary()}");
 
-            // 3) Looking around while cutting and walking: the head must stay on the ground at the same spot ahead
-            //    (it follows yaw only) and cut exactly under the blades at every pitch. Absolute pitch targets.
+            // 3) Looking around while cutting: at the default angle and at both look limits (plus a flick past each limit,
+            //    which must be held), the head must stay on the ground, level, at cutting height, fully in view, and cut
+            //    exactly under the blades while walking, strafing and turning.
             var fpc = _probeVm.GetComponent<FirstPersonController>();
             var rig = fpc != null ? fpc.Rig : null;
             yield return FaceFieldCentre(manager);
-            if (rig != null && rig.VerticalLookLocked)
             {
-                // 3) Fixed downward camera: try each candidate angle. Mouse Y must do nothing; the head must stay at the
-                //    same place on screen with its whole blade circle in view, on the ground, cutting exactly under the
-                //    blades while walking forward, strafing and turning.
-                float keep = rig.FixedLookDown;
-                foreach (float angle in new[] { 15f, 20f, 25f, 30f })
+                float up = rig != null ? rig.MaxLookUp : 15f, down = rig != null ? -rig.MaxLookDown : -30f;
+                float def = rig != null ? rig.DefaultPitch : -18f;
+                if (rig != null)
+                    _report.AppendLine($"  look limits: default {def:F0} deg, up to +{up:F0}, down to {down:F0}; vertical look locked: {rig.VerticalLookLocked}");
+                foreach (var (label, target, shot) in new[]
+                         {
+                             ("default angle", def, "14_look_default"), ("max up", up, "15_look_max_up"), ("max down", down, "15b_look_max_down"),
+                         })
                 {
-                    rig.FixedLookDown = angle;
-                    _input.Look = new Vector2(0f, 25f); // a big mouse-up flick: must be ignored
+                    for (int i = 0; i < 10; i++) { _input.Look = new Vector2(0f, (target - fpc.Pitch) / (10 - i)); yield return null; }
+                    // A further flick past the limit: the camera must stay at the limit.
+                    _input.Look = new Vector2(0f, target > def ? 30f : target < def ? -30f : 0f);
                     yield return null;
                     _input.Look = Vector2.zero;
                     yield return null;
-                    float camDown = Camera.main != null ? Mathf.DeltaAngle(0f, Camera.main.transform.eulerAngles.x) : float.NaN;
+                    float camPitch = Camera.main != null ? -Mathf.DeltaAngle(0f, Camera.main.transform.eulerAngles.x) : float.NaN;
                     long before = f.Remaining;
                     ResetProbe(); _probeActive = true;
                     for (int i = 0; i < 40; i++) { _input.Move = new Vector2(0f, 0.6f); yield return null; }
                     _input.Move = Vector2.zero; _probeActive = false;
-                    _report.AppendLine($"  camera {angle:F0} deg down (after a mouse-up flick the camera is at {camDown:F1} deg): walking: cut " +
-                                       $"{before - f.Remaining:N0} units; {ProbeSummary()}; {ScreenSummary()}");
-                    yield return Shot($"14_camera_{angle:F0}deg");
+                    _report.AppendLine($"  {label} (camera at {camPitch:F1} deg after a flick past it): walking: cut {before - f.Remaining:N0} units; " +
+                                       $"{ProbeSummary()}; {ScreenSummary()}");
+                    yield return Shot(shot);
                     ResetProbe(); _probeActive = true;
                     for (int i = 0; i < 40; i++) { _input.Move = new Vector2(1f, 0f); yield return null; }
                     _input.Move = Vector2.zero; _probeActive = false;
@@ -586,28 +590,50 @@ namespace PlayShift.Grass.Dev
                     _report.AppendLine($"    walking + turning 120 deg/s: {ProbeSummary()}; {ScreenSummary()}");
                     yield return FaceFieldCentre(manager);
                 }
-                rig.FixedLookDown = keep;
-                yield return null;
-            }
-            else
-            {
-                foreach (var (label, target, shot) in new[]
-                         {
-                             ("straight ahead", 0f, "14_cut_looking_straight_ahead"), ("slightly up", 15f, "15_cut_looking_slightly_up"),
-                             ("slightly down", -15f, "15b_cut_looking_slightly_down"), ("down 30", -30f, null),
-                         })
-                {
-                    for (int i = 0; i < 10; i++) { _input.Look = new Vector2(0f, (target - fpc.Pitch) / (10 - i)); yield return null; }
-                    _input.Look = Vector2.zero;
-                    long before = f.Remaining;
-                    ResetProbe(); _probeActive = true;
-                    for (int i = 0; i < 40; i++) { _input.Move = new Vector2(0f, 0.6f); yield return null; }
-                    _input.Move = Vector2.zero; _probeActive = false;
-                    _report.AppendLine($"  looking {label} (pitch {fpc.Pitch:F0} deg), walking: cut {before - f.Remaining:N0} units; {ProbeSummary()}; {ScreenSummary()}");
-                    if (shot != null) yield return Shot(shot);
-                }
-                for (int i = 0; i < 10; i++) { _input.Look = new Vector2(0f, (-18f - fpc.Pitch) / (10 - i)); yield return null; }
+                for (int i = 0; i < 10; i++) { _input.Look = new Vector2(0f, (def - fpc.Pitch) / (10 - i)); yield return null; }
                 _input.Look = Vector2.zero;
+            }
+
+            // 3b) Blade rotor: spin slowly, then at full speed. The rotor must turn rigidly about the head's axis: no
+            //     tilt against the fixed housing, no movement of its centre, even angle steps; shots of the slow spin.
+            {
+                var tb = _probeVm.GetComponent<TrimmerBlades>();
+                var rotor = tb != null && tb.Spinners.Count > 0 ? tb.Spinners[0] : null;
+                if (rotor != null && rotor.parent != null)
+                {
+                    var housing = rotor.parent;
+                    var mf = rotor.GetComponent<MeshFilter>();
+                    if (mf != null && mf.sharedMesh != null)
+                    {
+                        var b = mf.sharedMesh.bounds;
+                        _report.AppendLine($"  rotor '{rotor.name}' (child of '{housing.name}'): mesh extents x {b.extents.x:F4} / z {b.extents.z:F4} " +
+                                           $"(equal = blades the same length), centre offset {new Vector2(b.center.x, b.center.z).magnitude * 1000f:F2} mm, " +
+                                           $"local scale {rotor.localScale.x:F3}/{rotor.localScale.y:F3}/{rotor.localScale.z:F3}");
+                    }
+                    foreach (bool slow in new[] { true, false })
+                    {
+                        tb.SlowSpinPreview = slow;
+                        _input.TrimmerHeld = true;
+                        yield return Frames(slow ? 45 : 60);
+                        Vector3 pos0 = rotor.localPosition;
+                        float maxTilt = 0f, maxDrift = 0f, minStep = float.MaxValue, maxStep = 0f, last = tb.RotorAngle;
+                        int n = slow ? 90 : 60;
+                        for (int i = 0; i < n; i++)
+                        {
+                            yield return null;
+                            maxTilt = Mathf.Max(maxTilt, Vector3.Angle(rotor.up, housing.up));
+                            maxDrift = Mathf.Max(maxDrift, (rotor.localPosition - pos0).magnitude * housing.lossyScale.x);
+                            float step = Mathf.Repeat(tb.RotorAngle - last, 360f);
+                            last = tb.RotorAngle;
+                            minStep = Mathf.Min(minStep, step); maxStep = Mathf.Max(maxStep, step);
+                            if (slow && i % 12 == 0 && i <= 36) yield return Shot($"19_rotor_slow_{i / 12}");
+                        }
+                        _report.AppendLine($"  rotor {(slow ? "slow check" : "full speed")}: tilt against the housing max {maxTilt:F3} deg, centre moved max " +
+                                           $"{maxDrift * 1000f:F2} mm, angle step per frame {minStep:F2}-{maxStep:F2} deg (steady = equal)");
+                    }
+                    tb.SlowSpinPreview = false;
+                }
+                else _report.AppendLine("  rotor: no spinning part found");
             }
 
             // 4) Walking backwards while cutting.

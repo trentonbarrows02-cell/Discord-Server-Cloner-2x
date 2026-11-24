@@ -60,9 +60,13 @@ namespace PlayShift.Grass
         [Tooltip("On: the cutting head sits under a fixed point of the screen (Head Viewport) on the ground, so it stays in " +
                  "the same place on screen at any fixed camera angle and on any screen shape. Off: Work Reach ahead.")]
         [SerializeField] private bool placeFromView = true;
-        [Tooltip("Where the centre of the cutting head sits on screen (0-1; x = left to right, y = bottom to top). " +
-                 "0.56, 0.3 = lower middle, a little right, with the whole head and blades in view.")]
+        [Tooltip("Trimmer position: where the centre of the cutting head sits on screen at the default camera angle " +
+                 "(0-1; x = left to right, y = bottom to top). 0.56, 0.3 = lower middle, a little right, whole head in view.")]
         [SerializeField] private Vector2 headViewport = new Vector2(0.56f, 0.3f);
+        [Tooltip("How much the head follows the camera's up/down look (0 = stays at the default-angle spot on the ground and " +
+                 "slides across the screen; 1 = stays at the same spot on screen). It always stays on the ground, level " +
+                 "with it, at the cutting height: looking up never lifts it and looking down never pushes it in.")]
+        [SerializeField, Range(0f, 1f)] private float pitchFollow = 0.5f;
         [Tooltip("Nearest and furthest the head works on the ground (metres ahead of the player).")]
         [SerializeField] private float minReach = 1.2f;
         [SerializeField] private float maxReach = 8f;
@@ -334,15 +338,16 @@ namespace PlayShift.Grass
             {
                 Ray ray = cam.ViewportPointToRay(new Vector3(headViewport.x, headViewport.y, 0f));
                 float planeY = feet.y + clearance;
-                if (ray.direction.y < -0.02f)
-                {
-                    Vector3 p = ray.origin + ray.direction * ((planeY - ray.origin.y) / ray.direction.y);
-                    Vector3 rel = p - feet;
-                    fwd = Vector3.Dot(rel, flatDir);
-                    sideOff = Vector3.Dot(rel, right);
-                }
-                else fwd = maxReach;
-                fwd = Mathf.Clamp(fwd, minReach, maxReach);
+                // The same screen point seen at the default camera angle (the ray turned about the camera's right axis
+                // by the difference), and at the current angle; the head works between the two (Pitch Follow).
+                var rigC = controller != null ? controller.Rig : null;
+                float defPitch = rigC != null ? rigC.DefaultPitch : (controller != null ? controller.Pitch : 0f);
+                float curPitch = rigC != null ? rigC.Pitch : (controller != null ? controller.Pitch : defPitch); // camera, after the rig set it
+                Vector3 dirDef = Quaternion.AngleAxis(curPitch - defPitch, cam.transform.right) * ray.direction;
+                GroundHit(ray.origin, dirDef, planeY, feet, flatDir, right, out float fDef, out float sDef);
+                GroundHit(ray.origin, ray.direction, planeY, feet, flatDir, right, out float fCur, out float sCur);
+                fwd = Mathf.Clamp(Mathf.Lerp(fDef, fCur, pitchFollow), minReach, maxReach);
+                sideOff = Mathf.Lerp(sDef, sCur, pitchFollow);
             }
             Vector3 head = feet + flatDir * (fwd - pullBack) + right * sideOff;
 
@@ -429,6 +434,25 @@ namespace PlayShift.Grass
                 float side = (i % 2 == 0 ? -1f : 1f) * extraHeadSpacing * (i / 2 + 1);
                 _extraRoots[i].SetPositionAndRotation(head + headRot * new Vector3(side, 0f, 0f), headRot);
             }
+        }
+
+        /// <summary>Where a line of sight meets the ground plane, as (forward, sideways) metres in the ToolRoot frame.
+        /// Lines that never come down to the ground give the far limit.</summary>
+        private void GroundHit(Vector3 origin, Vector3 dir, float planeY, Vector3 feet, Vector3 flatDir, Vector3 right,
+                               out float fwd, out float side)
+        {
+            if (dir.y < -0.02f)
+            {
+                Vector3 rel = origin + dir * ((planeY - origin.y) / dir.y) - feet;
+                fwd = Vector3.Dot(rel, flatDir);
+                side = Vector3.Dot(rel, right);
+                if (fwd <= maxReach) return;
+                float k = maxReach / Mathf.Max(0.01f, fwd); // hold the same bearing at the far limit
+                fwd = maxReach; side *= k;
+                return;
+            }
+            fwd = maxReach;
+            side = 0f;
         }
 
         /// <summary>

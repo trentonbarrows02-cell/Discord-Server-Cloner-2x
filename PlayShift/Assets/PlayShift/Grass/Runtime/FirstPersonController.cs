@@ -99,8 +99,8 @@ namespace PlayShift.Grass
             // Start looking down at the trimmer (the controller starts level).
             if (UsesExternalController)
             {
-                bool portrait = playerCamera != null && playerCamera.aspect < 1f;
-                _pitch = portrait ? portraitStartPitch : startPitch;
+                // The rig owns the look: start at its Default Pitch (set in the Inspector).
+                _pitch = rig.DefaultPitch;
                 rig.Pitch = _pitch;
             }
         }
@@ -122,7 +122,8 @@ namespace PlayShift.Grass
             if (input.Look.y != 0f) _pitchTouched = true;
             if (!_pitchTouched && !UsesExternalController) _pitch = portrait ? portraitStartPitch : startPitch; // follows orientation until the player looks
             _yaw += input.Look.x;
-            _pitch = Mathf.Clamp(_pitch + input.Look.y, minPitch, maxPitch);
+            _pitch = rig != null ? Mathf.Clamp(_pitch + input.Look.y, rig.MinPitch, rig.MaxPitch)
+                                 : Mathf.Clamp(_pitch + input.Look.y, minPitch, maxPitch);
             if (rig != null && rig.VerticalLookLocked) _pitch = rig.LockedPitch; // fixed vertical look: mouse Y ignored
             transform.rotation = Quaternion.Euler(0f, _yaw, 0f);
             if (playerCamera != null) playerCamera.transform.localRotation = Quaternion.Euler(-_pitch, 0f, 0f);
@@ -156,7 +157,7 @@ namespace PlayShift.Grass
             if (scripted != _scripted)
             {
                 // Hand the view over so neither side snaps.
-                if (scripted) { _yaw = rig.Yaw; _pitch = rig.VerticalLookLocked ? rig.LockedPitch : rig.Pitch; }
+                if (scripted) { _yaw = rig.Yaw; _pitch = rig.LookPitch; }
                 else rig.Pitch = _pitch;
                 _scripted = scripted;
             }
@@ -178,7 +179,7 @@ namespace PlayShift.Grass
             _velocity = rig.Velocity;
             Speed = rig.Speed;
             _yaw = rig.Yaw;
-            _pitch = rig.VerticalLookLocked ? rig.LockedPitch : rig.Pitch;
+            _pitch = rig.LookPitch;
             return true;
         }
 

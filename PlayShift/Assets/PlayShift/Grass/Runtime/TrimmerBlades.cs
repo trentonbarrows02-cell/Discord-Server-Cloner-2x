@@ -30,6 +30,22 @@ namespace PlayShift.Grass
                  "blades always show, with a faint blur disc under them (the look we want).")]
         [Range(0f, 1.01f)] [SerializeField] private float hideBladesAbove = 1.01f;
 
+        [Header("Rotor")]
+        [Tooltip("How quickly the spin speed follows load changes (1/s). Keeps the rotation even while cutting thick or " +
+                 "thin grass instead of jumping frame to frame.")]
+        [SerializeField] private float speedSmoothing = 6f;
+        [Tooltip("Check the rotor by eye: spins at Slow Spin Scale of the normal speed (blades stay sharp, no blur).")]
+        [SerializeField] private bool slowSpinPreview;
+        [Range(0.01f, 0.5f)] [SerializeField] private float slowSpinScale = 0.06f;
+
+        private readonly List<Quaternion> _baseRotations = new List<Quaternion>();
+        private float _angle, _degPerSec;
+
+        /// <summary>Spin the rotor slowly to check it by eye (also used by the capture test).</summary>
+        public bool SlowSpinPreview { get => slowSpinPreview; set => slowSpinPreview = value; }
+        /// <summary>Current rotor angle in degrees (0-360), the same for every head.</summary>
+        public float RotorAngle => _angle;
+
         private readonly List<Renderer> _blurRings = new List<Renderer>();
         private readonly List<Renderer> _bladeRenderers = new List<Renderer>();
         private bool _bladesShown = true;
@@ -60,6 +76,10 @@ namespace PlayShift.Grass
         {
             spinners.Clear();
             spinners.AddRange(heads);
+            // Each rotor's rest rotation: the spin is applied as rest * (angle about local up), set fresh every frame,
+            // so it is one rigid turn about one fixed axis with no build-up of rounding error (no slow tilt or drift).
+            _baseRotations.Clear();
+            foreach (var s in spinners) _baseRotations.Add(s != null ? s.localRotation : Quaternion.identity);
             foreach (var r in _blurRings) if (r != null) Destroy(r.gameObject);
             _blurRings.Clear();
             SetBladesShown(true);
@@ -87,9 +107,18 @@ namespace PlayShift.Grass
             Rpm01 = Mathf.Lerp(Rpm01, target, 1f - Mathf.Exp(-dt / Mathf.Max(0.01f, tau)));
             if (!On && Rpm01 < 0.01f) Rpm01 = 0f;
 
-            float degPerSec = Rpm01 * maxRps * SpeedMultiplier * 360f * (1f - 0.25f * Load);
-            foreach (var s in spinners)
-                if (s != null) s.Rotate(0f, degPerSec * dt, 0f, Space.Self);
+            float targetDeg = Rpm01 * maxRps * SpeedMultiplier * 360f * (1f - 0.25f * Load) * (slowSpinPreview ? slowSpinScale : 1f);
+            _degPerSec = Mathf.Lerp(_degPerSec, targetDeg, 1f - Mathf.Exp(-speedSmoothing * dt));
+            float degPerSec = _degPerSec;
+            _angle = Mathf.Repeat(_angle + degPerSec * dt, 360f);
+            var spin = Quaternion.Euler(0f, _angle, 0f);
+            for (int i = 0; i < spinners.Count; i++)
+            {
+                var s = spinners[i];
+                if (s == null) continue;
+                if (i >= _baseRotations.Count) _baseRotations.Add(s.localRotation);
+                s.localRotation = _baseRotations[i] * spin;
+            }
 
             Vibration = Rpm01 * (0.35f + 0.65f * Load);
 
@@ -100,6 +129,7 @@ namespace PlayShift.Grass
                 if (_mpb == null) _mpb = new MaterialPropertyBlock();
                 // Blur builds up with speed and is full by the time the solid blades are hidden.
                 float a = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.15f, Mathf.Min(1f, hideBladesAbove), Rpm01)) * blurOpacity;
+                if (slowSpinPreview) a = 0f; // slow check: sharp blades only
                 foreach (var r in _blurRings)
                 {
                     if (r == null) continue;
