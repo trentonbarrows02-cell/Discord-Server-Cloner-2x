@@ -7,7 +7,7 @@ You are continuing work started in a cloud session (no Unity available there). R
   (The repo's root is an unrelated Discord tool; ignore it. Everything for the game is in `PlayShift/`.)
 - `PlayShift/` is a complete Unity project (Built-in render pipeline by default; URP shader also provided).
   `Packages/manifest.json` pins glTFast 6.10.1 (for the trimmer `.glb`), TextMeshPro 3.0.9, uGUI 1.0.0.
-- On this PC: clone to **`C:\PlayShiftGrass`** (outside OneDrive — Unity's Library folder breaks OneDrive sync).
+- On this PC: clone to **`C:\PlayShiftGames\ClearTheGrass`** (outside OneDrive — Unity's Library folder breaks OneDrive sync).
 - **Never touch** the folders `PlayShift-Launcher` or `PlayShift_Home_Dashboard_Launcher` (the owner's launcher /
   TikFinity integration). The game must not modify or break them.
 
@@ -68,7 +68,7 @@ Owner's non-negotiables (from their brief):
   untested. Expect first-open issues — that is your first job.
 
 ## Your tasks, in order
-1. Follow `PlayShift/SETUP_ON_PC.md`: find Unity, clone to `C:\PlayShiftGrass`, run
+1. Follow `PlayShift/SETUP_ON_PC.md`: find Unity, clone to `C:\PlayShiftGames\ClearTheGrass`, run
    `-executeMethod PlayShift.Grass.Editor.FirstOpenSetup.BuildForBatch` with a log file, fix every compile /
    shader / package / import error until the log says `BATCH SETUP OK`, commit + push fixes to the branch.
 2. Open the project in the Unity editor with the test scene, enter Play mode, and capture screenshots of the Game
