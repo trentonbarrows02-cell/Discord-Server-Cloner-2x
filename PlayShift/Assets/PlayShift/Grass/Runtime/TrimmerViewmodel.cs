@@ -303,7 +303,7 @@ namespace PlayShift.Grass
                 for (int i = 0; i < _extraRoots.Count; i++) _extraRoots[i].localScale = Vector3.one * scale;
             }
             float clearance = _headLift * scale + cuttingHeight;
-            if (cutter != null) cutter.HeadClearance = clearance;
+            if (cutter != null) { cutter.HeadClearance = clearance; cutter.HeadDepth = _headLift * scale; }
 
             if (groundFollow)
             {
@@ -461,6 +461,7 @@ namespace PlayShift.Grass
                 grip += Vector3.up * (Mathf.Sin(_walkPhase * walkBobPerMetre * 2f * Mathf.PI) * walkBob * k01);
             }
             Vector3 toGrip = grip - head;
+            if (cutter != null) cutter.ShaftDirection = toGrip.sqrMagnitude > 1e-4f ? toGrip.normalized : Vector3.zero;
             Vector3 toGripFlat = new Vector3(toGrip.x, 0f, toGrip.z);
             float swing = toGripFlat.sqrMagnitude > 1e-4f ? -Vector3.SignedAngle(-flatDir, toGripFlat, Vector3.up) : handleSwing;
             swing = Mathf.Clamp(swing, 0f, 60f);

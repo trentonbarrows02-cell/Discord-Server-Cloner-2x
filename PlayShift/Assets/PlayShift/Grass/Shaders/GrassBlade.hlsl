@@ -57,6 +57,7 @@ float4 _HeightClamp;                // x = min, y = max (metres)
 float _GrassTime;                   // same clock the logic stamps cut times with
 float _CutAnim;                     // seconds for a cut blade to shorten
 float4 _Cutters[PLAYSHIFT_MAX_CUTTERS]; // xyz = head centre (world), w = radius
+float4 _CutterShape[PLAYSHIFT_MAX_CUTTERS]; // x = world height of the head's underside, yzw = shaft direction (unit)
 float _CutterCount;
 float _Spin;                        // 0..1 blade speed
 
@@ -249,10 +250,45 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
     }
     push *= 1.0 - ease;
 
+    // Solid tool: grass never passes through the cutting head or the shaft. Blades under the blade disc (out to the tips
+    // plus a narrow edge) are pressed down below its underside and lean outward; blades along the low end of the shaft
+    // stay below it. Per blade in the vertex shader (shadows and depth included), stateless: the grass stands back up
+    // as soon as the head moves on, and nothing is counted as cut. A lifted head clears the grass and presses nothing.
+    float hCap = 1e4;
+    [unroll] for (int c2 = 0; c2 < PLAYSHIFT_MAX_CUTTERS; c2++)
+    {
+        if (c2 >= (int)_CutterCount || _CutterShape[c2].x < -999.0) continue;
+        float2 away2 = root.xz - _Cutters[c2].xz;
+        float d2 = length(away2);
+        float under = 1.0 - smoothstep(_Cutters[c2].w, _Cutters[c2].w + 0.08, d2);
+        float below = max(0.0, _CutterShape[c2].x - root.y - 0.008);
+        if (under > 0.0)
+        {
+            hCap = min(hCap, lerp(1e4, below, under));
+            push += (d2 > 1e-3 ? away2 / d2 : bdir) * under * 0.9;
+        }
+        float3 sd = _CutterShape[c2].yzw;
+        float lh = length(sd.xz);
+        if (lh > 1e-3)
+        {
+            float2 u = sd.xz / lh;
+            float along = dot(away2, u);
+            if (along > 0.0 && along < 1.6)
+            {
+                float perp = abs(dot(away2, float2(-u.y, u.x)));
+                float near = 1.0 - smoothstep(0.04, 0.1, perp);
+                float shaftY = _Cutters[c2].y + along * sd.y / lh - root.y - 0.045; // shaft underside above the root
+                if (near > 0.0) hCap = min(hCap, lerp(1e4, max(0.0, shaftY), near));
+            }
+        }
+    }
+
     float2 b = bdir * arc + windDir * windArc + push;
     // Struck blades kick outward for an instant, then settle as stubble.
     b += kickDir * sin(k * 3.14159) * 0.9 * step(0.0, cutAge) * step(cutAge, _CutAnim);
 
+    // Pressed blades: no taller than the tool above them allows (the lean above bends them outward).
+    h = min(h, hCap);
     float bl = length(b);
     float theta = min(bl, 1.45);
     float2 dir = bl > 1e-4 ? b / bl : bdir;

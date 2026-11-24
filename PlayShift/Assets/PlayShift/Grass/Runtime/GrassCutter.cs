@@ -10,6 +10,10 @@ namespace PlayShift.Grass
         public Vector3 Position;
         public float Radius;
         public float Spin;
+        /// <summary>World height of the lowest point of the head (blade disc underside).</summary>
+        public float BottomY;
+        /// <summary>Unit vector from the head toward the handle (the shaft), world space.</summary>
+        public Vector3 Shaft;
     }
 
     /// <summary>
@@ -88,6 +92,10 @@ namespace PlayShift.Grass
         /// blades are inside the grass: pivot height above the lawn minus this must not exceed the grass height.
         /// </summary>
         public float HeadClearance { get; set; }
+        /// <summary>Distance from a head's pivot down to its lowest point (set by the viewmodel).</summary>
+        public float HeadDepth { get; set; }
+        /// <summary>Direction from the main head up the shaft to the handle (set by the viewmodel; zero = none).</summary>
+        public Vector3 ShaftDirection { get; set; }
         public float CutRadius => cutRadius * (Manager != null ? Manager.Modifiers.RadiusMultiplier : 1f);
 
         /// <summary>Smoothed 0..1 "how hard the blades are working" (thick, tall grass = high). Drives vibration, resistance and motor strain.</summary>
@@ -122,7 +130,8 @@ namespace PlayShift.Grass
             var list = (List<CutterHeadState>)ActiveHeads;
             foreach (var h in heads)
                 if (h != null && h.gameObject.activeInHierarchy)
-                    list.Add(new CutterHeadState { Position = h.position, Radius = radius, Spin = spin });
+                    list.Add(new CutterHeadState { Position = h.position, Radius = radius, Spin = spin,
+                                                   BottomY = h.position.y - HeadDepth, Shaft = list.Count == 0 ? ShaftDirection : Vector3.zero });
 
             if (m == null || m.Progression == null || !m.Progression.IsPlaying) { ResetSweep(); DecayLoad(0f); return; }
             if (_lastLevel != m.Progression.CurrentLevelIndex)

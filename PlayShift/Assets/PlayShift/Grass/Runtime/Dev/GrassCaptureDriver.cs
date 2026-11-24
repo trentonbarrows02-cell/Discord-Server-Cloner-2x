@@ -1004,6 +1004,97 @@ namespace PlayShift.Grass.Dev
                 _report.AppendLine($"  title screen over saved cuts: grass left before {remainingBefore:N0}, after {f.Remaining:N0} (must be equal)");
                 yield return View(c + new Vector3(0f, 60f, 0f), down, true, size.y * 0.52f, 60f, "G7_after_menu_whole_lawn_normal");
             }
+            // Grass through the trimmer: are the tool's materials opaque, depth-writing, in the opaque queue? Then the head
+            // close up in tall grass, trimmer off and on, with and without the grass being pressed by the tool.
+            {
+                _report.AppendLine("  trimmer materials (shader, queue, ZWrite, blend src/dst):");
+                var seen = new System.Collections.Generic.HashSet<Material>();
+                Vector3 headW = vm.HeadPosition;
+                foreach (var r in FindObjectsByType<Renderer>(FindObjectsSortMode.None))
+                {
+                    if (!r.enabled || r.bounds.SqrDistance(headW) > 2.5f * 2.5f || r.bounds.size.magnitude > 20f) continue;
+                    foreach (var mat in r.sharedMaterials)
+                    {
+                        if (mat == null || !seen.Add(mat)) continue;
+                        string zw = mat.HasProperty("_ZWrite") ? mat.GetFloat("_ZWrite").ToString("F0") : "-";
+                        string bl = mat.HasProperty("_SrcBlend") ? $"{mat.GetFloat("_SrcBlend"):F0}/{mat.GetFloat("_DstBlend"):F0}" : "-";
+                        string sm = mat.HasProperty("_Mode") ? $", mode {mat.GetFloat("_Mode"):F0}" : "";
+                        _report.AppendLine($"    {r.name}: '{mat.name}' {mat.shader.name}, queue {mat.renderQueue}, ZWrite {zw}, blend {bl}{sm}, keywords [{string.Join(" ", mat.shaderKeywords)}]");
+                    }
+                }
+                foreach (int lv in new[] { 1, 4 })
+                {
+                    manager.StartLevel(lv);
+                    yield return Frames(5);
+                    f = manager.Field;
+                    yield return Go(c + new Vector3(10f, 0f, 10f), 30f);
+                    yield return Frames(10);
+                    Vector3 hp = vm.HeadPosition;
+                    Vector3 fwdF = Quaternion.Euler(0f, 30f, 0f) * Vector3.forward;
+                    Vector3 rightF = Quaternion.Euler(0f, 30f, 0f) * Vector3.right;
+                    Vector3 camP = hp - fwdF * 1.1f - rightF * 0.5f + Vector3.up * (lv == 1 ? 0.55f : 1.3f);
+                    var rot = Quaternion.LookRotation(hp + Vector3.up * 0.05f - camP);
+                    foreach (bool press in new[] { false, true })
+                    {
+                        GrassFieldRenderer.DebugNoToolPress = !press;
+                        _input.TrimmerHeld = false;
+                        yield return Frames(8);
+                        yield return View(camP, rot, false, 0f, 50f, $"G10_level{lv}_trimmer_off_{(press ? "after" : "before")}");
+                        long before = f.Remaining;
+                        _input.TrimmerHeld = true;
+                        yield return Frames(4);
+                        yield return View(camP, rot, false, 0f, 50f, $"G10_level{lv}_trimmer_on_{(press ? "after" : "before")}");
+                        _input.TrimmerHeld = false;
+                        yield return Frames(8);
+                        if (press) _report.AppendLine($"  level {lv}: trimmer on while standing cut {before - f.Remaining:N0} units");
+                        manager.StartLevel(lv); // fresh grass for the next shot
+                        yield return Frames(5);
+                        f = manager.Field;
+                    }
+                    GrassFieldRenderer.DebugNoToolPress = false;
+                    // Not cutting, moving: the counter must not change.
+                    long rem = f.Remaining;
+                    for (int i = 0; i < 40; i++) { _input.Move = new Vector2(0f, 0.6f); yield return null; }
+                    _input.Move = Vector2.zero;
+                    _report.AppendLine($"  level {lv}: walking 40 frames with the trimmer off changed the counter by {rem - f.Remaining} (must be 0)");
+                }
+                manager.StartLevel(1);
+                yield return Frames(5);
+            }
+
+            // Counter: text rebuilds per second while cutting at 30-240 FPS (should be ~20, not one per frame), and the
+            // shown value equals the exact count after release and after gifts.
+            {
+                var hud = FindAnyObjectByType<PlayShift.Grass.GrassHud>();
+                f = manager.Field;
+                yield return Go(c + new Vector3(-15f, 0f, -15f), 0f);
+                foreach (int fps in new[] { 30, 60, 144, 240 })
+                {
+                    Time.captureFramerate = fps;
+                    _input.TrimmerHeld = true;
+                    yield return Frames(6);
+                    int u0 = PlayShift.Grass.GrassHud.CounterTextUpdates, frames = 0;
+                    var sw = Stopwatch.StartNew();
+                    while (sw.Elapsed.TotalSeconds < 1.5) { _input.Move = new Vector2(0.3f, 0.6f); _input.Look = new Vector2(60f / fps, 0f); frames++; yield return null; }
+                    double secs = sw.Elapsed.TotalSeconds;
+                    _input.Move = Vector2.zero; _input.Look = Vector2.zero;
+                    int ups = PlayShift.Grass.GrassHud.CounterTextUpdates - u0;
+                    if (fps == 144) yield return Shot("G11_counter_while_cutting");
+                    _input.TrimmerHeld = false;
+                    var sw2 = Stopwatch.StartNew();
+                    while (sw2.Elapsed.TotalSeconds < 0.4) yield return null;
+                    _report.AppendLine($"  counter at {fps} fps: {frames / secs:F0} frames/s, {ups / secs:F1} text updates/s while cutting; after release shows " +
+                                       $"{(hud != null ? hud.ShownRemaining : -1):N0}, exact {f.Remaining:N0}");
+                }
+                Time.captureFramerate = 60;
+                long r = manager.RemoveGrass(50000);
+                var sw3 = Stopwatch.StartNew();
+                while (sw3.Elapsed.TotalSeconds < 0.6) yield return null;
+                _report.AppendLine($"  counter after a 50,000 removal gift: shows {(hud != null ? hud.ShownRemaining : -1):N0}, exact {f.Remaining:N0}");
+                manager.AddGrass(20000);
+                yield return Frames(2);
+                _report.AppendLine($"  counter right after a 20,000 regrow gift: shows {(hud != null ? hud.ShownRemaining : -1):N0}, exact {f.Remaining:N0}");
+            }
             Time.captureFramerate = 0;
             Step("grid diagnostics done");
         }

@@ -100,6 +100,10 @@ namespace PlayShift.Grass
         private MaterialPropertyBlock _mpb;
         private readonly Plane[] _frustum = new Plane[6];
         private readonly Vector4[] _cutterData = new Vector4[MaxCutters];
+        private readonly Vector4[] _cutterShape = new Vector4[MaxCutters];
+        private static readonly int CutterShapeId = Shader.PropertyToID("_CutterShape");
+        /// <summary>Diagnostics: grass is not pressed under / away from the trimmer (to see what it fixes).</summary>
+        public static bool DebugNoToolPress;
         private int _builtCellsX, _builtCellsZ, _builtBladesPerM2 = -1;
         private float _builtSizeX, _builtSizeZ, _builtChunkMeters;
         private int _seenResetCount = -1;
@@ -387,10 +391,12 @@ namespace PlayShift.Grass
             for (int i = 0; i < heads.Count && n < MaxCutters; i++)
             {
                 var h = heads[i];
+                _cutterShape[n] = DebugNoToolPress ? new Vector4(-1000f, 0f, 0f, 0f) : new Vector4(h.BottomY, h.Shaft.x, h.Shaft.y, h.Shaft.z);
                 _cutterData[n++] = new Vector4(h.Position.x, h.Position.y, h.Position.z, h.Radius);
                 spin = Mathf.Max(spin, h.Spin);
             }
-            for (int i = n; i < MaxCutters; i++) _cutterData[i] = new Vector4(0f, -1000f, 0f, 0f);
+            for (int i = n; i < MaxCutters; i++) { _cutterData[i] = new Vector4(0f, -1000f, 0f, 0f); _cutterShape[i] = new Vector4(-1000f, 0f, 0f, 0f); }
+            grassMaterial.SetVectorArray(CutterShapeId, _cutterShape);
             grassMaterial.SetVectorArray(CuttersId, _cutterData);
             grassMaterial.SetFloat(CutterCountId, n);
             grassMaterial.SetFloat(SpinId, spin);

@@ -55,6 +55,18 @@ namespace PlayShift.Grass
         private RectTransform _counterPanel;
         private RectTransform _levelInfo;
         private long _shownRemaining = -1;
+        // Displayed counter: the exact count lives in the field; the label shows it at a steady rate (CounterHz) so the
+        // last digits don't change every rendered frame (at 144-240 FPS that smeared into a blur), with fixed-width
+        // digits so changing digits never shift the number sideways.
+        private const float CounterHz = 20f;
+        private const float CounterDigitEm = 0.62f, CounterCommaEm = 0.3f;
+        private float _counterTick;
+        private long _lastTarget = -1;
+        private float _targetStill;
+        private readonly System.Text.StringBuilder _counterSb = new System.Text.StringBuilder(160);
+        /// <summary>Tests: how many times the counter text was rebuilt, and the value it shows.</summary>
+        public static int CounterTextUpdates;
+        public long ShownRemaining => _shownRemaining;
         private float _counterPunch;
         private Color _counterFlashColor = Ink;
 
@@ -304,14 +316,22 @@ namespace PlayShift.Grass
             var p = _manager.Progression;
             var field = p.Field;
 
-            // Count down smoothly towards the exact value (catches up within a few frames; jumps up instantly).
+            // Count down towards the exact value at CounterHz (catches up in a few steps), jump up instantly (regrowth
+            // gifts), and show the exact value as soon as the count stops changing (trimmer released).
             long target = field.Remaining;
-            long next = _shownRemaining < 0 || target > _shownRemaining ? target
-                : System.Math.Max(target, _shownRemaining - System.Math.Max(1L, (long)((_shownRemaining - target) * Mathf.Clamp01(Time.unscaledDeltaTime * 12f))));
+            float dt = Time.unscaledDeltaTime;
+            if (target != _lastTarget) { _lastTarget = target; _targetStill = 0f; } else _targetStill += dt;
+            _counterTick += dt;
+            long next = _shownRemaining;
+            if (_shownRemaining < 0 || target > _shownRemaining || (_targetStill >= 0.12f && target != _shownRemaining))
+                next = target;
+            else if (_counterTick >= 1f / CounterHz && target < _shownRemaining)
+                next = System.Math.Max(target, _shownRemaining - System.Math.Max(1L, (long)((_shownRemaining - target) * 0.55f)));
+            if (_counterTick >= 1f / CounterHz) _counterTick = 0f;
             if (next != _shownRemaining)
             {
                 _shownRemaining = next;
-                SetText(_grassLeftValue, _shownRemaining.ToString("N0"));
+                SetCounterText(_grassLeftValue, _shownRemaining);
             }
             _timerLabel.text = "TIME  " + GrassUiFactory.FormatTime(p.ElapsedSeconds);
         }
@@ -444,6 +464,31 @@ namespace PlayShift.Grass
 
         private static readonly System.Collections.Generic.Dictionary<TextMeshProUGUI, TextMeshProUGUI> s_shadows =
             new System.Collections.Generic.Dictionary<TextMeshProUGUI, TextMeshProUGUI>();
+
+        /// <summary>Counter digits at a fixed width (commas narrower but fixed too): no sideways shifting while counting.
+        /// Built in a reused StringBuilder (no string garbage); the shadow copy gets the same text.</summary>
+        private void SetCounterText(TextMeshProUGUI t, long value)
+        {
+            var sb = _counterSb;
+            sb.Clear();
+            string digits = value.ToString(System.Globalization.CultureInfo.InvariantCulture); // only when the value changes
+            int lead = digits.Length % 3;
+            bool open = false;
+            for (int i = 0; i < digits.Length; i++)
+            {
+                if (i > 0 && (i - lead) % 3 == 0)
+                {
+                    if (open) { sb.Append("</mspace>"); open = false; }
+                    sb.Append("<mspace=").Append(CounterCommaEm.ToString(System.Globalization.CultureInfo.InvariantCulture)).Append("em>,</mspace>");
+                }
+                if (!open) { sb.Append("<mspace=").Append(CounterDigitEm.ToString(System.Globalization.CultureInfo.InvariantCulture)).Append("em>"); open = true; }
+                sb.Append(digits[i]);
+            }
+            if (open) sb.Append("</mspace>");
+            CounterTextUpdates++;
+            t.SetText(sb);
+            if (s_shadows.TryGetValue(t, out var sh) && sh != null) sh.SetText(sb);
+        }
 
         private static void SetText(TextMeshProUGUI t, string value)
         {
