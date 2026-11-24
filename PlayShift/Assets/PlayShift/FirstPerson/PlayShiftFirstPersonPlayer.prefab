@@ -170,9 +170,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: PlayShift.FirstPerson::PlayShift.FirstPerson.PlayShiftFirstPersonRig
   playerCamera: {fileID: 6479067711778470023}
   toolAnchor: {fileID: 3434514469410713972}
-  baseMouseSensitivity: 2
-  minPitch: -80
-  maxPitch: 60
+  steadyCamera: 1
+  horizontalSensitivity: 2
+  verticalSensitivity: 0.8
+  defaultPitch: -45.5
+  maxLookUp: -39.5
+  maxLookDown: 49
+  cameraHeight: 2.1
+  lockVerticalLook: 0
 --- !u!114 &6584475181989935235
 MonoBehaviour:
   m_ObjectHideFlags: 0

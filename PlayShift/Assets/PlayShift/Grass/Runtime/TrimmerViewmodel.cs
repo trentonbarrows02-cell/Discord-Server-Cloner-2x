@@ -61,8 +61,8 @@ namespace PlayShift.Grass
                  "the same place on screen at any fixed camera angle and on any screen shape. Off: Work Reach ahead.")]
         [SerializeField] private bool placeFromView = true;
         [Tooltip("Trimmer position: where the centre of the cutting head sits on screen at the default camera angle " +
-                 "(0-1; x = left to right, y = bottom to top). 0.56, 0.3 = lower middle, a little right, whole head in view.")]
-        [SerializeField] private Vector2 headViewport = new Vector2(0.56f, 0.42f);
+                 "(0-1; x = left to right, y = bottom to top). 0.56, 0.51 = about half way down, a little right; the shaft runs to the bottom-right corner.")]
+        [SerializeField] private Vector2 headViewport = new Vector2(0.56f, 0.51f);
         [Tooltip("How much the head follows the camera's up/down look (0 = stays at the default-angle spot on the ground and " +
                  "slides across the screen; 1 = stays at the same spot on screen). It always stays on the ground, level " +
                  "with it, at the cutting height: looking up never lifts it and looking down never pushes it in.")]
