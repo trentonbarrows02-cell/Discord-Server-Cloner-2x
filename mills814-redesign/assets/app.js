@@ -624,6 +624,9 @@
   observeReveals(); bindMagnetic(); onScroll(); initBeads();
   (document.fonts?.ready || Promise.resolve()).then(() => {
     moveSegPill();
-    requestAnimationFrame(() => { document.documentElement.classList.add("is-loaded"); countUp(); });
+    requestAnimationFrame(() => {
+      document.documentElement.classList.add("is-loaded"); countUp();
+      setTimeout(() => document.documentElement.classList.add("is-revealed"), reduceMotion ? 0 : 1500);
+    });
   });
 })();
