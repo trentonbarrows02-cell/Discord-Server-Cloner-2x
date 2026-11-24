@@ -173,10 +173,10 @@ MonoBehaviour:
   steadyCamera: 1
   horizontalSensitivity: 2
   verticalSensitivity: 0.8
-  defaultPitch: -45.5
-  maxLookUp: -39.5
-  maxLookDown: 49
-  cameraHeight: 2.1
+  defaultPitch: -39
+  maxLookUp: -34
+  maxLookDown: 43
+  cameraHeight: 2.28
   lockVerticalLook: 0
 --- !u!114 &6584475181989935235
 MonoBehaviour:
