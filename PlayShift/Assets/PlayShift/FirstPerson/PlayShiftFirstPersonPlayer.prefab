@@ -172,10 +172,10 @@ MonoBehaviour:
   toolAnchor: {fileID: 3434514469410713972}
   steadyCamera: 1
   horizontalSensitivity: 2
-  verticalSensitivity: 0.8
+  verticalSensitivity: 2
   defaultPitch: -24
-  maxLookUp: -14
-  maxLookDown: 24
+  maxLookUp: 11
+  maxLookDown: 34
   cameraHeight: 2.28
   lockVerticalLook: 0
 --- !u!114 &6584475181989935235

@@ -37,14 +37,14 @@ namespace PlayShift.FirstPerson
         [UnityEngine.Serialization.FormerlySerializedAs("baseMouseSensitivity")]
         [SerializeField] private float horizontalSensitivity = 2f;
         [Tooltip("Up/down look speed at sensitivity 1 (same units).")]
-        [SerializeField] private float verticalSensitivity = 0.8f;
+        [SerializeField] private float verticalSensitivity = 2f;
         [Tooltip("Camera angle at the start (degrees, negative = looking down). Looks down onto the cutting head: the head sits about half way down the screen.")]
         [SerializeField, Range(-60f, 20f)] private float defaultPitch = -24f;
         [Tooltip("Highest the player can look (degrees, negative = still below the horizon). The trimmer stays on the ground; this is kept small enough that the whole cutting head stays in view.")]
-        [SerializeField, Range(-60f, 60f)] private float maxLookUp = -14f;
+        [SerializeField, Range(-60f, 60f)] private float maxLookUp = 11f;
         [Tooltip("Lowest the player can look (degrees below the horizon). Keeps the view off the trimmer's underside and " +
                  "the player's own feet.")]
-        [SerializeField, Range(0f, 89f)] private float maxLookDown = 24f; // = -Default Pitch: the default view is the lowest look
+        [SerializeField, Range(0f, 89f)] private float maxLookDown = 34f; // 10 deg below the default view
         [Tooltip("Camera (eye) height above the ground (m). Higher = a better view down onto the grass being cut.")]
         [SerializeField, Range(1.4f, 2.6f)] private float cameraHeight = 2.28f;
         [Tooltip("On: mouse up/down does nothing; the camera stays at Default Pitch. Left/right stays free (360).")]
