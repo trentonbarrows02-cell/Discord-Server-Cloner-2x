@@ -83,6 +83,10 @@ Shader "PlayShift/GrassGround"
                     float g1 = PsNoise(i.worldPos.xz * 33.0), g2 = PsNoise(i.worldPos.xz * 97.0 + 11.3);
                     float grain = g1 * 0.55 + g2 * 0.45;
                     turf *= lerp(1.0, 0.72 + 0.5 * grain, k);
+                    // Broad, slow tone variation (a few metres across) so the lawn texture never repeats visibly:
+                    // slightly lighter/yellower and darker/bluer patches, like a real mown lawn.
+                    float broad = PsNoise(i.worldPos.xz * 0.11 + 7.7) * 0.6 + PsNoise(i.worldPos.xz * 0.37 - 2.1) * 0.4;
+                    turf *= lerp(float3(0.9, 0.93, 0.97), float3(1.07, 1.06, 0.95), broad);
                 }
                 float3 col = turf;
 
@@ -98,8 +102,9 @@ Shader "PlayShift/GrassGround"
                                        PsCellAt((g0 + float2(0.5, 1.5)) * cs).y, PsCellAt((g0 + float2(1.5, 1.5)) * cs).y);
                     float4 isCut = step(0.0, cy) * step(_CutAnim, _GrassTime - cy);
                     float cutAmt = lerp(lerp(isCut.x, isCut.y, gf.x), lerp(isCut.z, isCut.w, gf.x), gf.y);
+                    if (_CutMaskParams.z > 0.5) cutAmt = _CutMask.SampleLevel(sampler_CutMask, f * _CutMaskParams.xy, 0).r;
                     // Gently wavy edge (low-frequency noise), like a trimmer line, not jagged.
-                    float wave = (PsNoise(f * 5.0) - 0.5) * 0.35 + (PsNoise(f * 17.0) - 0.5) * 0.12;
+                    float wave = ((PsNoise(f * 5.0) - 0.5) * 0.35 + (PsNoise(f * 17.0) - 0.5) * 0.12) * (_CutMaskParams.z > 0.5 ? 0.25 : 1.0);
                     float edge = smoothstep(0.35, 0.65, cutAmt + wave);
                     // The uncut grass wall shades the cut lawn right next to it.
                     col *= 1.0 - _EdgeShade * edge * (1.0 - smoothstep(0.55, 1.0, cutAmt + wave * 0.5));

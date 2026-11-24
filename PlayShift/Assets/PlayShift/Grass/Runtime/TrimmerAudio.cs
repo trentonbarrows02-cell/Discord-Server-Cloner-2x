@@ -14,6 +14,10 @@ namespace PlayShift.Grass
         [SerializeField] private TrimmerBlades blades;
         [SerializeField] private GrassCutter cutter;
         [Range(0f, 1f)] [SerializeField] private float masterVolume = 0.55f;
+        [Tooltip("Motor audio stopping time (s): how fast the motor sound fades after release. Start is a little faster.")]
+        [SerializeField] private float motorStopTime = 0.1f;
+        [Tooltip("Play the optional shutdown clip on release (off = no drawn-out shutdown sound).")]
+        [SerializeField] private bool playShutdownClip = false;
 
         [Header("Synth")]
         [SerializeField] private bool synthesizeMotor = true;
@@ -45,6 +49,7 @@ namespace PlayShift.Grass
         private float _noiseLp, _noiseBp, _cutEnv, _motorEnv;
         private uint _rng = 22222u;
         private int _sampleRate;
+        private float _attackCoef = 0.0005f, _releaseCoef = 0.0005f;
 
         private void Awake()
         {
@@ -99,11 +104,16 @@ namespace PlayShift.Grass
             _cutAccum = 0f;
 
             _rpm = rpm; _load = load; _cutRate = Mathf.Lerp(_cutRate, rate, 1f - Mathf.Exp(-12f * dt));
+            if (!on) _cutRate = 0f; // the cutting rustle stops with the cut
+            // Per-sample envelope coefficients: release reaches ~95% in motorStopTime, attack in 0.03 s.
+            float sr = Mathf.Max(8000f, _sampleRate);
+            _releaseCoef = 1f - Mathf.Exp(-3f / (Mathf.Max(0.01f, motorStopTime) * sr));
+            _attackCoef = 1f - Mathf.Exp(-3f / (0.03f * sr));
             UpdateSynthFlags();
 
             if (on != _wasOn)
             {
-                var clip = on ? startupClip : shutdownClip;
+                var clip = on ? startupClip : (playShutdownClip ? shutdownClip : null);
                 if (clip != null) _oneShots.PlayOneShot(clip, masterVolume);
                 _wasOn = on;
             }
@@ -150,7 +160,7 @@ namespace PlayShift.Grass
 
             for (int i = 0; i < data.Length; i += channels)
             {
-                _motorEnv += (motorTarget - _motorEnv) * 0.0005f;
+                _motorEnv += (motorTarget - _motorEnv) * (motorTarget > _motorEnv ? _attackCoef : _releaseCoef);
                 _cutEnv += (cutTarget - _cutEnv) * 0.002f;
                 _phase += inc;
                 if (_phase >= 1.0) _phase -= 1.0;

@@ -13,7 +13,7 @@ namespace PlayShift.Grass
 
         // FOV is set as the vertical FOV of a 16:9 (landscape) screen; other aspect ratios keep the same horizontal view,
         // so a vertical (TikTok) window shows more above and below instead of zooming in.
-        public const float MinFov = 50f, MaxFov = 100f, DefaultFov = 65f;
+        public const float MinFov = 50f, MaxFov = 100f, DefaultFov = 62f;
         public const float MinMouse = 0.2f, MaxMouse = 3f, DefaultMouse = 1f;
         private const float ReferenceAspect = 16f / 9f;
 

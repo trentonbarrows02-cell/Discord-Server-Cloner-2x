@@ -37,14 +37,16 @@ namespace PlayShift.FirstPerson
         [UnityEngine.Serialization.FormerlySerializedAs("baseMouseSensitivity")]
         [SerializeField] private float horizontalSensitivity = 2f;
         [Tooltip("Up/down look speed at sensitivity 1 (same units).")]
-        [SerializeField] private float verticalSensitivity = 2f;
+        [SerializeField] private float verticalSensitivity = 1.3f;
         [Tooltip("Camera angle at the start (degrees, negative = looking down).")]
-        [SerializeField, Range(-60f, 20f)] private float defaultPitch = -20f;
+        [SerializeField, Range(-60f, 20f)] private float defaultPitch = -35f;
         [Tooltip("Highest the player can look (degrees above the horizon).")]
-        [SerializeField, Range(-30f, 60f)] private float maxLookUp = 10f;
+        [SerializeField, Range(-60f, 60f)] private float maxLookUp = -20f;
         [Tooltip("Lowest the player can look (degrees below the horizon). Keeps the view off the trimmer's underside and " +
                  "the player's own feet.")]
-        [SerializeField, Range(0f, 89f)] private float maxLookDown = 35f;
+        [SerializeField, Range(0f, 89f)] private float maxLookDown = 45f;
+        [Tooltip("Camera (eye) height above the ground (m). Higher = a better view down onto the grass being cut.")]
+        [SerializeField, Range(1.4f, 2.6f)] private float cameraHeight = 1.95f;
         [Tooltip("On: mouse up/down does nothing; the camera stays at Default Pitch. Left/right stays free (360).")]
         [SerializeField] private bool lockVerticalLook;
 
@@ -102,7 +104,8 @@ namespace PlayShift.FirstPerson
 
         private MonoBehaviour _ext;
         private CharacterController _cc;
-        private FieldInfo _fWalk, _fSprint, _fCrouch, _fNormalFov, _fSprintFov, _fSensitivity, _fPitch;
+        private FieldInfo _fWalk, _fSprint, _fCrouch, _fNormalFov, _fSprintFov, _fSensitivity, _fPitch, _fCamHeight, _fCrouchCamHeight;
+        private float _sentCamHeight = -1f;
         private float _baseWalk, _baseSprint, _baseCrouch;
         // Last values pushed (reflection boxes floats, so only write on change).
         private float _sentSpeedK = -1f, _sentFov = -1f, _sentSens = -1f;
@@ -128,6 +131,8 @@ namespace PlayShift.FirstPerson
                 _fSprintFov = t.GetField("sprintFov", F);
                 _fSensitivity = t.GetField("mouseSensitivity", F);
                 _fPitch = t.GetField("xRotation", F);
+                _fCamHeight = t.GetField("standingCameraHeight", F);
+                _fCrouchCamHeight = t.GetField("crouchingCameraHeight", F);
                 if (_fWalk == null || _fSprint == null || _fCrouch == null || _fNormalFov == null || _fSprintFov == null ||
                     _fSensitivity == null || _fPitch == null)
                 {
@@ -174,6 +179,12 @@ namespace PlayShift.FirstPerson
                 _fNormalFov.SetValue(_ext, fov);
                 _fSprintFov.SetValue(_ext, fov); // no sprint zoom
             }
+            if (_fCamHeight != null && !Mathf.Approximately(cameraHeight, _sentCamHeight))
+            {
+                _sentCamHeight = cameraHeight;
+                _fCamHeight.SetValue(_ext, cameraHeight);
+                _fCrouchCamHeight?.SetValue(_ext, cameraHeight); // crouch is off; keep it level anyway
+            }
             float sens = horizontalSensitivity * MouseSensitivityScale;
             if (sens != _sentSens)
             {
@@ -209,6 +220,13 @@ namespace PlayShift.FirstPerson
             // and whatever it holds is overwritten here before anything uses or draws the camera.)
             if (playerCamera == null) return;
             if (!_pitchInit) { _pitch = defaultPitch; _pitchInit = true; }
+            // While the controller is paused (menus, scripted control) it does not move the camera: hold the eye height.
+            if ((_ext == null || !_ext.enabled) && playerCamera.transform.parent != null && playerCamera.transform.parent != transform)
+            {
+                var cp = playerCamera.transform.parent;
+                var lp = cp.localPosition;
+                if (!Mathf.Approximately(lp.y, cameraHeight)) cp.localPosition = new Vector3(lp.x, cameraHeight, lp.z);
+            }
             if (lockVerticalLook) _pitch = defaultPitch;
             else if (Suspended || _ext == null || !_ext.enabled)
             {

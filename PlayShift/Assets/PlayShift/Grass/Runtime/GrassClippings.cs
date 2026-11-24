@@ -137,8 +137,9 @@ namespace PlayShift.Grass
                 var tangent = new Vector3(-dir.z, 0f, dir.x) * spinDirection;
                 float sp = Random.Range(2.2f, 5.4f);
                 p.position = head + dir * rr + Vector3.up * Random.Range(0.04f, 0.06f + 0.4f * tall);
-                p.velocity = tangent * sp + dir * 0.8f + Vector3.up * Random.Range(1.4f, 4.2f) + headVel * 0.6f
-                             + toPlayer * Random.Range(0.8f, 3.2f);
+                // Flung out off the blade tips: along the blade's path and outward from the head, a little up.
+                p.velocity = tangent * sp + dir * Random.Range(1.4f, 2.6f) + Vector3.up * Random.Range(1.0f, 3.0f) + headVel * 0.6f
+                             + toPlayer * Random.Range(0.2f, 0.9f);
                 // Leafy flakes, chopped bits and long slivers, big enough to read at stream resolution.
                 float kind = Random.value;
                 p.startSize3D = kind < 0.35f ? new Vector3(Random.Range(0.05f, 0.09f), Random.Range(0.05f, 0.095f), 1f)

@@ -37,6 +37,26 @@ namespace PlayShift.Grass
                  "trimmer (looking up) cuts nothing.")]
         [SerializeField] private float bladeContactTolerance = 0.05f;
 
+        /// <summary>One frame of one head's cut: a swept circle from A to B (field-local metres, x/z).</summary>
+        public struct CutStroke
+        {
+            public Vector2 A, B;
+            public float Radius;
+        }
+
+        private static readonly List<CutStroke> s_strokes = new List<CutStroke>();
+        private static int s_strokesFrame = -1;
+
+        /// <summary>Every cut made this frame (read by the renderer's cut mask to draw round cut paths).</summary>
+        public static IReadOnlyList<CutStroke> FrameStrokes
+        {
+            get
+            {
+                if (s_strokesFrame != Time.frameCount) { s_strokes.Clear(); s_strokesFrame = Time.frameCount; }
+                return s_strokes;
+            }
+        }
+
         private static readonly List<CutterHeadState> s_heads = new List<CutterHeadState>();
         private static int s_headsFrame = -1;
 
@@ -131,10 +151,12 @@ namespace PlayShift.Grass
                 long cut = 0;
                 if (cutting && onLawn)
                 {
-                    if (_hasLast[i] && (now - _last[i]).sqrMagnitude <= teleportDistance * teleportDistance)
-                        cut = field.CutCapsule(_last[i].x, _last[i].y, now.x, now.y, radius);
-                    else
-                        cut = field.CutCircle(now.x, now.y, radius);
+                    bool swept = _hasLast[i] && (now - _last[i]).sqrMagnitude <= teleportDistance * teleportDistance;
+                    Vector2 from = swept ? _last[i] : now;
+                    cut = swept ? field.CutCapsule(from.x, from.y, now.x, now.y, radius) : field.CutCircle(now.x, now.y, radius);
+                    // The same stroke, for the look of the cut (exact circle, independent of the cells).
+                    var strokes = (List<CutStroke>)FrameStrokes;
+                    strokes.Add(new CutStroke { A = from, B = now, Radius = radius });
                 }
 
                 if (cut > 0)

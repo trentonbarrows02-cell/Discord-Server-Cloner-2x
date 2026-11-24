@@ -24,7 +24,7 @@ namespace PlayShift.Grass
         [SerializeField] private string cutterHeadName = "CutterHead";
         [Tooltip("Child of the cutter head holding only the blades: the only part that spins (the cap, collar and " +
                  "spool stay fixed to the shaft). Without it the whole head spins.")]
-        [SerializeField] private string bladesName = "Blades";
+        [SerializeField] private string bladesName = "BladeRotor";
         [SerializeField] private float modelScale = 1.85f;
         [Tooltip("Lengthens only the shaft (model Z) so it reaches from the head on the ground up to the bottom-right corner. The cutting head keeps its real size.")]
         [SerializeField] private float shaftStretch = 1f;
@@ -62,24 +62,27 @@ namespace PlayShift.Grass
         [SerializeField] private bool placeFromView = true;
         [Tooltip("Trimmer position: where the centre of the cutting head sits on screen at the default camera angle " +
                  "(0-1; x = left to right, y = bottom to top). 0.56, 0.3 = lower middle, a little right, whole head in view.")]
-        [SerializeField] private Vector2 headViewport = new Vector2(0.56f, 0.3f);
+        [SerializeField] private Vector2 headViewport = new Vector2(0.56f, 0.42f);
         [Tooltip("How much the head follows the camera's up/down look (0 = stays at the default-angle spot on the ground and " +
                  "slides across the screen; 1 = stays at the same spot on screen). It always stays on the ground, level " +
                  "with it, at the cutting height: looking up never lifts it and looking down never pushes it in.")]
-        [SerializeField, Range(0f, 1f)] private float pitchFollow = 0.7f;
+        [SerializeField, Range(0f, 1f)] private float pitchFollow = 0f;
         [Tooltip("Nearest and furthest the head works on the ground (metres ahead of the player).")]
         [SerializeField] private float minReach = 1.2f;
         [SerializeField] private float maxReach = 8f;
         [Tooltip("How much the handle end follows the view (0 = held at the hip, 1 = fixed just off the bottom-right " +
                  "corner of the view). Keeps the shaft entering from the bottom-right corner.")]
-        [SerializeField, Range(0f, 1f)] private float gripFollowsView = 0.8f;
+        [SerializeField, Range(0f, 1f)] private float gripFollowsView = 0f;
         [Tooltip("Handle end in camera space (x right, y up, z forward), just outside the bottom-right of the view.")]
         [SerializeField] private Vector3 viewGrip = new Vector3(0.55f, -0.7f, 0.35f);
 
         [Header("Walking motion")]
         [Tooltip("Gentle up/down of the handle end while walking (metres at walking speed). The cutting head itself stays " +
                  "steady on the ground, so the cut never moves. 0 = none.")]
-        [SerializeField] private float walkBob = 0.012f;
+        [SerializeField] private float walkBob = 0f;
+        [Tooltip("Trimmer rotation offset: extra turn of the shaft about the head, left/right and up/down (degrees).")]
+        [SerializeField] private float shaftYawOffset = 0f;
+        [SerializeField] private float shaftPitchOffset = 0f;
         [Tooltip("Handle bob cycles per metre walked.")]
         [SerializeField] private float walkBobPerMetre = 0.85f;
         [Tooltip("Head offset to the right of the player's centre line (metres).")]
@@ -176,7 +179,7 @@ namespace PlayShift.Grass
                     _mainSpinner.localPosition = Vector3.zero;
                     _mainSpinner.localRotation = Quaternion.identity;
                     _mainSpinner.localScale = Vector3.one * modelScale;
-                    _mainBlades = FindDeep(_mainSpinner, bladesName);
+                    _mainBlades = FindRotor(_mainSpinner);
                     _headLift = LowestPointBelowPivot(_mainHeadRoot);
                     _bladeRadius = HorizontalReach(_mainHeadRoot);
                 }
@@ -427,7 +430,7 @@ namespace PlayShift.Grass
             float stretch = Mathf.Clamp(Mathf.Sqrt(Mathf.Max(0f, need * need - sin0 * sin0)) / cos0, 0.6f, 2.5f);
             if (_model != null) _model.localScale = new Vector3(modelScale, modelScale, modelScale * stretch);
             float rise = riseToGrip - Mathf.Atan(Mathf.Tan(a0) / stretch) * Mathf.Rad2Deg;
-            _bodyPivot.SetPositionAndRotation(head, flatRot * Quaternion.Euler(rise, -swing, 0f));
+            _bodyPivot.SetPositionAndRotation(head, flatRot * Quaternion.Euler(rise + shaftPitchOffset, -swing + shaftYawOffset, 0f));
 
             for (int i = 0; i < _extraRoots.Count; i++)
             {
@@ -510,7 +513,7 @@ namespace PlayShift.Grass
                 spinner.localScale = _mainSpinner.localScale;
                 foreach (var ring in spinner.GetComponentsInChildren<Transform>())
                     if (ring != spinner && ring.name == "MotionBlurRing") Destroy(ring.gameObject);
-                var cloneBlades = _mainBlades != null ? FindDeep(spinner, bladesName) : null;
+                var cloneBlades = _mainBlades != null ? FindRotor(spinner) : null;
                 if (cloneBlades != null)
                 {
                     cloneBlades.localRotation = _mainBlades.localRotation;
@@ -530,6 +533,10 @@ namespace PlayShift.Grass
             _extraRoots.Add(root);
             _extraSpinners.Add(spinner);
         }
+
+        /// <summary>The spinning blade assembly: the configured name, else 'BladeRotor', else the older 'Blades'.</summary>
+        private Transform FindRotor(Transform head) =>
+            FindDeep(head, bladesName) ?? FindDeep(head, "BladeRotor") ?? FindDeep(head, "Blades");
 
         private static Transform FindDeep(Transform t, string name)
         {

@@ -282,6 +282,7 @@ namespace PlayShift.Grass.Dev
             yield return Shot("05_fresh_cut_lawn_closeup");
 
             yield return CutAccuracyTest(cutter, manager);
+            yield return CuttingQualityTest(cutter, manager, fieldRenderer);
             yield return EnvironmentTour(manager);
 
             // Real gift path (receiver -> router -> HUD): two "Ice Cream Cone" (remove 15k) from the same viewer stack
@@ -606,6 +607,177 @@ namespace PlayShift.Grass.Dev
                 yield return Frames(10);
             }
             Step("environment tour done");
+        }
+
+        /// <summary>
+        /// Cutting feel and shape: start/stop timing (and nothing cut after release), rapid clicking, accuracy at 30-240
+        /// fps, diagonal / circle / S-curve paths photographed from above, the fine cut mask's alignment, both upgrades
+        /// (wider cut, extra heads), and all five levels with the counter checked on each.
+        /// </summary>
+        private IEnumerator CuttingQualityTest(GrassCutter cutter, GrassLevelManager manager, GrassFieldRenderer fr)
+        {
+            var vm = _probeVm != null ? _probeVm : FindAnyObjectByType<TrimmerViewmodel>();
+            var tb = vm != null ? vm.GetComponent<TrimmerBlades>() : null;
+            if (vm == null || tb == null || cutter == null) yield break;
+            _probeVm = vm; _probeCutter = cutter; _probeManager = manager;
+            var player = vm.transform;
+            var cc = player.GetComponent<CharacterController>();
+            var f = manager.Field;
+            Vector2 size = new Vector2(f.CellsX * f.CellSizeX, f.CellsZ * f.CellSizeZ);
+            Vector3 origin = manager.FieldTransform.position;
+            void Teleport(Vector3 p)
+            {
+                if (cc != null) cc.enabled = false;
+                player.position = new Vector3(p.x, player.position.y, p.z);
+                if (cc != null) cc.enabled = true;
+            }
+            _report.AppendLine("Cutting quality:");
+            Time.captureFramerate = 30;
+
+            // A) Start / stop.
+            Teleport(origin + new Vector3(size.x * 0.25f, 0f, size.y * 0.75f));
+            yield return FaceFieldCentre(manager);
+            _input.TrimmerHeld = false;
+            yield return Frames(20);
+            _input.TrimmerHeld = true;
+            int toFull = 0;
+            while (tb.Rpm01 < 0.95f && toFull < 90) { yield return null; toFull++; }
+            yield return Frames(15);
+            _input.TrimmerHeld = false;
+            long atRelease = f.Remaining;
+            float angleAtRelease = tb.RotorAngle;
+            int toStop = 0;
+            while (tb.Rpm01 > 0.02f && toStop < 90) { _input.Move = new Vector2(0f, 0.6f); yield return null; toStop++; }
+            for (int i = 0; i < 20; i++) { _input.Move = new Vector2(0f, 0.6f); yield return null; }
+            _input.Move = Vector2.zero;
+            float angleAfter = tb.RotorAngle;
+            yield return Frames(10);
+            _report.AppendLine($"  start: 95% speed after {toFull} frames ({toFull * 1000f / 30f:F0} ms); release: stopped after {toStop} frames " +
+                               $"({toStop * 1000f / 30f:F0} ms); units cut after release while walking on: {atRelease - f.Remaining} (must be 0); " +
+                               $"rotor kept its angle after stopping: {Mathf.Abs(Mathf.DeltaAngle(angleAfter, tb.RotorAngle)) < 0.01f}");
+
+            // Rapid clicking while walking: 12 quick on/off clicks.
+            long before = f.Remaining;
+            for (int k = 0; k < 12; k++)
+            {
+                _input.TrimmerHeld = k % 2 == 0;
+                for (int i = 0; i < 4; i++) { _input.Move = new Vector2(0.4f, 0.5f); yield return null; }
+            }
+            _input.TrimmerHeld = false; _input.Move = Vector2.zero;
+            yield return Frames(10);
+            _report.AppendLine($"  rapid clicking (12 clicks of 4 frames while walking): cut {before - f.Remaining:N0} units, blades at rest after: {tb.Rpm01 < 0.02f}");
+
+            // B) Frame rates: walking + turning while cutting, exact under the blades at each rate.
+            foreach (int fps in new[] { 30, 60, 120, 240 })
+            {
+                Time.captureFramerate = fps;
+                Teleport(origin + new Vector3(size.x * (0.2f + 0.15f * (fps / 60)), 0f, size.y * 0.35f));
+                _input.TrimmerHeld = true;
+                yield return Frames(fps / 5);
+                ResetProbe(); _probeActive = true;
+                for (int i = 0; i < fps * 3 / 2; i++) { _input.Move = new Vector2(0.3f, 0.8f); _input.Look = new Vector2(90f / fps, 0f); yield return null; }
+                _input.Move = Vector2.zero; _input.Look = Vector2.zero; _probeActive = false;
+                _report.AppendLine($"  {fps} fps, walking + turning 90 deg/s for 1.5 s: {ProbeSummary()}");
+            }
+            Time.captureFramerate = 30;
+            _input.TrimmerHeld = false;
+            yield return Frames(10);
+
+            // C) Path shapes on fresh grass, photographed from straight above.
+            Vector3 area = origin + new Vector3(size.x * 0.72f, 0f, size.y * 0.72f);
+            Teleport(area);
+            yield return FaceFieldCentre(manager);
+            _input.TrimmerHeld = true;
+            yield return Frames(8);
+            for (int i = 0; i < 40; i++) { _input.Move = new Vector2(0.7f, 0.7f); yield return null; }           // diagonal
+            for (int i = 0; i < 60; i++) { _input.Move = new Vector2(0f, 0.55f); _input.Look = new Vector2(6f, 0f); yield return null; } // circle
+            for (int i = 0; i < 90; i++) { _input.Move = new Vector2(0f, 0.6f); _input.Look = new Vector2(4.5f * Mathf.Sin(i * 0.07f), 0f); yield return null; } // S-curve
+            _input.Move = Vector2.zero; _input.Look = Vector2.zero; _input.TrimmerHeld = false;
+            yield return Frames(15);
+            Vector3 headNow = vm.HeadPosition;
+            {
+                var go = new GameObject("TopDownTestCamera");
+                var top = go.AddComponent<Camera>();
+                top.CopyFrom(_cam);
+                top.orthographic = true;
+                top.orthographicSize = 4.5f;
+                top.transform.SetPositionAndRotation(new Vector3((headNow.x + area.x) * 0.5f, area.y + 25f, (headNow.z + area.z) * 0.5f), Quaternion.Euler(90f, 0f, 0f));
+                top.targetTexture = _rt;
+                var keep = _cam;
+                _cam = top;
+                yield return Shot("24_cut_paths_top_down");
+                _cam = keep;
+                Destroy(go);
+            }
+
+            // D) Fine mask alignment: under the head it must read cut, at the mirrored spot (wrong orientation) not.
+            var mask = fr != null ? fr.CutMask : null;
+            if (mask != null && mask.Texture != null)
+            {
+                Vector3 l = manager.FieldTransform.InverseTransformPoint(headNow);
+                float u = l.x / size.x, v = l.z / size.y;
+                float ReadMask(float uu, float vv)
+                {
+                    var tex = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+                    var prev = RenderTexture.active;
+                    RenderTexture.active = mask.Texture;
+                    tex.ReadPixels(new Rect(Mathf.Clamp(uu, 0f, 0.9999f) * mask.Width, Mathf.Clamp(vv, 0f, 0.9999f) * mask.Height, 1, 1), 0, 0);
+                    tex.Apply();
+                    RenderTexture.active = prev;
+                    float r = tex.GetPixel(0, 0).r;
+                    Destroy(tex);
+                    return r;
+                }
+                float here = ReadMask(u, v), mirrored = ReadMask(u, 1f - v);
+                _report.AppendLine($"  cut mask {mask.Width}x{mask.Height} ({size.x / mask.Width * 100f:F1} cm per texel): under the head {here:F2} (must be 1), " +
+                                   $"at the mirrored spot {mirrored:F2} (0 unless cut there too); strokes drawn last frame {mask.LastStrokes}");
+            }
+            else _report.AppendLine("  cut mask: off");
+
+            // E) Upgrades: a wider cut, then extra heads.
+            Teleport(origin + new Vector3(size.x * 0.4f, 0f, size.y * 0.15f));
+            yield return FaceFieldCentre(manager);
+            manager.AddRadiusBoost(0.6f, 4f);
+            _input.TrimmerHeld = true;
+            yield return Frames(10);
+            ResetProbe(); _probeActive = true;
+            before = f.Remaining;
+            for (int i = 0; i < 40; i++) { _input.Move = new Vector2(0f, 0.6f); yield return null; }
+            _probeActive = false; _input.Move = Vector2.zero;
+            _report.AppendLine($"  upgrade: wider cut (radius {cutter.CutRadius:F2} m): cut {before - f.Remaining:N0} units; {ProbeSummary()}");
+            manager.Modifiers.Clear();
+            manager.AddBlades(2, 4f);
+            yield return Frames(10);
+            before = f.Remaining;
+            int strokes = 0;
+            for (int i = 0; i < 40; i++) { _input.Move = new Vector2(0f, 0.6f); yield return null; strokes = Mathf.Max(strokes, GrassCutter.FrameStrokes.Count); }
+            _input.Move = Vector2.zero;
+            _report.AppendLine($"  upgrade: +2 heads: cut {before - f.Remaining:N0} units, up to {strokes} cut strokes per frame (3 heads)");
+            manager.Modifiers.Clear();
+            _input.TrimmerHeld = false;
+            yield return Frames(15);
+
+            // F) All five levels: heights, counter exact (remaining + cut + gift removals - additions = initial).
+            int keepLevel = manager.Progression.CurrentLevelIndex + 1;
+            for (int lv = 1; lv <= 5; lv++)
+            {
+                manager.StartLevel(lv);
+                yield return Frames(5);
+                f = manager.Field;
+                Teleport(origin + new Vector3(size.x * 0.5f, 0f, size.y * 0.5f));
+                _input.TrimmerHeld = true;
+                yield return Frames(8);
+                for (int i = 0; i < 40; i++) { _input.Move = new Vector2(0f, 0.6f); yield return null; }
+                _input.Move = Vector2.zero; _input.TrimmerHeld = false;
+                yield return Frames(6);
+                long sum = f.Remaining + f.CutByMower + f.RemovedByGifts - f.AddedByGifts;
+                _report.AppendLine($"  level {lv}: grass {f.CurrentMinHeightCm:0}-{f.CurrentMaxHeightCm:0} cm, cut {f.CutByMower:N0} of {f.InitialUnits:N0}; " +
+                                   $"remaining + cut = {sum:N0} (must equal {f.InitialUnits:N0})");
+                if (lv == 5) yield return Shot("25_level5_cut");
+            }
+            manager.StartLevel(keepLevel);
+            yield return Frames(5);
+            Step("cutting quality done");
         }
 
         private IEnumerator CutAccuracyTest(GrassCutter cutter, GrassLevelManager manager)

@@ -25,6 +25,10 @@ StructuredBuffer<float2> _Cells;
 float4 _CellGrid;                   // cellsX, cellsZ, 1/cellSizeX, 1/cellSizeZ
 float _TilesX;
 float _HeightBonus;                 // gift height bonus (m), one value for the whole field
+// Fine cut mask (global, GrassCutMask): 1 = looks cut. x = 1/sizeX, y = 1/sizeZ (field metres -> 0..1), z = on.
+Texture2D _CutMask;
+SamplerState sampler_CutMask;
+float4 _CutMaskParams;
 
 // Per draw (chunk). Blade positions are generated here from (seed, instance index): no blade buffer exists.
 float4 _ChunkRect;                  // x0, z0, sizeX, sizeZ (field-local metres)
@@ -114,6 +118,15 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
     }
     float2 jit = float2(PsHash(blade.w * 1000.0 + 81.3), PsHash(blade.w * 1000.0 + 97.9)) - 0.5;
     float2 cell = PsCellAt(blade.xy + jit * _CutEdgeJitter / _CellGrid.zw);
+    if (_CutMaskParams.z > 0.5)
+    {
+        // Cut or standing comes from the fine mask at this blade's exact root, so cut paths are the real blade circle
+        // (round and smooth). Height and the cut animation's start time still come from the cell.
+        float2 cellExact = PsCellAt(blade.xy);
+        float m = _CutMask.SampleLevel(sampler_CutMask, blade.xy * _CutMaskParams.xy, 0).r;
+        if (m > 0.5) cell.y = cellExact.y >= 0.0 ? cellExact.y : _GrassTime - 10.0;
+        else cell.y = -1.0;
+    }
     cell.x += _HeightBonus;
     float s = blade.w * 1000.0;
     float r1 = PsHash(s + 1.7), r2 = PsHash(s + 11.3), r3 = PsHash(s + 23.9);

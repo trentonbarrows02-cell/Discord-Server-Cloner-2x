@@ -16,10 +16,10 @@ namespace PlayShift.Grass
         [SerializeField] private List<Transform> spinners = new List<Transform>();
         [Tooltip("Visual spin speed at full power, revolutions per second.")]
         [SerializeField] private float maxRps = 9.5f;
-        [Tooltip("Seconds to reach ~95% speed.")]
-        [SerializeField] private float spinUpTime = 1.1f;
-        [Tooltip("Seconds to coast down to ~5%.")]
-        [SerializeField] private float spinDownTime = 1.9f;
+        [Tooltip("Blade startup time: seconds to reach ~95% speed after pressing (snappy, not a slow wind-up).")]
+        [SerializeField] private float startupTime = 0.08f;
+        [Tooltip("Blade stopping time: seconds to stop after releasing (the blades stay where they stop; no snap back).")]
+        [SerializeField] private float stoppingTime = 0.08f;
         [SerializeField] private bool startOn;
         [Header("Motion blur")]
         [SerializeField] private bool motionBlurRing = true;
@@ -31,15 +31,20 @@ namespace PlayShift.Grass
         [Range(0f, 1.01f)] [SerializeField] private float hideBladesAbove = 1.01f;
 
         [Header("Rotor")]
-        [Tooltip("How quickly the spin speed follows load changes (1/s). Keeps the rotation even while cutting thick or " +
-                 "thin grass instead of jumping frame to frame.")]
-        [SerializeField] private float speedSmoothing = 6f;
+        [Tooltip("How quickly the cutting load slows the blades (1/s): smoothed so the rotation stays even in thick or " +
+                 "thin grass instead of jumping frame to frame. Start/stop are not affected.")]
+        [SerializeField] private float loadSmoothing = 6f;
+        [Tooltip("Rotor position offset in the head's space (m, at model scale): nudges the blade assembly on its axis.")]
+        [SerializeField] private Vector3 rotorOffset = Vector3.zero;
+        [Tooltip("Blade attachment offset (m, at model scale): moves every blade in or out from the hub (+ = outward).")]
+        [SerializeField] private float bladeAttachmentOffset = 0f;
         [Tooltip("Check the rotor by eye: spins at Slow Spin Scale of the normal speed (blades stay sharp, no blur).")]
         [SerializeField] private bool slowSpinPreview;
         [Range(0.01f, 0.5f)] [SerializeField] private float slowSpinScale = 0.06f;
 
         private readonly List<Quaternion> _baseRotations = new List<Quaternion>();
-        private float _angle, _degPerSec;
+        private float _angle, _degPerSec, _loadSmoothed;
+        private readonly List<Vector3> _basePositions = new List<Vector3>();
 
         /// <summary>Spin the rotor slowly to check it by eye (also used by the capture test).</summary>
         public bool SlowSpinPreview { get => slowSpinPreview; set => slowSpinPreview = value; }
@@ -79,7 +84,22 @@ namespace PlayShift.Grass
             // Each rotor's rest rotation: the spin is applied as rest * (angle about local up), set fresh every frame,
             // so it is one rigid turn about one fixed axis with no build-up of rounding error (no slow tilt or drift).
             _baseRotations.Clear();
-            foreach (var s in spinners) _baseRotations.Add(s != null ? s.localRotation : Quaternion.identity);
+            _basePositions.Clear();
+            foreach (var s in spinners)
+            {
+                _baseRotations.Add(s != null ? s.localRotation : Quaternion.identity);
+                _basePositions.Add(s != null ? s.localPosition : Vector3.zero);
+                if (s == null || Mathf.Approximately(bladeAttachmentOffset, 0f)) continue;
+                // Move each blade in/out along its own direction from the axis (the plate stays put).
+                foreach (Transform c in s)
+                {
+                    if (!c.name.StartsWith("Blade")) continue;
+                    var mf = c.GetComponent<MeshFilter>();
+                    if (mf == null || mf.sharedMesh == null) continue;
+                    Vector3 d = mf.sharedMesh.bounds.center; d.y = 0f;
+                    if (d.sqrMagnitude > 1e-8f) c.localPosition += d.normalized * bladeAttachmentOffset;
+                }
+            }
             foreach (var r in _blurRings) if (r != null) Destroy(r.gameObject);
             _blurRings.Clear();
             SetBladesShown(true);
@@ -103,12 +123,12 @@ namespace PlayShift.Grass
             float dt = Time.deltaTime;
             float target = On ? 1f : 0f;
             // Exponential approach: 3 time-constants = 95%.
-            float tau = (On ? spinUpTime : spinDownTime) / 3f;
+            float tau = (On ? startupTime : stoppingTime) / 3f;
             Rpm01 = Mathf.Lerp(Rpm01, target, 1f - Mathf.Exp(-dt / Mathf.Max(0.01f, tau)));
             if (!On && Rpm01 < 0.01f) Rpm01 = 0f;
 
-            float targetDeg = Rpm01 * maxRps * SpeedMultiplier * 360f * (1f - 0.25f * Load) * (slowSpinPreview ? slowSpinScale : 1f);
-            _degPerSec = Mathf.Lerp(_degPerSec, targetDeg, 1f - Mathf.Exp(-speedSmoothing * dt));
+            _loadSmoothed = Mathf.Lerp(_loadSmoothed, Load, 1f - Mathf.Exp(-loadSmoothing * dt));
+            _degPerSec = Rpm01 * maxRps * SpeedMultiplier * 360f * (1f - 0.25f * _loadSmoothed) * (slowSpinPreview ? slowSpinScale : 1f);
             float degPerSec = _degPerSec;
             _angle = Mathf.Repeat(_angle + degPerSec * dt, 360f);
             var spin = Quaternion.Euler(0f, _angle, 0f);
@@ -116,8 +136,9 @@ namespace PlayShift.Grass
             {
                 var s = spinners[i];
                 if (s == null) continue;
-                if (i >= _baseRotations.Count) _baseRotations.Add(s.localRotation);
+                if (i >= _baseRotations.Count) { _baseRotations.Add(s.localRotation); _basePositions.Add(s.localPosition); }
                 s.localRotation = _baseRotations[i] * spin;
+                s.localPosition = _basePositions[i] + rotorOffset;
             }
 
             Vibration = Rpm01 * (0.35f + 0.65f * Load);
@@ -160,6 +181,29 @@ namespace PlayShift.Grass
                 var b = smf.sharedMesh.bounds;
                 tip = Mathf.Max(b.extents.x + Mathf.Abs(b.center.x), b.extents.z + Mathf.Abs(b.center.z)) * spinner.lossyScale.x;
                 bladeY = b.center.y;
+            }
+            else
+            {
+                // Rotor is an empty with the plate and blades as children: their bounds in the rotor's space.
+                bool any = false;
+                var bb = new Bounds();
+                foreach (var cmf in spinner.GetComponentsInChildren<MeshFilter>())
+                {
+                    if (cmf.sharedMesh == null || cmf.name == "MotionBlurRing") continue;
+                    var mb = cmf.sharedMesh.bounds;
+                    var t = cmf.transform;
+                    for (int k = 0; k < 8; k++)
+                    {
+                        Vector3 c = mb.center + Vector3.Scale(mb.extents, new Vector3((k & 1) == 0 ? -1 : 1, (k & 2) == 0 ? -1 : 1, (k & 4) == 0 ? -1 : 1));
+                        Vector3 q = spinner.InverseTransformPoint(t.TransformPoint(c));
+                        if (!any) { bb = new Bounds(q, Vector3.zero); any = true; } else bb.Encapsulate(q);
+                    }
+                }
+                if (any)
+                {
+                    tip = Mathf.Max(bb.extents.x + Mathf.Abs(bb.center.x), bb.extents.z + Mathf.Abs(bb.center.z)) * spinner.lossyScale.x;
+                    bladeY = bb.center.y;
+                }
             }
             float radius = tip > 0.05f ? tip * 1.02f : blurRadius;
             var go = new GameObject("MotionBlurRing");

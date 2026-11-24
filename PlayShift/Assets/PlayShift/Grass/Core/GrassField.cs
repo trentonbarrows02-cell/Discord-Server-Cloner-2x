@@ -41,6 +41,18 @@ namespace PlayShift.Grass
         private readonly int[] _tileCells;
         private readonly int[] _tileOrder;
 
+        // Cells changed by anything other than the trimmer (gifts), and a flag for "everything changed" (new level,
+        // loaded save). The renderer's fine cut mask mirrors these; the trimmer's own cuts it draws as exact circles.
+        private readonly System.Collections.Generic.List<int> _externalCells = new System.Collections.Generic.List<int>();
+        private bool _maskRebuild = true;
+
+        /// <summary>Cells changed by gifts since the renderer last looked (indices; read their state with IsCellCut).</summary>
+        public System.Collections.Generic.IReadOnlyList<int> ExternalCellChanges => _externalCells;
+        public void ClearExternalCellChanges() => _externalCells.Clear();
+        /// <summary>True after a new level or a loaded save: the renderer rebuilds its cut mask from the cells.</summary>
+        public bool MaskRebuildNeeded => _maskRebuild;
+        public void AcknowledgeMaskRebuild() { _maskRebuild = false; _externalCells.Clear(); }
+
         /// <summary>Patches tried before a gift falls back to whole tiles (keeps the cost bounded with scattered cuts).</summary>
         private const int MaxPatchRounds = 8;
 
@@ -239,7 +251,7 @@ namespace PlayShift.Grass
                     _cutTime[i] = Clock;
                     removed += u;
                     _tileCut[(cz >> TileShift) * TilesX + (cx >> TileShift)]++;
-                    MarkCellDirty(cx, cz);
+                    MarkCellDirty(cx, cz, external: false);
                 }
             }
 
@@ -640,8 +652,9 @@ namespace PlayShift.Grass
             return budget;
         }
 
-        private void MarkCellDirty(int cx, int cz)
+        private void MarkCellDirty(int cx, int cz, bool external = true)
         {
+            if (external) _externalCells.Add(cz * _layout.CellsX + cx);
             int t = (cz >> TileShift) * TilesX + (cx >> TileShift);
             if (_tileDirty[t]) return;
             _tileDirty[t] = true;
@@ -653,6 +666,8 @@ namespace PlayShift.Grass
 
         private void MarkAllDirty()
         {
+            _maskRebuild = true;
+            _externalCells.Clear();
             int n = _dirtyQueue.Length;
             for (int t = 0; t < n; t++) { _tileDirty[t] = true; _dirtyQueue[t] = t; }
             _dirtyHead = 0;

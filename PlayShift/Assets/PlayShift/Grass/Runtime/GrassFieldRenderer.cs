@@ -70,7 +70,17 @@ namespace PlayShift.Grass
         [Header("Rendering")]
         [SerializeField] private Camera targetCamera;
 
+        [Header("Cut shape")]
+        [Tooltip("Fine GPU mask for the look of cut grass: cut paths follow the real blade circle (smooth, round) instead " +
+                 "of the 10 cm counting cells. The grass counter always uses the cells.")]
+        [SerializeField] private bool useCutMask = true;
+        [Tooltip("Mask texels across the lawn (4096 on a 100 m lawn = 2.4 cm). 16 MB of GPU memory at 4096, 4 MB at 2048.")]
+        [SerializeField] private int cutMaskResolution = 4096;
+
         private GrassField _field;
+        private GrassCutMask _mask;
+        /// <summary>The fine cut mask (null when off or unsupported).</summary>
+        public GrassCutMask CutMask => _mask;
         private Mesh _bladeMesh, _bladeMeshMid, _bladeMeshFar;
         private GraphicsBuffer _cellBuffer;
         private float[] _tileScratch;
@@ -160,6 +170,14 @@ namespace PlayShift.Grass
             EnsureCellBuffer();
             RebuildChunksIfNeeded();
             UploadAllTiles();
+            _mask?.Release();
+            _mask = null;
+            if (useCutMask)
+            {
+                _mask = new GrassCutMask();
+                if (_mask.Create(field, cutMaskResolution)) { _mask.RebuildFromCells(field); field.AcknowledgeMaskRebuild(); }
+                else _mask = null;
+            }
         }
 
         public static string DefaultShaderName =>
@@ -290,6 +308,7 @@ namespace PlayShift.Grass
             if (_field.ResetCount != _seenResetCount) UploadAllTiles();
             else UploadTiles(maxTileUploadsPerFrame);
 
+            _mask?.Update(_field, GrassCutter.FrameStrokes);
             var cam = targetCamera != null ? targetCamera : Camera.main;
             UpdateShaderGlobals();
             DrawChunks(cam);
@@ -427,6 +446,8 @@ namespace PlayShift.Grass
         private void OnDestroy()
         {
             ReleaseBuffers();
+            _mask?.Release();
+            _mask = null;
             if (_bladeMesh != null) Destroy(_bladeMesh);
             if (_bladeMeshMid != null) Destroy(_bladeMeshMid);
             if (_bladeMeshFar != null) Destroy(_bladeMeshFar);
