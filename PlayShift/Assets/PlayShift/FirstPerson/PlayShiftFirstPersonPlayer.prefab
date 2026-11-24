@@ -202,8 +202,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2922308556bc98e4898cb3309250e781, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EasyPeasyFirstPersonController.FirstPersonController
-  walkSpeed: 6.3
-  sprintSpeed: 6.3
+  walkSpeed: 7.2
+  sprintSpeed: 7.2
   crouchSpeed: 3.5
   jumpSpeed: 0
   gravity: 9.81

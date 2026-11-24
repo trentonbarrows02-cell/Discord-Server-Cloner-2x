@@ -20,8 +20,7 @@ namespace PlayShift.Grass
         [SerializeField] private Camera playerCamera;
         [Header("Built-in movement (used only without the Easy Peasy controller)")]
         [SerializeField] private float eyeHeight = 1.7f;
-        [SerializeField] private float walkSpeed = 6.3f; // = sprint speed: normal movement at the sprint pace
-        [SerializeField] private float sprintSpeed = 6.3f;
+        [SerializeField] private float walkSpeed = 7.2f; // = sprint speed: normal movement at the sprint pace
         [SerializeField] private float acceleration = 70f;
         [SerializeField] private float mouseSensitivity = 0.12f;
         [SerializeField] private bool invertY;
@@ -135,7 +134,7 @@ namespace PlayShift.Grass
             float mod = m != null ? m.Modifiers.MoveSpeedMultiplier : 1f;
             if (blades != null) blades.SpeedMultiplier = m != null ? m.Modifiers.SpinMultiplier : 1f;
             float load = cutter != null ? cutter.Load : 0f;
-            float speed = (input.Sprint ? sprintSpeed : walkSpeed) * mod * (1f - thickGrassResistance * load);
+            float speed = walkSpeed * mod * (1f - thickGrassResistance * load); // no sprint
 
             Vector3 wish = transform.right * input.Move.x + transform.forward * input.Move.y;
             if (wish.sqrMagnitude > 1f) wish.Normalize();
@@ -203,7 +202,7 @@ namespace PlayShift.Grass
             {
                 i.Move.x = (kb.dKey.isPressed || kb.rightArrowKey.isPressed ? 1f : 0f) - (kb.aKey.isPressed || kb.leftArrowKey.isPressed ? 1f : 0f);
                 i.Move.y = (kb.wKey.isPressed || kb.upArrowKey.isPressed ? 1f : 0f) - (kb.sKey.isPressed || kb.downArrowKey.isPressed ? 1f : 0f);
-                i.Sprint = kb.leftShiftKey.isPressed;
+                i.Sprint = false; // no sprint
                 i.TrimmerToggle = kb.spaceKey.wasPressedThisFrame;
                 // Esc belongs to GameSettingsMenu (opens settings and frees the cursor).
             }
@@ -219,7 +218,7 @@ namespace PlayShift.Grass
             }
 #elif ENABLE_LEGACY_INPUT_MANAGER
             i.Move = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
-            i.Sprint = Input.GetKey(KeyCode.LeftShift);
+            i.Sprint = false; // no sprint
             i.TrimmerToggle = Input.GetKeyDown(KeyCode.Space);
             // Esc belongs to GameSettingsMenu (opens settings and frees the cursor).
             if (locked)

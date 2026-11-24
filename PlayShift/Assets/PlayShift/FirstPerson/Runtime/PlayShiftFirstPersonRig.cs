@@ -169,7 +169,7 @@ namespace PlayShift.FirstPerson
             {
                 _sentSpeedK = k;
                 _fWalk.SetValue(_ext, _baseWalk * k);
-                _fSprint.SetValue(_ext, _baseSprint * k);
+                _fSprint.SetValue(_ext, _baseWalk * k); // no sprint: Shift moves at walking speed
                 _fCrouch.SetValue(_ext, _baseCrouch * k);
             }
             float fov = Mathf.Round(VerticalFov * 10f) / 10f;

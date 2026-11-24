@@ -26,7 +26,7 @@ namespace PlayShift.FirstPerson.Editor
     {
         public const string PrefabPath = "Assets/PlayShift/FirstPerson/PlayShiftFirstPersonPlayer.prefab";
         public const float EyeHeight = 1.7f;
-        public const float WalkSpeed = 6.3f, SprintSpeed = 6.3f, DefaultVerticalFov = 65f;
+        public const float WalkSpeed = 7.2f, SprintSpeed = 7.2f, DefaultVerticalFov = 65f;
         private const string InputTypeName = "EasyPeasyFirstPersonController.InputManager";
         private const int IgnoreRaycastLayer = 2;
 
