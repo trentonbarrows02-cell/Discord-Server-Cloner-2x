@@ -11,6 +11,8 @@ Shader "PlayShift/Foliage"
         _Color ("Tint", Color) = (1, 1, 1, 1)
         _VertexColor ("Use vertex colour", Range(0, 1)) = 0
         _Wrap ("Soft light wrap", Range(0, 1)) = 0.35
+        _Naturalize ("Leaves: lime/yellow to forest green", Range(0, 1)) = 0
+        _Saturation ("Leaves: saturation", Range(0, 1.5)) = 1
         _Cutoff ("Alpha cutoff", Range(0, 1)) = 0.5
         [Toggle(_ALPHATEST_ON)] _AlphaClip ("Alpha clip", Float) = 0
     }
@@ -30,7 +32,7 @@ Shader "PlayShift/Foliage"
 
         sampler2D _MainTex;
         fixed4 _Color;
-        half _VertexColor, _Wrap, _Cutoff;
+        half _VertexColor, _Wrap, _Cutoff, _Naturalize, _Saturation;
 
         struct Input
         {
@@ -59,7 +61,14 @@ Shader "PlayShift/Foliage"
             #ifdef _ALPHATEST_ON
             clip(c.a - _Cutoff);
             #endif
-            o.Albedo = c.rgb;
+            // Leaves only (clearly green texels; bark, fence and rocks keep their colour): less yellow-lime, a deeper,
+            // more natural forest green, a little less saturated.
+            half3 col = c.rgb;
+            half leaf = saturate((col.g - max(col.r, col.b)) * 5.0);
+            col = lerp(col, half3(col.r * 0.7, col.g * 0.9, col.b * 1.08 + 0.012), leaf * _Naturalize);
+            half lum = dot(col, half3(0.299, 0.587, 0.114));
+            col = lerp(lum.xxx, col, lerp(1.0, _Saturation, leaf));
+            o.Albedo = col;
             o.Alpha = 1;
             o.Specular = 0;
             o.Gloss = 0;

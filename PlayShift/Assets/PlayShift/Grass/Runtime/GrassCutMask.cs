@@ -32,6 +32,11 @@ namespace PlayShift.Grass
         private int _cellsX, _cellsZ;
         private readonly List<int> _scratch = new List<int>();
         private readonly HashSet<int> _tiles = new HashSet<int>();
+        // Mip levels let the ground show cut paths smoothly far away (no stair steps or shimmer). Regenerated after
+        // changes, at most every MipInterval seconds (blades read level 0, which is always current).
+        private const float MipInterval = 0.15f;
+        private bool _mipsDirty;
+        private float _lastMips = -1f;
 
         public RenderTexture Texture => _rt;
         public int Width => _rt != null ? _rt.width : 0;
@@ -56,7 +61,7 @@ namespace PlayShift.Grass
             int h = Mathf.Clamp(Mathf.RoundToInt(w * layout.SizeZ / layout.SizeX), 256, 8192);
             _rt = new RenderTexture(w, h, 0, RenderTextureFormat.R8, RenderTextureReadWrite.Linear)
             {
-                name = "GrassCutMask", filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp, useMipMap = false,
+                name = "GrassCutMask", filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp, useMipMap = true, autoGenerateMips = false,
             };
             _rt.Create();
             _mat = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
@@ -80,6 +85,8 @@ namespace PlayShift.Grass
             _cellTex.SetPixelData(_cellBytes, 0);
             _cellTex.Apply(false, false);
             Graphics.Blit(_cellTex, _rt, _mat, 1);
+            _rt.GenerateMips();
+            _mipsDirty = false;
         }
 
         /// <summary>
@@ -89,6 +96,18 @@ namespace PlayShift.Grass
         public void Update(GrassField field, IReadOnlyList<GrassCutter.CutStroke> strokes)
         {
             if (_rt == null) return;
+            UpdateMask(field, strokes);
+            float now = Time.unscaledTime;
+            if (_mipsDirty && (now - _lastMips >= MipInterval || _lastMips < 0f))
+            {
+                _rt.GenerateMips();
+                _lastMips = now;
+                _mipsDirty = false;
+            }
+        }
+
+        private void UpdateMask(GrassField field, IReadOnlyList<GrassCutter.CutStroke> strokes)
+        {
             if (field.MaskRebuildNeeded) { RebuildFromCells(field); field.AcknowledgeMaskRebuild(); }
             LastExternalCells = 0;
             if (field.ExternalCellChanges.Count > 0)
@@ -101,6 +120,7 @@ namespace PlayShift.Grass
             }
             LastStrokes = strokes.Count;
             if (strokes.Count == 0) return;
+            _mipsDirty = true;
 
             var prev = RenderTexture.active;
             Graphics.SetRenderTarget(_rt);
@@ -155,7 +175,7 @@ namespace PlayShift.Grass
             _cellTex.Apply(false, false);
 
             var old = RenderTexture.GetTemporary(_rt.width, _rt.height, 0, RenderTextureFormat.R8, RenderTextureReadWrite.Linear);
-            Graphics.CopyTexture(_rt, old);
+            Graphics.CopyTexture(_rt, 0, 0, old, 0, 0); // level 0 only (the mask has mips, the copy doesn't)
             _mat.SetTexture(MainTexId, _cellTex);
             _mat.SetTexture(OldMaskId, old);
             var prev = RenderTexture.active;
@@ -175,6 +195,7 @@ namespace PlayShift.Grass
             GL.PopMatrix();
             RenderTexture.active = prev;
             RenderTexture.ReleaseTemporary(old);
+            _mipsDirty = true;
             // These cells are now in the mask; clear their "changed" mark for the next stamp (uploaded with it).
             for (int k = 0; k < _scratch.Count; k++) _cellBytes[2 * _scratch[k] + 1] = 0;
         }

@@ -34,6 +34,10 @@ namespace PlayShift.Grass
         [SerializeField, Range(0.4f, 1f)] private float canopySpacing = 0.75f;
         [Tooltip("Tint on the trees' texture (slightly under 1 calms the greens).")]
         [SerializeField] private Color foliageTint = new Color(0.9f, 0.93f, 0.88f, 1f);
+        [Tooltip("Leaves: 0 = the texture's bright lime/yellow greens, 1 = natural forest green.")]
+        [SerializeField, Range(0f, 1f)] private float leafNaturalize = 1f;
+        [Tooltip("Leaf colour saturation (1 = as the texture).")]
+        [SerializeField, Range(0f, 1.5f)] private float leafSaturation = 0.85f;
 
         private struct Plant
         {
@@ -58,6 +62,11 @@ namespace PlayShift.Grass
             _litMat = FoliageMat("ForestFar", tex, foliageTint);
             _nearMat = FoliageMat("ForestNear", tex, foliageTint);   // casts shadows (see FlushBuckets)
             _bushMat = FoliageMat("ForestBushes", tex, foliageTint);
+            foreach (var m in new[] { _litMat, _nearMat, _bushMat })
+            {
+                m.SetFloat("_Naturalize", leafNaturalize);
+                m.SetFloat("_Saturation", leafSaturation);
+            }
 
             var trees = new Plant[TreeKinds.Length];
             for (int i = 0; i < trees.Length; i++)

@@ -77,6 +77,13 @@ namespace PlayShift.Grass
         [Tooltip("Mask texels across the lawn (4096 on a 100 m lawn = 2.4 cm). 16 MB of GPU memory at 4096, 4 MB at 2048.")]
         [SerializeField] private int cutMaskResolution = 4096;
 
+        [Header("Title screen")]
+        [Tooltip("The title screen shows an untouched lawn (no cut paths). Only the look: saved progress is not touched.")]
+        [SerializeField] private bool untouchedLawnOnTitle = true;
+        [Tooltip("Grass drawing for the high orbiting title camera: no grass shadows and shorter detail distances " +
+                 "(everything there is far away; the ground carries the field's colour).")]
+        [SerializeField] private bool titleScreenGrassProfile = true;
+
         private GrassField _field;
         private GrassCutMask _mask;
         /// <summary>The fine cut mask (null when off or unsupported).</summary>
@@ -124,10 +131,17 @@ namespace PlayShift.Grass
         private static readonly int GrassLodId = Shader.PropertyToID("_GrassLod");
         private static readonly int GrassLodFracId = Shader.PropertyToID("_GrassLodFrac");
         private static readonly int ChunkCountId = Shader.PropertyToID("_ChunkCount");
+        private static readonly int PsLodDistId = Shader.PropertyToID("_PsLodDist");
+        private static readonly int PsGrassAvgId = Shader.PropertyToID("_PsGrassAvg");
+        private static readonly int PsGrassDryId = Shader.PropertyToID("_PsGrassDry");
+        private static readonly int GrassShowUncutId = Shader.PropertyToID("_GrassShowUncut");
+        private static readonly int PsChunkId = Shader.PropertyToID("_PsChunk");
 
         // ---- Diagnostics (capture tool / dev only; all off in the game) ----
         /// <summary>0 = normal; 1 = the ground shows the cut state (white = fine mask and cells agree, red = cell only,
-        /// cyan = mask only), blades hidden; 2 = blades tinted by detail level (red full, green mid, blue far).</summary>
+        /// cyan = mask only), blades hidden; 2 = blades tinted by detail level (red full, green mid, blue far);
+        /// 3 = the ground shows detail zones by distance (red full, green mid, blue far, orange blade fade, grey no
+        /// blades), chunk edges (thin lines) and the chunk culling edge (white), blades hidden.</summary>
         public static int DebugView;
         /// <summary>Grass casts no shadows (to see what darkening comes from grass shadows).</summary>
         public static bool DebugNoBladeShadows;
@@ -165,10 +179,10 @@ namespace PlayShift.Grass
             {
                 switch (quality)
                 {
-                    case GrassQuality.Low: return low;
-                    case GrassQuality.Medium: return medium;
-                    case GrassQuality.Ultra: return ultra;
-                    default: return high;
+                    case GrassQuality.Low: return ForTitle(low);
+                    case GrassQuality.Medium: return ForTitle(medium);
+                    case GrassQuality.Ultra: return ForTitle(ultra);
+                    default: return ForTitle(high);
                 }
             }
         }
@@ -329,7 +343,12 @@ namespace PlayShift.Grass
             var cam = LodCamera != null ? LodCamera : targetCamera != null ? targetCamera : Camera.main;
             UpdateShaderGlobals();
             Shader.SetGlobalFloat(GrassDebugId, DebugView);
-            if (DebugHideBlades || DebugView == 1) { LastDrawnBlades = 0; LastDrawCalls = 0; return; }
+            {
+                var q0 = Q;
+                Shader.SetGlobalVector(PsLodDistId, new Vector4(q0.fullDetailDistance, q0.midDetailDistance, q0.maxDrawDistance, q0.maxDrawDistance * 0.72f));
+                Shader.SetGlobalVector(PsChunkId, new Vector4(chunkMeters, _field.CurrentMaxHeightCm * 0.013f + 0.1f, 0f, 0f));
+            }
+            if (DebugHideBlades || DebugView == 1 || DebugView == 3) { LastDrawnBlades = 0; LastDrawCalls = 0; return; }
             DrawChunks(cam);
         }
 
@@ -345,6 +364,14 @@ namespace PlayShift.Grass
             Shader.SetGlobalFloat(GrassTimeId, _field.Clock);
             Shader.SetGlobalMatrix(WorldToFieldId, transform.worldToLocalMatrix);
             Shader.SetGlobalVector(GrassFadeId, new Vector4(q.maxDrawDistance * 0.72f, q.maxDrawDistance, 0f, 0f));
+            // The ground's uncut grass uses the blades' average colour, so near blades, the ground under them and the
+            // field beyond the draw distance are one colour. Weights = the blade shader's palette mix; 0.9 = roots.
+            Color avg = grassMaterial.GetColor("_ColYellowGreen") * 0.35f + grassMaterial.GetColor("_ColGoldenGreen") * 0.25f
+                      + grassMaterial.GetColor("_ColDarkGreen") * 0.18f + grassMaterial.GetColor("_ColFreshGreen") * 0.22f;
+            Shader.SetGlobalColor(PsGrassAvgId, avg * 0.9f);
+            Color dry = grassMaterial.GetColor("_ColDry");
+            Shader.SetGlobalVector(PsGrassDryId, new Vector4(dry.r * 0.9f, dry.g * 0.9f, dry.b * 0.9f, grassMaterial.GetFloat("_DryAmount")));
+            Shader.SetGlobalFloat(GrassShowUncutId, MainMenu.IsOpen && untouchedLawnOnTitle ? 1f : 0f);
 
             // Cutting heads bend the grass around them (GPU only; no per-blade physics).
             int n = 0;
@@ -435,6 +462,16 @@ namespace PlayShift.Grass
             }
             LastDrawnBlades = drawn;
             LastDrawCalls = calls;
+        }
+
+        private QualityPreset ForTitle(QualityPreset q)
+        {
+            if (!titleScreenGrassProfile || !MainMenu.IsOpen) return q;
+            q.shadowCastDistance = 0f;
+            q.fullDetailDistance = Mathf.Min(q.fullDetailDistance, 20f);
+            q.midDetailDistance = Mathf.Min(q.midDetailDistance, 32f);
+            q.maxDrawDistance = Mathf.Min(q.maxDrawDistance, 50f);
+            return q;
         }
 
         /// <summary>Fraction of blades kept at a distance (same curve as the shader's per-blade falloff).</summary>

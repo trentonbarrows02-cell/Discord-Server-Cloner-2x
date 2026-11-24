@@ -53,7 +53,7 @@ namespace PlayShift.Grass
         [SerializeField] private Color sunColour = new Color(1f, 0.965f, 0.9f);
         [SerializeField] private float sunIntensity = 1.25f;
         [Tooltip("Shadow darkness (lower = softer, more light in the shade).")]
-        [SerializeField, Range(0f, 1f)] private float shadowStrength = 0.78f;
+        [SerializeField, Range(0f, 1f)] private float shadowStrength = 0.6f;
 
         private System.Random _rng;
         private float R() => (float)_rng.NextDouble();

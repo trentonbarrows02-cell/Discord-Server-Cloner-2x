@@ -891,6 +891,8 @@ namespace PlayShift.Grass.Dev
                 GrassFieldRenderer.DebugNoBladeShadows = false;
                 GrassFieldRenderer.DebugView = 2;
                 yield return View(pos, rot, ortho, orthoSize, fov, prefix + "_c_detail_levels");
+                GrassFieldRenderer.DebugView = 3;
+                yield return View(pos, rot, ortho, orthoSize, fov, prefix + "_f_zones_chunks_culling");
                 GrassFieldRenderer.DebugView = 0;
                 if (!all) yield break;
                 GrassFieldRenderer.DebugHideBlades = true;
@@ -909,6 +911,9 @@ namespace PlayShift.Grass.Dev
             yield return Variants("G2_fp", fpPos, fpRot, false, 0f, playerCam.fieldOfView, true);
             // Wide view across the lawn (detail-level bands at 13 / 28 m on High).
             yield return Variants("G3_wide", c + new Vector3(0f, 3.2f, -16f), Quaternion.Euler(14f, 0f, 0f), false, 0f, 62f, false);
+            // Elevated views (where the blade / flat-ground boundary showed): 9 m up looking across, and 40 m up.
+            yield return Variants("G6_elevated", c + new Vector3(0f, 9f, -30f), Quaternion.Euler(24f, 0f, 0f), false, 0f, 62f, true);
+            yield return Variants("G8_high", c + new Vector3(0f, 40f, -22f), Quaternion.Euler(62f, 0f, 0f), false, 0f, 62f, false);
 
             // A loaded save / new level rebuilds the fine mask from the 10 cm cells.
             fr.DebugRebuildMask();
@@ -952,6 +957,34 @@ namespace PlayShift.Grass.Dev
             long r3 = manager.RemoveGrass(250000);
             yield return Lawn("G5c_after_huge_removal");
             _report.AppendLine($"  gifts: removed {r1:N0} + {r2:N0}, regrew {a1:N0}, then removed {r3:N0} at once");
+
+            // Title screen over a lawn with saved cuts: the menu must show an untouched lawn, and the cuts must still be
+            // there (in the cells and on screen) once play resumes.
+            if (MainMenu.Instance != null)
+            {
+                long remainingBefore = f.Remaining;
+                MainMenu.Instance.Show();
+                yield return Frames(20);
+                var mapCam = MainMenu.Instance.MenuCamera;
+                if (mapCam != null)
+                {
+                    mapCam.targetTexture = _rt;
+                    _cam = mapCam;
+                    yield return Shot("G7_menu_a");
+                    yield return Frames(240); // 8 s of orbit
+                    yield return Shot("G7_menu_b");
+                    GrassFieldRenderer.DebugView = 3;
+                    yield return Frames(2);
+                    yield return Shot("G7_menu_c_zones_chunks_culling");
+                    GrassFieldRenderer.DebugView = 0;
+                    mapCam.targetTexture = null;
+                    _cam = playerCam;
+                }
+                MainMenu.Instance.Play();
+                yield return Frames(10);
+                _report.AppendLine($"  title screen over saved cuts: grass left before {remainingBefore:N0}, after {f.Remaining:N0} (must be equal)");
+                yield return View(c + new Vector3(0f, 60f, 0f), down, true, size.y * 0.52f, 60f, "G7_after_menu_whole_lawn_normal");
+            }
             Time.captureFramerate = 0;
             Step("grid diagnostics done");
         }

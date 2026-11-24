@@ -43,6 +43,8 @@ float4 _GrassLod;
 float4 _GrassLodFrac;
 float _ChunkCount;
 float _GrassDebug;                  // global, diagnostics only (GrassFieldRenderer.DebugView)
+float4 _PsGrassAvg;                 // global: average blade colour (the ground's uncut colour uses the same)
+float _GrassShowUncut;              // global: 1 on the title screen (every blade standing; saved cuts untouched)
 float4 _GrassFade;                  // global: x = blade fade start, y = blade draw end (m from camera); the ground
                                     // shader (GrassGround) shows grown grass beyond, from the same cell data
 float4 _HeightClamp;                // x = min, y = max (metres)
@@ -129,9 +131,9 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
     // the chunk's uniform sequence is kept while i / count is below it (shrinking away over the last 20%). Kept blades
     // widen to hold the same coverage. No chunk-shaped bands or squares.
     float lodF = 1.0, lodKeep = 1.0;
+    float dl = distance(root, _WorldSpaceCameraPos);
     if (_ChunkCount > 0.5 && _GrassLod.y > 0.0)
     {
-        float dl = distance(root, _WorldSpaceCameraPos);
         // Full detail to x; down to the mid fraction halfway to y; the far fraction from y on (same blade budget as
         // the old per-chunk steps, without the steps).
         float half = 0.5 * (_GrassLod.x + _GrassLod.y);
@@ -158,6 +160,7 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
         if (m > 0.5) cell.y = cellExact.y >= 0.0 ? cellExact.y : _GrassTime - 10.0;
         else cell.y = -1.0;
     }
+    if (_GrassShowUncut > 0.5) cell.y = -1.0;
     cell.x += _HeightBonus;
     float s = blade.w * 1000.0;
     float r1 = PsHash(s + 1.7), r2 = PsHash(s + 11.3), r3 = PsHash(s + 23.9);
@@ -173,9 +176,11 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
     float ease = 1.0 - pow(1.0 - k, 3.0);
     float stub = _StubbleHeight * (0.65 + 0.7 * r5);
     float h = lerp(full, stub, ease) * lodKeep;
-    // Distance fade: blades sink smoothly into the ground-shaded grass before the draw distance (no hard edge).
+    // Distance fade: blades sink smoothly into the ground (which has their average colour) before the draw distance.
+    // 3D distance, the same the renderer culls whole chunks by: with the flat distance, an elevated camera culled
+    // chunks before their blades had faded, which left a hard, chunk-shaped edge.
     if (_GrassFade.y > 0.0)
-        h *= 1.0 - smoothstep(_GrassFade.x, _GrassFade.y, distance(root.xz, _WorldSpaceCameraPos.xz));
+        h *= 1.0 - smoothstep(_GrassFade.x, _GrassFade.y, dl);
 
     float tall = smoothstep(0.12, 1.5, full) * (1.0 - ease);
     float facing = r2 * 6.2831853;
@@ -259,6 +264,13 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
     grown = lerp(grown, lerp(tip, _ColGoldenGreen.rgb * 1.3, 0.6) * (0.9 + 0.2 * r3), smoothstep(0.6, 1.0, t) * _TipGold);
     float3 stubC = lerp(_StubbleColor.rgb, _StubbleTipColor.rgb, smoothstep(0.3, 1.0, t)) * (0.85 + 0.3 * r1);
     o.color = lerp(grown, stubC, ease) * lerp(0.74, 1.0, smoothstep(0.0, 0.7, t));
+    // Far blades drift toward the field's average colour: less per-blade contrast where blades are a pixel or two
+    // wide (no sparkle), and a seamless hand-over to the ground beyond the draw distance.
+    if (_GrassFade.y > 0.0 && _GrassLod.x > 0.0)
+    {
+        float farMix = smoothstep(_GrassLod.x, _GrassFade.y, dl) * 0.6;
+        o.color = lerp(o.color, _PsGrassAvg.rgb * lerp(0.8, 1.05, t), farMix * (1.0 - ease));
+    }
     if (_GrassDebug > 1.5)
     {
         // Diagnostics: red = full detail, green = mid, blue = far (continuous).
