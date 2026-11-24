@@ -47,10 +47,10 @@ namespace PlayShift.Grass
         [SerializeField] private GrassQuality quality = GrassQuality.High;
         // Blades are drawn only near the camera; beyond maxDrawDistance they fade into the ground shader
         // (PlayShift/GrassGround), which shows grown/cut grass from the same cell data at almost no cost.
-        [SerializeField] private QualityPreset low = new QualityPreset { bladesPerSquareMeter = 380, fullDetailDistance = 8f, midDetailDistance = 18f, maxDrawDistance = 32f, shadowCastDistance = 0f };
-        [SerializeField] private QualityPreset medium = new QualityPreset { bladesPerSquareMeter = 600, fullDetailDistance = 10f, midDetailDistance = 22f, maxDrawDistance = 42f, shadowCastDistance = 6f };
-        [SerializeField] private QualityPreset high = new QualityPreset { bladesPerSquareMeter = 950, fullDetailDistance = 13f, midDetailDistance = 28f, maxDrawDistance = 55f, shadowCastDistance = 10f };
-        [SerializeField] private QualityPreset ultra = new QualityPreset { bladesPerSquareMeter = 1500, fullDetailDistance = 18f, midDetailDistance = 38f, maxDrawDistance = 75f, shadowCastDistance = 16f };
+        [SerializeField] private QualityPreset low = new QualityPreset { bladesPerSquareMeter = 300, fullDetailDistance = 8f, midDetailDistance = 18f, maxDrawDistance = 32f, shadowCastDistance = 0f };
+        [SerializeField] private QualityPreset medium = new QualityPreset { bladesPerSquareMeter = 480, fullDetailDistance = 10f, midDetailDistance = 22f, maxDrawDistance = 42f, shadowCastDistance = 4f };
+        [SerializeField] private QualityPreset high = new QualityPreset { bladesPerSquareMeter = 720, fullDetailDistance = 13f, midDetailDistance = 28f, maxDrawDistance = 55f, shadowCastDistance = 6f };
+        [SerializeField] private QualityPreset ultra = new QualityPreset { bladesPerSquareMeter = 1100, fullDetailDistance = 18f, midDetailDistance = 38f, maxDrawDistance = 75f, shadowCastDistance = 10f };
         [Range(0.05f, 1f)] [SerializeField] private float midDetailFraction = 0.45f;
         [Range(0.02f, 1f)] [SerializeField] private float farDetailFraction = 0.2f;
 
@@ -59,6 +59,9 @@ namespace PlayShift.Grass
         [Range(0.5f, 8f)] [SerializeField] private float chunkMeters = 2f;
         [SerializeField] private int bladeSeed = 777;
         [Range(3, 10)] [SerializeField] private int bladeSegments = 6;
+        [Tooltip("Blade segments at mid and far distance (fewer triangles where the curve can't be seen).")]
+        [Range(2, 6)] [SerializeField] private int midBladeSegments = 3;
+        [Range(2, 4)] [SerializeField] private int farBladeSegments = 2;
 
         [Header("Streaming")]
         [Tooltip("Most changed 32x32-cell tiles uploaded per frame (8 KB each). Bursts beyond this spread over the next frames.")]
@@ -68,7 +71,7 @@ namespace PlayShift.Grass
         [SerializeField] private Camera targetCamera;
 
         private GrassField _field;
-        private Mesh _bladeMesh;
+        private Mesh _bladeMesh, _bladeMeshMid, _bladeMeshFar;
         private GraphicsBuffer _cellBuffer;
         private float[] _tileScratch;
         private int[] _tileList;
@@ -187,6 +190,8 @@ namespace PlayShift.Grass
 
             ReleaseBuffers();
             if (_bladeMesh == null) _bladeMesh = GrassBladeMesh.Create(bladeSegments);
+            if (_bladeMeshMid == null) _bladeMeshMid = GrassBladeMesh.Create(midBladeSegments);
+            if (_bladeMeshFar == null) _bladeMeshFar = GrassBladeMesh.Create(farBladeSegments);
             _cellBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, _field.TileCount * GrassField.TileCellCount, CellStride);
             _tileScratch = new float[GrassField.TileCellCount * 2];
             _tileList = new int[_field.TileCount];
@@ -359,14 +364,17 @@ namespace PlayShift.Grass
                 Bounds world = TransformBounds(m, localBounds);
 
                 float fraction = 1f, dist = 0f;
+                bool visible = true;
+                Mesh mesh = _bladeMesh;
                 if (cull)
                 {
                     dist = Mathf.Sqrt(world.SqrDistance(camPos));
                     if (dist > q.maxDrawDistance) continue;
-                    // Chunks behind the camera can still cast shadows into view, so only frustum-cull distant ones.
-                    if (!GeometryUtility.TestPlanesAABB(_frustum, world) && dist > q.shadowCastDistance) continue;
-                    if (dist > q.midDetailDistance) fraction = farDetailFraction;
-                    else if (dist > q.fullDetailDistance) fraction = midDetailFraction;
+                    // Chunks behind the camera can still cast shadows into view: those are drawn shadow-only.
+                    visible = GeometryUtility.TestPlanesAABB(_frustum, world);
+                    if (!visible && dist > q.shadowCastDistance) continue;
+                    if (dist > q.midDetailDistance) { fraction = farDetailFraction; mesh = _bladeMeshFar; }
+                    else if (dist > q.fullDetailDistance) { fraction = midDetailFraction; mesh = _bladeMeshMid; }
                 }
 
                 int count = Mathf.Max(1, Mathf.CeilToInt(c.Count * density * fraction));
@@ -376,8 +384,9 @@ namespace PlayShift.Grass
                 _mpb.SetFloat(ChunkSeedId, c.Seed);
                 // Fewer, wider blades far away keep the same ground coverage.
                 _mpb.SetFloat(LodWidthScaleId, Mathf.Min(2.5f, 1f / Mathf.Sqrt(fraction)));
-                var shadows = dist < q.shadowCastDistance ? ShadowCastingMode.On : ShadowCastingMode.Off;
-                Graphics.DrawMeshInstancedProcedural(_bladeMesh, 0, grassMaterial, world, count, _mpb, shadows, true, layer, targetCamera);
+                var shadows = !visible ? ShadowCastingMode.ShadowsOnly
+                    : dist < q.shadowCastDistance ? ShadowCastingMode.On : ShadowCastingMode.Off;
+                Graphics.DrawMeshInstancedProcedural(mesh, 0, grassMaterial, world, count, _mpb, shadows, true, layer, targetCamera);
             }
             LastDrawnBlades = drawn;
             LastDrawCalls = calls;
@@ -419,6 +428,8 @@ namespace PlayShift.Grass
         {
             ReleaseBuffers();
             if (_bladeMesh != null) Destroy(_bladeMesh);
+            if (_bladeMeshMid != null) Destroy(_bladeMeshMid);
+            if (_bladeMeshFar != null) Destroy(_bladeMeshFar);
             if (_ownsMaterial && grassMaterial != null) Destroy(grassMaterial);
         }
 

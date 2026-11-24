@@ -196,25 +196,25 @@ MonoBehaviour:
   grassMaterial: {fileID: 2100000, guid: b149c8ccf68d7cc4e9036c1c218ebb44, type: 2}
   quality: 2
   low:
-    bladesPerSquareMeter: 380
+    bladesPerSquareMeter: 300
     fullDetailDistance: 9
     midDetailDistance: 22
     maxDrawDistance: 90
     shadowCastDistance: 0
   medium:
-    bladesPerSquareMeter: 600
+    bladesPerSquareMeter: 480
     fullDetailDistance: 12
     midDetailDistance: 30
     maxDrawDistance: 120
     shadowCastDistance: 7
   high:
-    bladesPerSquareMeter: 950
+    bladesPerSquareMeter: 720
     fullDetailDistance: 16
     midDetailDistance: 40
     maxDrawDistance: 160
     shadowCastDistance: 12
   ultra:
-    bladesPerSquareMeter: 1500
+    bladesPerSquareMeter: 1100
     fullDetailDistance: 24
     midDetailDistance: 55
     maxDrawDistance: 200
@@ -635,9 +635,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayShift.Grass.GrassClippings
   cutter: {fileID: 1903568458}
   clippingMaterial: {fileID: 2100000, guid: 292170866def04544a1b66be1aaabb9f, type: 2}
-  maxParticles: 1200
-  perHundredUnits: 40
-  maxPerFrame: 70
+  maxParticles: 700
+  perHundredUnits: 22
+  maxPerFrame: 40
   spinDirection: -1
 --- !u!199 &1827985367
 ParticleSystemRenderer:

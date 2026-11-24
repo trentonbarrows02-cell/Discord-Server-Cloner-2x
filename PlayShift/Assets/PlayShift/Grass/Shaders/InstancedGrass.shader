@@ -27,7 +27,8 @@ Shader "PlayShift/InstancedGrass"
         _TuftSize ("Tuft spacing (m), 0 = no tufts", Range(0, 0.4)) = 0.14
         _TuftPull ("Tuft: how tightly blades gather", Range(0, 0.9)) = 0.45
         _TuftFan ("Tuft: how far blades fan out", Range(0, 1)) = 0.6
-        _TipGold ("Golden tips", Range(0, 1)) = 0.6
+        _TipGold ("Golden tips", Range(0, 1)) = 0.15
+        _TipDroop ("Tip curl", Range(0, 0.5)) = 0.15
 
         [Header(Wind)]
         _WindDirection ("Wind direction (XZ)", Vector) = (0.86, 0, 0.5, 0)

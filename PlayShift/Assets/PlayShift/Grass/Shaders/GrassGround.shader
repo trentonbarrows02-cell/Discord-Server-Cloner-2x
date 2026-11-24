@@ -16,7 +16,8 @@ Shader "PlayShift/GrassGround"
         _FarGolden ("Far grass: golden", Color) = (0.66, 0.62, 0.24, 1)
         _FarDark ("Far grass: dark", Color) = (0.28, 0.42, 0.11, 1)
         _FarStart ("Far colour starts at (x blade fade start)", Range(0, 1)) = 0.55
-        _CutTint ("Fresh-cut turf tint (multiplies lawn)", Color) = (1.08, 1.16, 0.86, 1)
+        _CutTint ("Fresh-cut turf tint (multiplies lawn)", Color) = (0.9, 0.98, 0.84, 1)
+        _CutDetail ("Fresh-cut turf: short-grass grain", Range(0, 1)) = 0.6
         _CutFine ("Fresh-cut turf: fine detail mix", Range(0, 1)) = 0.5
         _EdgeShade ("Shade on the cut lawn along the uncut grass", Range(0, 1)) = 0.35
     }
@@ -44,7 +45,7 @@ Shader "PlayShift/GrassGround"
             sampler2D _MainTex;
             float _Tiling;
             float4 _UnderColor, _FarYellow, _FarGolden, _FarDark, _CutTint;
-            float _FarStart, _CutFine, _EdgeShade;
+            float _FarStart, _CutFine, _EdgeShade, _CutDetail;
             float4x4 _WorldToField;   // global
             float4 _FieldSize;        // global: x, z (m)
 
@@ -74,6 +75,15 @@ Shader "PlayShift/GrassGround"
                 // and more saturated.
                 float3 fine = tex2D(_MainTex, i.worldPos.zx * (_Tiling * 3.7) + 0.37).rgb;
                 float3 turf = lerp(lawn, fine, _CutFine) * _CutTint.rgb;
+                // Short-grass grain: two fine noise layers (~3 cm and ~1 cm), faded out with distance so it never
+                // shimmers far away. Gives the mown lawn a real turf texture instead of a flat sheet.
+                {
+                    float dcam = distance(_WorldSpaceCameraPos.xz, i.worldPos.xz);
+                    float k = _CutDetail * (1.0 - smoothstep(6.0, 22.0, dcam));
+                    float g1 = PsNoise(i.worldPos.xz * 33.0), g2 = PsNoise(i.worldPos.xz * 97.0 + 11.3);
+                    float grain = g1 * 0.55 + g2 * 0.45;
+                    turf *= lerp(1.0, 0.72 + 0.5 * grain, k);
+                }
                 float3 col = turf;
 
                 float2 f = mul(_WorldToField, float4(i.worldPos, 1.0)).xz;

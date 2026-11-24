@@ -66,7 +66,7 @@ namespace PlayShift.Grass
 
         private void BuildGround(Vector3 origin, Vector2 size)
         {
-            var lawnTex = Speckle(512, new Color32(63, 138, 28, 255), new[] { "4fa224", "3a7d18", "5cb52b", "33721a", "6cc236", "468f20" }, 16000, 0.6f, 2.2f);
+            var lawnTex = Speckle(512, new Color32(54, 112, 30, 255), new[] { "4a9426", "3a7a1e", "55a02c", "2f6619", "5fa834", "44861f" }, 16000, 0.6f, 2.2f);
             var meadowTex = Speckle(512, new Color32(86, 130, 40, 255), new[] { "6b9a34", "5a8a2c", "78a83c", "4d7a26", "86b444" }, 12000, 0.7f, 2.4f);
 
             // The lawn: GrassGround reads the cell buffer (grown vs cut) set globally by GrassFieldRenderer.

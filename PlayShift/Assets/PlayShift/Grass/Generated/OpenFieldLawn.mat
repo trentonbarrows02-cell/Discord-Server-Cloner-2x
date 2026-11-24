@@ -32,9 +32,9 @@ Material:
     - _FarStart: 0.55
     - _Tiling: 0.66
     m_Colors:
-    - _FarDark: {r: 0.28, g: 0.42, b: 0.11, a: 1}
-    - _FarGolden: {r: 0.66, g: 0.62, b: 0.24, a: 1}
-    - _FarYellow: {r: 0.56, g: 0.66, b: 0.2, a: 1}
-    - _UnderColor: {r: 0.55, g: 0.62, b: 0.38, a: 1}
+    - _FarDark: {r: 0.16, g: 0.34, b: 0.08, a: 1}
+    - _FarGolden: {r: 0.4, g: 0.58, b: 0.15, a: 1}
+    - _FarYellow: {r: 0.32, g: 0.54, b: 0.13, a: 1}
+    - _UnderColor: {r: 0.4, g: 0.52, b: 0.28, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

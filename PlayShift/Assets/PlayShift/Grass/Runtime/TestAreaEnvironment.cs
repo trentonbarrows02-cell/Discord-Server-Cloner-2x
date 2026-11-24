@@ -47,7 +47,7 @@ namespace PlayShift.Grass
         private void BuildGround(Vector3 origin, Vector2 size)
         {
             _origin = origin; _size = size;
-            var lawnTex = Speckle(512, new Color32(63, 138, 28, 255), new[] { "4fa224", "3a7d18", "5cb52b", "33721a", "6cc236", "468f20" }, 16000, 0.6f, 2.2f);
+            var lawnTex = Speckle(512, new Color32(54, 112, 30, 255), new[] { "4a9426", "3a7a1e", "55a02c", "2f6619", "5fa834", "44861f" }, 16000, 0.6f, 2.2f);
             var meadowTex = Speckle(512, new Color32(85, 104, 44, 255), new[] { "617a30", "4a5d26", "6e7d38", "5d5a33", "73883c", "3f5222" }, 14000, 0.6f, 2.5f);
             var gravelTex = Speckle(256, new Color32(155, 143, 120, 255), new[] { "b3a891", "857a65", "a89a7d", "c2b9a3", "6f6555", "8c7f68" }, 7000, 0.6f, 2.2f);
 

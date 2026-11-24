@@ -17,18 +17,18 @@ namespace PlayShift.Grass
         [SerializeField] private GrassCutter cutter;
         [Tooltip("Particle material (unlit, vertex colour). Created at runtime when empty.")]
         [SerializeField] private Material clippingMaterial;
-        [SerializeField] private int maxParticles = 1200;
+        [SerializeField] private int maxParticles = 700;
         [Tooltip("Particles per 100 grass units cut, before the height factor.")]
-        [SerializeField] private float perHundredUnits = 40f;
-        [SerializeField] private int maxPerFrame = 70;
+        [SerializeField] private float perHundredUnits = 22f;
+        [SerializeField] private int maxPerFrame = 40;
         [Tooltip("-1 = clockwise seen from above, which matches TrimmerBlades rotating about +Y in Unity.")]
         [SerializeField] private float spinDirection = -1f;
 
         private static readonly Color32[] Palette =
         {
-            new Color32(93, 154, 44, 255), new Color32(122, 181, 58, 255), new Color32(167, 194, 74, 255),
-            new Color32(201, 180, 90, 255), new Color32(63, 122, 34, 255),
-            new Color32(58, 70, 22, 255), new Color32(84, 58, 30, 255), new Color32(38, 72, 20, 255), new Color32(66, 40, 26, 255),
+            new Color32(88, 150, 46, 255), new Color32(104, 165, 52, 255), new Color32(76, 136, 40, 255),
+            new Color32(120, 172, 60, 255), new Color32(64, 120, 34, 255),
+            new Color32(44, 96, 26, 255), new Color32(52, 104, 30, 255), new Color32(38, 84, 22, 255), new Color32(58, 112, 34, 255),
         };
 
         private Transform _cam;

@@ -44,7 +44,7 @@ float _Spin;                        // 0..1 blade speed
 float4 _ColYellowGreen, _ColGoldenGreen, _ColDarkGreen, _ColFreshGreen, _ColDry;
 float4 _StubbleColor, _StubbleTipColor;
 float _DryAmount, _BladeWidth, _WidthGrowth, _StubbleHeight, _LeanAmount, _CutEdgeJitter;
-float _TuftSize, _TuftPull, _TuftFan, _TipGold;
+float _TuftSize, _TuftPull, _TuftFan, _TipGold, _TipDroop;
 float4 _WindDirection;
 float _WindStrength, _WindSpeed;
 
@@ -183,12 +183,16 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
     float a = theta * t;
     float up = theta < 1e-3 ? h * t : h * sin(a) / theta;
     float along = theta < 1e-3 ? 0.0 : h * (1.0 - cos(a)) / theta;
+    // Tips curl over a little more than the base (natural blades bend most near the tip).
+    float droop = _TipDroop * (0.4 + 1.2 * r5) * t * t * t * h;
+    along += droop;
+    up -= droop * 0.35;
 
     // Varied widths; taller levels have thicker blades. Tapers to a point.
-    float w = _BladeWidth * (0.7 + 0.6 * r4)
+    float w = _BladeWidth * (0.55 + 0.9 * r4)
             * (1.0 + _WidthGrowth * (sqrt(max(full, 0.05) / 0.2) - 1.0))
             * lerp(1.0, 1.35, ease) * _LodWidthScale;
-    w *= 1.0 - pow(t, 1.6) * 0.92;
+    w *= 1.0 - pow(t, 1.25) * 0.97; // natural taper to a fine (not needle-sharp) tip
     // With no stubble (_StubbleHeight 0) a cut blade collapses completely: no sliver, no shadow, just lawn.
     w *= lerp(1.0, step(1e-4, _StubbleHeight), ease);
 
