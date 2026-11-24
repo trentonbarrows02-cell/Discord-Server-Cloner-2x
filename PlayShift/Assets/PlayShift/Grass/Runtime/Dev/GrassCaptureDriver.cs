@@ -609,6 +609,26 @@ namespace PlayShift.Grass.Dev
             Step("environment tour done");
         }
 
+        /// <summary>Level side view of the cutting head (orthographic, at blade height) to show the blades are flat.</summary>
+        private IEnumerator SideShot(Transform rotor, string name)
+        {
+            var go = new GameObject("SideTestCamera");
+            var cam = go.AddComponent<Camera>();
+            cam.CopyFrom(_cam);
+            cam.orthographic = true;
+            cam.orthographicSize = 0.45f;
+            cam.nearClipPlane = 0.05f;
+            Vector3 c = rotor.position;
+            Vector3 side = Vector3.Cross(Vector3.up, _probeVm != null ? _probeVm.transform.forward : Vector3.forward).normalized;
+            cam.transform.SetPositionAndRotation(c + side * 2.2f, Quaternion.LookRotation(-side, Vector3.up));
+            cam.targetTexture = _rt;
+            var keep = _cam;
+            _cam = cam;
+            yield return Shot(name);
+            _cam = keep;
+            Destroy(go);
+        }
+
         /// <summary>
         /// Cutting feel and shape: start/stop timing (and nothing cut after release), rapid clicking, accuracy at 30-240
         /// fps, diagonal / circle / S-curve paths photographed from above, the fine cut mask's alignment, both upgrades
@@ -883,13 +903,26 @@ namespace PlayShift.Grass.Dev
                 if (rotor != null && rotor.parent != null)
                 {
                     var housing = rotor.parent;
-                    var mf = rotor.GetComponent<MeshFilter>();
-                    if (mf != null && mf.sharedMesh != null)
                     {
-                        var b = mf.sharedMesh.bounds;
-                        _report.AppendLine($"  rotor '{rotor.name}' (child of '{housing.name}'): mesh extents x {b.extents.x:F4} / z {b.extents.z:F4} " +
-                                           $"(equal = blades the same length), centre offset {new Vector2(b.center.x, b.center.z).magnitude * 1000f:F2} mm, " +
-                                           $"local scale {rotor.localScale.x:F3}/{rotor.localScale.y:F3}/{rotor.localScale.z:F3}");
+                        // Blades in the rotor's own space: equal reach, flat (height range = blade thickness), centred.
+                        var parts = rotor.GetComponentsInChildren<MeshFilter>();
+                        var bb = new Bounds(); bool any = false; int bladeCount = 0;
+                        foreach (var pmf in parts)
+                        {
+                            if (pmf.sharedMesh == null || !pmf.name.StartsWith("Blade")) continue;
+                            bladeCount++;
+                            var mb = pmf.sharedMesh.bounds;
+                            for (int k = 0; k < 8; k++)
+                            {
+                                Vector3 c = mb.center + Vector3.Scale(mb.extents, new Vector3((k & 1) == 0 ? -1 : 1, (k & 2) == 0 ? -1 : 1, (k & 4) == 0 ? -1 : 1));
+                                Vector3 q = rotor.InverseTransformPoint(pmf.transform.TransformPoint(c));
+                                if (!any) { bb = new Bounds(q, Vector3.zero); any = true; } else bb.Encapsulate(q);
+                            }
+                        }
+                        float sc = rotor.lossyScale.x;
+                        _report.AppendLine($"  rotor '{rotor.name}' (child of '{housing.name}', {rotor.childCount} parts, {bladeCount} blades): reach x {bb.extents.x * sc * 100f:F1} / " +
+                                           $"z {bb.extents.z * sc * 100f:F1} cm (equal = same length), blade height range {bb.size.y * sc * 100f:F2} cm " +
+                                           $"(= blade thickness when flat), centre offset {new Vector2(bb.center.x, bb.center.z).magnitude * sc * 1000f:F2} mm");
                     }
                     foreach (bool slow in new[] { true, false })
                     {
@@ -911,8 +944,12 @@ namespace PlayShift.Grass.Dev
                         }
                         _report.AppendLine($"  rotor {(slow ? "slow check" : "full speed")}: tilt against the housing max {maxTilt:F3} deg, centre moved max " +
                                            $"{maxDrift * 1000f:F2} mm, angle step per frame {minStep:F2}-{maxStep:F2} deg (steady = equal)");
+                        yield return SideShot(rotor, slow ? "19_rotor_side_slow" : "19_rotor_side_full");
                     }
                     tb.SlowSpinPreview = false;
+                    _input.TrimmerHeld = false;
+                    yield return Frames(15);
+                    yield return SideShot(rotor, "19_rotor_side_stopped");
                 }
                 else _report.AppendLine("  rotor: no spinning part found");
             }
