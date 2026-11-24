@@ -2,9 +2,10 @@
 // One instance = one blade, generated procedurally per chunk (no blade buffer). Its height and cut state come from the logical cell it
 // belongs to (_Cells: x = grown height in metres, y = time the cell was cut, or -1 while grown).
 //
-//  * Cut animation: when a cell is cut, its blades shorten over _CutAnim seconds with a small kick away
-//    from the cutting head. With _StubbleHeight 0 (default) they vanish and the green lawn ground shows
-//    (never bare dirt); a positive _StubbleHeight leaves short stubble instead.
+//  * Cut animation: when a cell is cut, its blades are sliced down over _CutAnim seconds with a small kick away
+//    from the cutting head, leaving short fresh stubble (_StubbleHeight; 0 = they vanish and the lawn shows).
+//    Each blade reads its cut state from a point jittered by up to ~half a cell (_CutEdgeJitter), so a cut path
+//    has a ragged, natural edge instead of 10 cm stair steps (the cutting logic still uses the exact cells).
 //  * Interaction: uncut blades near a cutting head lean away from it (more for tall grass and while the
 //    blades spin). Roots never move: every blade is a constant-length arc rooted at its anchor.
 //  * Wind: rolling gusts; taller grass sways more.
@@ -39,7 +40,7 @@ float _Spin;                        // 0..1 blade speed
 
 float4 _ColYellowGreen, _ColGoldenGreen, _ColDarkGreen, _ColFreshGreen, _ColDry;
 float4 _StubbleColor, _StubbleTipColor;
-float _DryAmount, _BladeWidth, _WidthGrowth, _StubbleHeight, _LeanAmount;
+float _DryAmount, _BladeWidth, _WidthGrowth, _StubbleHeight, _LeanAmount, _CutEdgeJitter;
 float4 _WindDirection;
 float _WindStrength, _WindSpeed;
 
@@ -96,7 +97,8 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
 {
     GrassBlade o;
     float4 blade = PsProceduralBlade(instanceID);
-    float2 cell = PsCellAt(blade.xy);
+    float2 jit = float2(PsHash(blade.w * 1000.0 + 81.3), PsHash(blade.w * 1000.0 + 97.9)) - 0.5;
+    float2 cell = PsCellAt(blade.xy + jit * _CutEdgeJitter / _CellGrid.zw);
     cell.x += _HeightBonus;
     float s = blade.w * 1000.0;
     float r1 = PsHash(s + 1.7), r2 = PsHash(s + 11.3), r3 = PsHash(s + 23.9);

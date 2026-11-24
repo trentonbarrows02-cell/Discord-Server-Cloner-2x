@@ -72,15 +72,23 @@ Shader "PlayShift/GrassGround"
                 float2 f = mul(_WorldToField, float4(i.worldPos, 1.0)).xz;
                 if (f.x >= 0.0 && f.y >= 0.0 && f.x < _FieldSize.x && f.y < _FieldSize.y && _CellGrid.x > 0.0)
                 {
-                    float2 cell = PsCellAt(f);
-                    bool grown = cell.y < 0.0 || (_GrassTime - cell.y) < _CutAnim;
-                    if (grown)
+                    // How cut this spot is: bilinear over the 4 nearest cell centres, then a noisy threshold, so
+                    // the mown lawn meets the long grass along a soft, ragged line (no 10 cm squares).
+                    float2 g = f * _CellGrid.zw - 0.5;
+                    float2 g0 = floor(g), gf = g - g0;
+                    float2 cs = 1.0 / _CellGrid.zw;
+                    float4 cy = float4(PsCellAt((g0 + float2(0.5, 0.5)) * cs).y, PsCellAt((g0 + float2(1.5, 0.5)) * cs).y,
+                                       PsCellAt((g0 + float2(0.5, 1.5)) * cs).y, PsCellAt((g0 + float2(1.5, 1.5)) * cs).y);
+                    float4 isCut = step(0.0, cy) * step(_CutAnim, _GrassTime - cy);
+                    float cutAmt = lerp(lerp(isCut.x, isCut.y, gf.x), lerp(isCut.z, isCut.w, gf.x), gf.y);
+                    float edge = smoothstep(0.3, 0.7, cutAmt + (PsNoise(f * 23.0) - 0.5) * 0.45);
+                    if (edge < 0.999)
                     {
                         float d = distance(_WorldSpaceCameraPos.xz, i.worldPos.xz);
                         float far = _GrassFade.y > 0.0 ? smoothstep(_GrassFade.x * _FarStart, _GrassFade.y, d) : 1.0;
                         float n1 = PsNoise(f * 0.35 + 3.1), n2 = PsNoise(f * 1.7 - 7.3);
                         float3 grass = lerp(lerp(_FarYellow.rgb, _FarGolden.rgb, smoothstep(0.55, 0.9, n1)), _FarDark.rgb, n2 * 0.45);
-                        col = lerp(lawn * _UnderColor.rgb, grass, far);
+                        col = lerp(lerp(lawn * _UnderColor.rgb, grass, far), lawn, edge);
                     }
                 }
 

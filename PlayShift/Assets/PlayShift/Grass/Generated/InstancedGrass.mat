@@ -26,10 +26,11 @@ Material:
     m_Ints: []
     m_Floats:
     - _BladeWidth: 0.0062
-    - _CutAnim: 0.18
+    - _CutAnim: 0.12
+    - _CutEdgeJitter: 0.9
     - _DryAmount: 0.8
     - _LeanAmount: 1
-    - _StubbleHeight: 0
+    - _StubbleHeight: 0.035
     - _Translucency: 0.9
     - _WidthGrowth: 0.45
     - _WindSpeed: 1.5
@@ -40,8 +41,8 @@ Material:
     - _ColFreshGreen: {r: 0.33, g: 0.55, b: 0.14, a: 1}
     - _ColGoldenGreen: {r: 0.66, g: 0.62, b: 0.22, a: 1}
     - _ColYellowGreen: {r: 0.55, g: 0.66, b: 0.18, a: 1}
-    - _StubbleColor: {r: 0.16, g: 0.5, b: 0.05, a: 1}
-    - _StubbleTipColor: {r: 0.42, g: 0.86, b: 0.17, a: 1}
+    - _StubbleColor: {r: 0.17, g: 0.42, b: 0.07, a: 1}
+    - _StubbleTipColor: {r: 0.5, g: 0.74, b: 0.24, a: 1}
     - _WindDirection: {r: 0.86, g: 0, b: 0.5, a: 0}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

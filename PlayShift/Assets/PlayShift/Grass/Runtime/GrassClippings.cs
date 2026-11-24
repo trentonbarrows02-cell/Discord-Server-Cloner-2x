@@ -5,8 +5,9 @@ namespace PlayShift.Grass
     /// <summary>
     /// Lightweight flying grass clippings. One pooled ParticleSystem (fixed max particle count, no
     /// GameObjects per particle). Small green/yellow slivers are thrown tangentially off the spinning blade,
-    /// plus the head's own movement; more for dense, tall grass, few for short grass. They tumble, fall and
-    /// fade quickly. No smoke, snow or large debris.
+    /// plus the head's own movement; more for dense, tall grass, few for short grass. They come off the front of
+    /// the blade disc (where it bites into uncut grass) while the head moves, all round it when standing still.
+    /// A mix of fine bits and longer slivers; they tumble, fall and fade quickly. No smoke, snow or large debris.
     /// </summary>
     [RequireComponent(typeof(ParticleSystem))]
     public sealed class GrassClippings : MonoBehaviour
@@ -16,8 +17,8 @@ namespace PlayShift.Grass
         [SerializeField] private Material clippingMaterial;
         [SerializeField] private int maxParticles = 900;
         [Tooltip("Particles per 100 grass units cut, before the height factor.")]
-        [SerializeField] private float perHundredUnits = 0.9f;
-        [SerializeField] private int maxPerFrame = 40;
+        [SerializeField] private float perHundredUnits = 1.3f;
+        [SerializeField] private int maxPerFrame = 55;
         [Tooltip("-1 = clockwise seen from above, which matches TrimmerBlades rotating about +Y in Unity.")]
         [SerializeField] private float spinDirection = -1f;
 
@@ -110,16 +111,22 @@ namespace PlayShift.Grass
 
             var p = new ParticleSystem.EmitParams();
             float len = Mathf.Lerp(0.03f, 0.06f, tall);
+            // Leading edge: the side of the disc moving into uncut grass.
+            var flat = new Vector2(headVel.x, headVel.z);
+            float lead = Mathf.Atan2(flat.y, flat.x);
+            float spread = flat.magnitude > 0.25f ? 1.25f : Mathf.PI;
             for (int i = 0; i < n; i++)
             {
-                float phi = Random.value * Mathf.PI * 2f;
+                float phi = lead + Random.Range(-spread, spread);
                 float rr = radius * Random.Range(0.6f, 1f);
                 var dir = new Vector3(Mathf.Cos(phi), 0f, Mathf.Sin(phi));
                 var tangent = new Vector3(-dir.z, 0f, dir.x) * spinDirection;
                 float sp = Random.Range(2.2f, 5.4f);
                 p.position = head + dir * rr + Vector3.up * Random.Range(0.04f, 0.06f + 0.4f * tall);
                 p.velocity = tangent * sp + dir * 0.8f + Vector3.up * Random.Range(1.2f, 3.8f) + headVel * 0.6f;
-                p.startSize3D = new Vector3(0.008f, len * Random.Range(0.6f, 1.3f), 1f);
+                bool fine = Random.value < 0.55f; // fine chopped bits and longer slivers
+                p.startSize3D = fine ? new Vector3(0.007f, len * Random.Range(0.25f, 0.45f), 1f)
+                                     : new Vector3(0.009f, len * Random.Range(0.7f, 1.3f), 1f);
                 p.rotation3D = new Vector3(Random.value * 360f, Random.value * 360f, Random.value * 360f);
                 p.startColor = Palette[Random.Range(0, Palette.Length)];
                 p.startLifetime = Random.Range(0.55f, 1.15f);

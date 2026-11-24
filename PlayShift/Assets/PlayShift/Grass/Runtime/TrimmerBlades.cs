@@ -5,9 +5,10 @@ namespace PlayShift.Grass
 {
     /// <summary>
     /// Spins the trimmer's cutting head(s). Turning on accelerates smoothly, turning off coasts down; all
-    /// timing uses deltaTime, so it is frame-rate independent. At speed, a soft motion-blur ring fades in
-    /// over each head so it reads as a fast spinning blade without strobing. Supports any number of heads
-    /// (double-bladed / upgraded trimmers).
+    /// timing uses deltaTime, so it is frame-rate independent. As the blades speed up a motion-blur disc
+    /// (sized to the blade tips, at blade height) fades in, and at full speed the solid blades are hidden: at
+    /// 7 turns a second a 4-blade disc strobes at 30-60 fps (it seems to crawl or run backwards), a real
+    /// trimmer reads as a blurred disc. Supports any number of heads (double-bladed / upgraded trimmers).
     /// </summary>
     public sealed class TrimmerBlades : MonoBehaviour
     {
@@ -23,9 +24,14 @@ namespace PlayShift.Grass
         [Header("Motion blur")]
         [SerializeField] private bool motionBlurRing = true;
         [SerializeField] private float blurRadius = 0.65f;
-        [Range(0f, 1f)] [SerializeField] private float blurOpacity = 0.5f;
+        [Range(0f, 1f)] [SerializeField] private float blurOpacity = 0.9f;
+
+        [Tooltip("Above this speed (0..1) the solid blades are hidden and only the blur disc shows.")]
+        [Range(0f, 1f)] [SerializeField] private float hideBladesAbove = 0.62f;
 
         private readonly List<Renderer> _blurRings = new List<Renderer>();
+        private readonly List<Renderer> _bladeRenderers = new List<Renderer>();
+        private bool _bladesShown = true;
         private MaterialPropertyBlock _mpb;
         private static Texture2D s_blurTex;
         private static Material s_blurMat;
@@ -55,9 +61,18 @@ namespace PlayShift.Grass
             spinners.AddRange(heads);
             foreach (var r in _blurRings) if (r != null) Destroy(r.gameObject);
             _blurRings.Clear();
+            SetBladesShown(true);
+            _bladeRenderers.Clear();
             if (!motionBlurRing) return;
             foreach (var s in spinners)
-                if (s != null) _blurRings.Add(CreateBlurRing(s.parent != null ? s.parent : s));
+            {
+                if (s == null) continue;
+                _blurRings.Add(CreateBlurRing(s));
+                // Only a blades-only spinner is hidden at speed (a whole-head spinner keeps showing).
+                if (s.parent != null && s.name != "CutterHead")
+                    foreach (var r in s.GetComponentsInChildren<Renderer>(true))
+                        if (r.name != "MotionBlurRing") { r.enabled = true; _bladeRenderers.Add(r); }
+            }
         }
 
         public void Toggle() => On = !On;
@@ -77,10 +92,13 @@ namespace PlayShift.Grass
 
             Vibration = Rpm01 * (0.35f + 0.65f * Load);
 
+            if (_bladeRenderers.Count > 0) SetBladesShown(Rpm01 < hideBladesAbove);
+
             if (_blurRings.Count > 0)
             {
                 if (_mpb == null) _mpb = new MaterialPropertyBlock();
-                float a = Mathf.Clamp01((Rpm01 - 0.3f) / 0.7f) * blurOpacity;
+                // Blur builds up with speed and is full by the time the solid blades are hidden.
+                float a = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.15f, hideBladesAbove, Rpm01)) * blurOpacity;
                 foreach (var r in _blurRings)
                 {
                     if (r == null) continue;
@@ -93,13 +111,35 @@ namespace PlayShift.Grass
             }
         }
 
-        private Renderer CreateBlurRing(Transform headParent)
+        private void SetBladesShown(bool show)
         {
+            if (_bladesShown == show) return;
+            _bladesShown = show;
+            foreach (var r in _bladeRenderers) if (r != null) r.enabled = show;
+        }
+
+        /// <summary>Blur disc on the blade plane, as wide as the blade tips (measured from the spinner's mesh).</summary>
+        private Renderer CreateBlurRing(Transform spinner)
+        {
+            var headParent = spinner.parent != null ? spinner.parent : spinner;
+            float tip = 0f, bladeY = 0f;
+            var smf = spinner.GetComponent<MeshFilter>();
+            if (smf != null && smf.sharedMesh != null)
+            {
+                var b = smf.sharedMesh.bounds;
+                tip = Mathf.Max(b.extents.x + Mathf.Abs(b.center.x), b.extents.z + Mathf.Abs(b.center.z)) * spinner.lossyScale.x;
+                bladeY = b.center.y;
+            }
+            float radius = tip > 0.05f ? tip * 1.02f : blurRadius;
             var go = new GameObject("MotionBlurRing");
             go.transform.SetParent(headParent, false);
-            go.transform.localPosition = new Vector3(0f, 0.04f / Mathf.Max(0.01f, headParent.lossyScale.y), 0f);
+            // Just above the blades' mid-plane so the disc covers them without floating above.
+            bool own = spinner != headParent;
+            Vector3 local = own ? spinner.localPosition : Vector3.zero;
+            local.y += (own ? bladeY * spinner.localScale.y : 0f) + 0.006f / Mathf.Max(0.01f, headParent.lossyScale.y);
+            go.transform.localPosition = local;
             go.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
-            float s = blurRadius * 2f / Mathf.Max(0.01f, headParent.lossyScale.x);
+            float s = radius * 2f / Mathf.Max(0.01f, headParent.lossyScale.x);
             go.transform.localScale = new Vector3(s, s, s);
             var mf = go.AddComponent<MeshFilter>();
             mf.sharedMesh = Resources.GetBuiltinResource<Mesh>("Quad.fbx");
@@ -127,20 +167,29 @@ namespace PlayShift.Grass
             get
             {
                 if (s_blurTex != null) return s_blurTex;
-                const int n = 128;
-                s_blurTex = new Texture2D(n, n, TextureFormat.RGBA32, false) { name = "TrimmerBlurRing", wrapMode = TextureWrapMode.Clamp };
+                const int n = 256;
+                s_blurTex = new Texture2D(n, n, TextureFormat.RGBA32, true) { name = "TrimmerBlurRing", wrapMode = TextureWrapMode.Clamp, anisoLevel = 4 };
                 var px = new Color32[n * n];
                 for (int y = 0; y < n; y++)
                     for (int x = 0; x < n; x++)
                     {
                         float dx = (x + 0.5f) / n * 2f - 1f, dy = (y + 0.5f) / n * 2f - 1f;
                         float r = Mathf.Sqrt(dx * dx + dy * dy), th = Mathf.Atan2(dy, dx);
-                        float ring = (r < 1f && r > 0.3f) ? Mathf.Exp(-Mathf.Pow((r - 0.78f) / 0.2f, 2f)) : 0f;
-                        float a = ring * (0.55f + 0.45f * Mathf.Cos(3f * th)) * 0.9f;
-                        px[y * n + x] = new Color32(215, 220, 228, (byte)(a * 255f));
+                        // Disc from under the cap out to the blade tips, soft anti-aliased rim.
+                        float disc = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.2f, 0.32f, r)) *
+                                     (1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.965f, 1f, r)));
+                        // Smeared steel: denser toward the tips (blades are wider there), faint 4-blade lobes,
+                        // fine concentric speed rings and a bright band where the blade edges catch the light.
+                        float body = 0.34f + 0.26f * Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.35f, 0.9f, r));
+                        float lobes = 0.88f + 0.12f * Mathf.Cos(4f * th);
+                        float rings = 0.9f + 0.1f * Mathf.Sin(r * 70f);
+                        float band = Mathf.Exp(-Mathf.Pow((r - 0.9f) / 0.05f, 2f));
+                        float a = disc * Mathf.Clamp01(body * lobes * rings + 0.08f * band);
+                        float shade = Mathf.Lerp(0.8f, 0.95f, band) * (0.92f + 0.08f * Mathf.Cos(2f * th + 0.6f));
+                        px[y * n + x] = new Color32((byte)(172 * shade), (byte)(178 * shade), (byte)(186 * shade), (byte)(a * 255f));
                     }
                 s_blurTex.SetPixels32(px);
-                s_blurTex.Apply(false, true);
+                s_blurTex.Apply(true, true);
                 return s_blurTex;
             }
         }

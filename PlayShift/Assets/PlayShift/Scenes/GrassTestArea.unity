@@ -636,8 +636,8 @@ MonoBehaviour:
   cutter: {fileID: 1903568458}
   clippingMaterial: {fileID: 2100000, guid: 292170866def04544a1b66be1aaabb9f, type: 2}
   maxParticles: 900
-  perHundredUnits: 0.9
-  maxPerFrame: 40
+  perHundredUnits: 1.3
+  maxPerFrame: 55
   spinDirection: -1
 --- !u!199 &1827985367
 ParticleSystemRenderer:
@@ -3125,7 +3125,7 @@ MonoBehaviour:
   startOn: 0
   motionBlurRing: 1
   blurRadius: 0.65
-  blurOpacity: 0.5
+  blurOpacity: 0.9
 --- !u!1 &2146210640
 GameObject:
   m_ObjectHideFlags: 0
