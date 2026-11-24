@@ -72,7 +72,7 @@ namespace PlayShift.Grass
         [Tooltip("Vertical trimmer movement influence: looking above the default camera angle swings the trimmer up about " +
                  "the hip grip by this fraction of the extra angle (0 = stays on the ground, 1 = follows the camera fully). " +
                  "Looking down to the default angle or below lowers it back onto the ground at the cutting height.")]
-        [SerializeField, Range(0f, 1f)] private float liftInfluence = 0.85f;
+        [SerializeField, Range(0f, 1f)] private float liftInfluence = 0f;
         [Tooltip("Maximum trimmer lift height (metres above its cutting height).")]
         [SerializeField, Range(0f, 1.5f)] private float maxLiftHeight = 0.6f;
         [Tooltip("Trimmer movement responsiveness: how fast the lift follows the look (per second; 30 = settles in ~0.1 s, " +
