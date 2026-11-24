@@ -1093,6 +1093,32 @@ namespace PlayShift.Grass.Dev
                 }
                 _input.Move = Vector2.zero;
                 yield return Frames(10);
+
+                // Blades while tapping left/right with the trimmer running: the drawn step per frame must stay steady
+                // and forward (no wagon-wheel stop / reverse).
+                var tbS = vm.GetComponent<TrimmerBlades>();
+                if (tbS != null)
+                {
+                    foreach (int fps in new[] { 30, 60, 144, 240 })
+                    {
+                        Time.captureFramerate = fps;
+                        _input.TrimmerHeld = true;
+                        yield return Frames(fps / 4);
+                        float prev = tbS.RotorAngle, minStep = 999f, maxStep = -999f;
+                        for (int i = 0; i < fps; i++)
+                        {
+                            _input.Move = (i / Mathf.Max(1, fps / 10)) % 2 == 0 ? new Vector2(1f, 0f) : new Vector2(-1f, 0f);
+                            yield return null;
+                            float st = Mathf.Repeat(tbS.RotorAngle - prev, 360f);
+                            prev = tbS.RotorAngle;
+                            minStep = Mathf.Min(minStep, st); maxStep = Mathf.Max(maxStep, st);
+                        }
+                        _input.Move = Vector2.zero; _input.TrimmerHeld = false;
+                        _report.AppendLine($"  blades at {fps} fps while tapping left/right: drawn step {minStep:F1}-{maxStep:F1} deg per frame (steady, forward, under 45)");
+                        yield return Frames(10);
+                    }
+                    Time.captureFramerate = 60;
+                }
             }
 
             // Counter: text rebuilds per second while cutting at 30-240 FPS (should be ~20, not one per frame), and the

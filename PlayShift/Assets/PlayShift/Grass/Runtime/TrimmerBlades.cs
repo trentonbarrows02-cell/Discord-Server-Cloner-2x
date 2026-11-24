@@ -44,6 +44,7 @@ namespace PlayShift.Grass
 
         private readonly List<Quaternion> _baseRotations = new List<Quaternion>();
         private float _angle, _degPerSec, _loadSmoothed;
+        private const float MaxVisibleStepDeg = 30f; // < 90/3: the 4-blade pattern always reads as turning forward
         private readonly List<Vector3> _basePositions = new List<Vector3>();
 
         /// <summary>Spin the rotor slowly to check it by eye (also used by the capture test).</summary>
@@ -128,9 +129,14 @@ namespace PlayShift.Grass
             if (!On && Rpm01 < 0.01f) Rpm01 = 0f;
 
             _loadSmoothed = Mathf.Lerp(_loadSmoothed, Load, 1f - Mathf.Exp(-loadSmoothing * dt));
-            _degPerSec = Rpm01 * maxRps * SpeedMultiplier * 360f * (1f - 0.25f * _loadSmoothed) * (slowSpinPreview ? slowSpinScale : 1f);
-            float degPerSec = _degPerSec;
-            _angle = Mathf.Repeat(_angle + degPerSec * dt, 360f);
+            // The drawn rotation does not slow under cutting load: with 4 blades the pattern repeats every 90 deg, and at
+            // 9.5 rev/s a 25% load dip swung the frame-to-frame step across that (wagon-wheel effect), so tapping
+            // left/right made the blades look like they stopped or ran backwards. The step per frame is also capped
+            // below a third of the 90 deg repeat, so the blades always read as spinning forward at any frame rate (the
+            // blur disc carries the speed). Load still drives the sound and vibration.
+            _degPerSec = Rpm01 * maxRps * SpeedMultiplier * 360f * (slowSpinPreview ? slowSpinScale : 1f);
+            float step = Mathf.Min(_degPerSec * dt, MaxVisibleStepDeg);
+            _angle = Mathf.Repeat(_angle + step, 360f);
             var spin = Quaternion.Euler(0f, _angle, 0f);
             for (int i = 0; i < spinners.Count; i++)
             {
@@ -158,7 +164,7 @@ namespace PlayShift.Grass
                     r.GetPropertyBlock(_mpb);
                     _mpb.SetColor("_Color", new Color(1f, 1f, 1f, a));
                     r.SetPropertyBlock(_mpb);
-                    r.transform.Rotate(0f, 0f, degPerSec * 0.37f * dt, Space.Self);
+                    r.transform.Rotate(0f, 0f, _degPerSec * 0.37f * dt, Space.Self);
                 }
             }
         }

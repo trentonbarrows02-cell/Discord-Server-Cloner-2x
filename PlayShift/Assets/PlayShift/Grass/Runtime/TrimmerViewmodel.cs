@@ -61,8 +61,8 @@ namespace PlayShift.Grass
                  "the same place on screen at any fixed camera angle and on any screen shape. Off: Work Reach ahead.")]
         [SerializeField] private bool placeFromView = true;
         [Tooltip("Trimmer position: where the centre of the cutting head sits on screen at the default camera angle " +
-                 "(0-1; x = left to right, y = bottom to top). 0.56, 0.46 = just below the middle, a little right; the shaft runs to the bottom-right corner.")]
-        [SerializeField] private Vector2 headViewport = new Vector2(0.56f, 0.46f);
+                 "(0-1; x = left to right, y = bottom to top). 0.56, 0.34 = lower third, a little right; the shaft runs to the bottom-right corner.")]
+        [SerializeField] private Vector2 headViewport = new Vector2(0.56f, 0.34f);
         [Tooltip("How much the head follows the camera's up/down look (0 = stays at the default-angle spot on the ground and " +
                  "slides across the screen; 1 = stays at the same spot on screen). It always stays on the ground, level " +
                  "with it, at the cutting height: looking up never lifts it and looking down never pushes it in.")]
@@ -106,7 +106,7 @@ namespace PlayShift.Grass
         [SerializeField] private float maxGroundTilt = 20f;
         [Tooltip("Where the trimmer is held, relative to the player's feet (x right, y up, z forward): the right hip. The " +
                  "shaft always runs back towards it, out of the bottom-right of the view.")]
-        [SerializeField] private Vector3 hipGrip = new Vector3(0.85f, 0.8f, 0.2f);
+        [SerializeField] private Vector3 hipGrip = new Vector3(0.82f, 0.85f, 0.45f);
         [Tooltip("Shaft length of the trimmer model at stretch 1 (m, world) and its built-in rise from the head (deg).")]
         [SerializeField] private float shaftLength = 2.2f;
         [SerializeField] private float shaftBuiltInRise = 22.5f;

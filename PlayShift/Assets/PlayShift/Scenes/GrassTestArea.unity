@@ -3043,7 +3043,7 @@ MonoBehaviour:
     m_Bits: 4294967291
   groundFollowRate: 18
   maxGroundTilt: 20
-  hipGrip: {x: 0.85, y: 0.8, z: 0.2}
+  hipGrip: {x: 0.82, y: 0.85, z: 0.45}
   obstacleMask:
     serializedVersion: 2
     m_Bits: 4294967291
@@ -3071,8 +3071,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayShift.Grass.FirstPersonController
   playerCamera: {fileID: 1903568453}
   eyeHeight: 1.7
-  walkSpeed: 5.5
-  sprintSpeed: 5.5
+  walkSpeed: 6.3
+  sprintSpeed: 6.3
   acceleration: 70
   mouseSensitivity: 0.12
   invertY: 0
