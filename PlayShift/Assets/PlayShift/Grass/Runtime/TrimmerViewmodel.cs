@@ -22,6 +22,9 @@ namespace PlayShift.Grass
         [Tooltip("The trimmer model (Assets/PlayShift/Models/StringTrimmer.glb). Must contain a child named 'CutterHead'.")]
         [SerializeField] private GameObject trimmerModel;
         [SerializeField] private string cutterHeadName = "CutterHead";
+        [Tooltip("Child of the cutter head holding only the blades: the only part that spins (the cap, collar and " +
+                 "spool stay fixed to the shaft). Without it the whole head spins.")]
+        [SerializeField] private string bladesName = "Blades";
         [SerializeField] private float modelScale = 1.85f;
         [Tooltip("Lengthens only the shaft (model Z) so it reaches from the head on the ground up to the bottom-right corner. The cutting head keeps its real size.")]
         [SerializeField] private float shaftStretch = 1f;
@@ -76,15 +79,18 @@ namespace PlayShift.Grass
         [SerializeField] private float sweepDegrees = 24f;
         [SerializeField] private float sweepHz = 0.55f;
         [SerializeField] private float turnLag = 7f;
-        [SerializeField] private float walkSway = 0.03f;
-        [SerializeField] private float vibrationMetres = 0.006f;
-        [SerializeField] private float thickGrassPullBack = 0.06f;
+        [Tooltip("Side-to-side drift of the head while walking (m). 0 = the head holds still; only the blades spin.")]
+        [SerializeField] private float walkSway = 0f;
+        [Tooltip("Motor shake of the head (m). 0 = the head holds still; only the blades spin.")]
+        [SerializeField] private float vibrationMetres = 0f;
+        [Tooltip("How far thick grass pushes the head back (m). 0 = the head holds still.")]
+        [SerializeField] private float thickGrassPullBack = 0f;
 
         [Header("Multi-blade")]
         [SerializeField] private float extraHeadSpacing = 1.4f;
         [SerializeField] private Material crossbarMaterial;
 
-        private Transform _rig, _bodyPivot, _mainHeadRoot, _mainSpinner;
+        private Transform _rig, _bodyPivot, _mainHeadRoot, _mainSpinner, _mainBlades;
         private readonly List<Transform> _extraRoots = new List<Transform>();
         private readonly List<Transform> _extraSpinners = new List<Transform>();
         private float _yaw, _sweepPhase, _sweep, _walkPhase;
@@ -98,6 +104,10 @@ namespace PlayShift.Grass
 
         /// <summary>World position of the main cutting head (on the ground).</summary>
         public Vector3 HeadPosition => _mainHeadRoot != null ? _mainHeadRoot.position : transform.position;
+        /// <summary>Head position relative to the player in the player's turn frame, as placed this frame.</summary>
+        public Vector3 HeadOffsetFromPlayer { get; private set; }
+        /// <summary>The fixed housing's rotation relative to the player's turn frame (changes only with ground tilt).</summary>
+        public Quaternion HousingRotationFromPlayer { get; private set; } = Quaternion.identity;
         /// <summary>Gap kept between the lowest point of the blades and the ground (m).</summary>
         public float CuttingHeight => cuttingHeight;
         public Vector3 HeadVelocity { get; private set; }
@@ -136,6 +146,7 @@ namespace PlayShift.Grass
                     _mainSpinner.localPosition = Vector3.zero;
                     _mainSpinner.localRotation = Quaternion.identity;
                     _mainSpinner.localScale = Vector3.one * modelScale;
+                    _mainBlades = FindDeep(_mainSpinner, bladesName);
                     _headLift = LowestPointBelowPivot(_mainHeadRoot);
                     _bladeRadius = HorizontalReach(_mainHeadRoot);
                 }
@@ -247,6 +258,8 @@ namespace PlayShift.Grass
             if (groundFollow)
             {
                 PlaceOnGround(m, clearance, sway, jx, Mathf.Abs(jy), -pull, dt);
+                HeadOffsetFromPlayer = Quaternion.Inverse(_rig.rotation) * (HeadPosition - _rig.position);
+                if (_mainSpinner != null) HousingRotationFromPlayer = Quaternion.Inverse(_rig.rotation) * _mainSpinner.rotation;
                 HeadVelocity = (HeadPosition - _prevHead) / Mathf.Max(dt, 1e-4f);
                 _prevHead = HeadPosition;
                 return;
@@ -390,7 +403,7 @@ namespace PlayShift.Grass
 
             var cutPoints = new List<Transform> { _mainHeadRoot };
             var spinners = new List<Transform>();
-            if (_mainSpinner != null) spinners.Add(_mainSpinner);
+            if (_mainSpinner != null) spinners.Add(_mainBlades != null ? _mainBlades : _mainSpinner);
             for (int i = 0; i < extra; i++)
             {
                 cutPoints.Add(_extraRoots[i]);
@@ -415,6 +428,12 @@ namespace PlayShift.Grass
                 spinner.localScale = _mainSpinner.localScale;
                 foreach (var ring in spinner.GetComponentsInChildren<Transform>())
                     if (ring != spinner && ring.name == "MotionBlurRing") Destroy(ring.gameObject);
+                var cloneBlades = _mainBlades != null ? FindDeep(spinner, bladesName) : null;
+                if (cloneBlades != null)
+                {
+                    cloneBlades.localRotation = _mainBlades.localRotation;
+                    spinner = cloneBlades; // only the blades spin
+                }
             }
             // Crossbar from the main head to this one, at hub height.
             var bar = GameObject.CreatePrimitive(PrimitiveType.Cylinder);

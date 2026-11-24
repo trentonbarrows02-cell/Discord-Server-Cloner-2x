@@ -3052,9 +3052,9 @@ MonoBehaviour:
   sweepDegrees: 24
   sweepHz: 0.55
   turnLag: 7
-  walkSway: 0.03
-  vibrationMetres: 0.006
-  thickGrassPullBack: 0.06
+  walkSway: 0
+  vibrationMetres: 0
+  thickGrassPullBack: 0
   extraHeadSpacing: 1.4
   crossbarMaterial: {fileID: 0}
 --- !u!114 &1903568457

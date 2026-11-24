@@ -184,6 +184,12 @@ namespace PlayShift.Grass.Dev
                 includeAlpha = false,
                 bitRateMode = VideoBitrateMode.High
             };
+            var vm = FindAnyObjectByType<TrimmerViewmodel>();
+            var spin = FindAnyObjectByType<TrimmerBlades>();
+            Vector3 hMin = Vector3.positiveInfinity, hMax = Vector3.negativeInfinity;
+            float housingTurn = 0f;
+            Quaternion housing0 = Quaternion.identity;
+            Transform housing = null;
             using (var encoder = new MediaEncoder(Path.Combine(_dir, "clip_walk_and_cut.mp4"), attrs))
             {
                 int total = Mathf.RoundToInt(ClipSeconds * ClipFps);
@@ -197,6 +203,15 @@ namespace PlayShift.Grass.Dev
                     _input.Look = turn ? new Vector2(40f / ClipFps, 0f)
                                        : new Vector2(Mathf.Cos(t * Mathf.PI) * 14f * Mathf.PI / ClipFps, 0f);
                     yield return Grab();
+                    if (vm != null && fp != null)
+                    {
+                        // Head relative to the player (in the player's turn frame): should hold still while walking.
+                        // Sampled by the viewmodel in the same frame it placed the head (no one-frame lag).
+                        var local = vm.HeadOffsetFromPlayer;
+                        if (t < 7f) { hMin = Vector3.Min(hMin, local); hMax = Vector3.Max(hMax, local); }
+                        if (housing == null) { housing = vm.transform; housing0 = vm.HousingRotationFromPlayer; }
+                        housingTurn = Mathf.Max(housingTurn, Quaternion.Angle(housing0, vm.HousingRotationFromPlayer));
+                    }
                     if (fieldRenderer != null)
                     {
                         maxTiles = Mathf.Max(maxTiles, fieldRenderer.LastTilesUploaded);
@@ -210,6 +225,10 @@ namespace PlayShift.Grass.Dev
                 _report.AppendLine($"While cutting: max {maxTiles} tiles uploaded in a frame ({maxTiles * 8} KB), " +
                                    $"grass CPU avg {sumGrassCpu / total:F3} ms, max {maxGrassCpu:F3} ms");
             }
+            if (spin != null && spin.Spinners.Count > 0 && spin.Spinners[0] != null)
+                _report.AppendLine($"Trimmer head while walking and cutting: spinning part '{spin.Spinners[0].name}' (only the blades should spin); " +
+                                   $"head moved {(hMax.x - hMin.x) * 100f:F1} cm sideways, {(hMax.y - hMin.y) * 100f:F1} cm up/down, " +
+                                   $"{(hMax.z - hMin.z) * 100f:F1} cm fore/aft relative to the player; housing turned at most {housingTurn:F1} deg (should be 0)");
             Time.captureFramerate = 0;
             _input.Look = Vector2.zero;
             _input.Move = Vector2.zero;
@@ -563,7 +582,16 @@ namespace PlayShift.Grass.Dev
                 yield return null;
                 _input.Look = Vector2.zero;
                 _input.Move = new Vector2(0f, 1f);
-                yield return Frames(240);
+                // Walk until the fence stops the player (wherever the earlier steps left them), at most 25 s.
+                float walkStart = Time.time, lastZ = float.MaxValue, lastCheck = Time.time;
+                while (Time.time - walkStart < 25f)
+                {
+                    yield return null;
+                    if (Time.time - lastCheck < 0.5f) continue;
+                    float z = player.position.z;
+                    if (Mathf.Abs(lastZ - z) < 0.01f) break;
+                    lastZ = z; lastCheck = Time.time;
+                }
                 _input.Move = Vector2.zero;
                 yield return Frames(10);
                 Vector3 local = manager.FieldTransform.InverseTransformPoint(_probeVm.HeadPosition);
