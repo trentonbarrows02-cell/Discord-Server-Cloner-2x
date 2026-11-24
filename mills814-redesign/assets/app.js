@@ -473,7 +473,7 @@
     const cv = $("#beads"), hero = $(".hero");
     if (!cv || !cv.getContext) return;
     const ctx = cv.getContext("2d");
-    const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent-rgb").trim().split(/\s+/).join(",") || "255,106,26";
+    const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent-rgb").trim().split(/\s+/).join(",") || "200,167,106";
     const sprites = new Map();
     let W = 0, H = 0, dpr = 1, drops = [], trails = [], raf = 0, visible = true, lastT = 0, nextSlide = 0, wiped = false;
     const rand = (a, b) => a + Math.random() * (b - a);
@@ -491,9 +491,9 @@
       g.fillStyle = "rgba(0,0,0,.38)";                         // contact shadow
       g.beginPath(); g.ellipse(x + R * 0.16, y + R * 0.3, R * 0.95, R * 0.88, 0, 0, Math.PI * 2); g.fill();
       const body = g.createRadialGradient(x - R * 0.3, y - R * 0.35, R * 0.05, x, y, R);
-      body.addColorStop(0, "rgba(255,248,240,.14)");
+      body.addColorStop(0, "rgba(246,244,232,.14)");
       body.addColorStop(0.65, `rgba(${accent},.07)`);
-      body.addColorStop(1, "rgba(235,228,218,.4)");
+      body.addColorStop(1, "rgba(226,228,210,.4)");
       g.fillStyle = body;
       g.beginPath(); g.arc(x, y, R, 0, Math.PI * 2); g.fill();
       g.strokeStyle = `rgba(${accent},.65)`;                    // light focused through the bead
@@ -577,7 +577,7 @@
       ctx.lineCap = "round";
       for (const tr of trails) {
         if (tr.pts.length < 2) continue;
-        ctx.strokeStyle = `rgba(230,222,212,${0.07 * tr.life})`;
+        ctx.strokeStyle = `rgba(222,224,206,${0.07 * tr.life})`;
         ctx.lineWidth = tr.w;
         ctx.beginPath(); ctx.moveTo(tr.pts[0][0], tr.pts[0][1]);
         for (const [x, y] of tr.pts) ctx.lineTo(x, y);
@@ -590,7 +590,7 @@
         const p = ((t % period) / period) * (span + 600) - 300;
         const g = ctx.createLinearGradient(p - 220, 0, p + 220, H * 0.45);
         g.addColorStop(0, "rgba(255,255,255,0)");
-        g.addColorStop(0.5, "rgba(255,236,215,.07)");
+        g.addColorStop(0.5, "rgba(240,238,220,.07)");
         g.addColorStop(1, "rgba(255,255,255,0)");
         ctx.globalCompositeOperation = "lighter";
         ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);

@@ -4,26 +4,27 @@
    near-black surfaces, hairline borders.
    ========================================================================== */
 :root {
-  /* Graphite & Ember: tire-rubber blacks, tool-steel greys, one burnt-orange accent */
-  --bg: #0b0b0a;
-  --bg-rgb: 11 11 10;
-  --bg-2: #10100f;
-  --surface: #161614;
-  --surface-2: #1e1e1b;
-  --line: rgb(255 240 225 / 0.08);
-  --line-2: rgb(255 240 225 / 0.15);
-  --text: #f2eee8;
-  --muted: #9b958c;
-  --dim: #645f58;
-  --unlit: #2a2825;           /* manifesto words before they light up */
-  --accent: #ff6a1a;          /* Ember */
-  --accent-rgb: 255 106 26;
-  --accent-ink: #160800;
-  --accent-glow: rgb(var(--accent-rgb) / 0.4);
-  --ink: #0e0e0d;             /* tags + quick-add on light tiles */
-  --tile: #e8e6e2;            /* product image backdrop */
-  --sale: #ff6a1a;
-  --light: #fff2e2;           /* LED tube */
+  /* Tactical: ranger-green blacks, bone text, coyote-tan accent, olive-drab glow */
+  --bg: #0d0f0b;
+  --bg-rgb: 13 15 11;
+  --bg-2: #11140f;
+  --surface: #171b14;
+  --surface-2: #1f251b;
+  --line: rgb(214 222 190 / 0.08);
+  --line-2: rgb(214 222 190 / 0.15);
+  --text: #ebe8dc;            /* bone */
+  --muted: #9b9b87;
+  --dim: #64675a;
+  --unlit: #272c22;           /* manifesto words before they light up */
+  --accent: #c8a76a;          /* coyote tan */
+  --accent-rgb: 200 167 106;
+  --accent-ink: #161106;
+  --accent-glow: rgb(var(--accent-rgb) / 0.35);
+  --olive-rgb: 110 128 64;    /* olive drab */
+  --ink: #10120d;             /* tags + quick-add on light tiles */
+  --tile: #e5e3da;            /* product image backdrop */
+  --sale: #c8a76a;
+  --light: #f3efe2;           /* LED tube */
 
   --font: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -181,7 +182,7 @@ svg { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 1
 }
 .is-loaded .hero__lights { animation: lights-on 1.6s steps(1, end) .15s forwards; }
 .hero__lights .tube { stroke: var(--light); stroke-width: 2.6; }
-.hero__lights .halo { stroke: rgb(var(--accent-rgb) / .22); stroke-width: 9; }
+.hero__lights .halo { stroke: rgb(var(--olive-rgb) / .32); stroke-width: 9; }
 @keyframes lights-on {
   0% { opacity: 0; } 8% { opacity: .4; } 12% { opacity: .05; } 20% { opacity: .5; }
   24% { opacity: .1; } 30% { opacity: .32; } 34% { opacity: .15; } 46%, 100% { opacity: .32; }
@@ -199,7 +200,7 @@ svg { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 1
 .hero__glow {
   position: absolute; width: 60vmax; height: 60vmax; left: 50%; top: 40%;
   translate: -50% -50%;
-  background: radial-gradient(circle, rgb(var(--accent-rgb) / .22), rgb(255 60 0 / .05) 38%, transparent 65%);
+  background: radial-gradient(circle, rgb(var(--olive-rgb) / .3), rgb(var(--accent-rgb) / .05) 40%, transparent 65%);
   filter: blur(20px);
   transition: translate 1.2s var(--ease);
 }
@@ -319,7 +320,7 @@ svg { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 1
 .card:hover .card__media::after { opacity: 1; }
 .tags { position: absolute; top: 12px; left: 12px; display: flex; gap: 6px; z-index: 2; }
 .tag { font: 500 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; padding: 6px 8px; border-radius: 6px; background: var(--ink); color: var(--text); }
-.tag--sale { background: var(--sale); color: var(--accent-ink); }
+.tag--sale { background: var(--ink); color: var(--sale); box-shadow: inset 0 0 0 1px rgb(var(--accent-rgb) / .45); }
 .tag--out { background: rgb(var(--bg-rgb) / .72); color: var(--muted); }
 .quick {
   position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 2;
@@ -360,7 +361,7 @@ svg { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 1
 .search input::placeholder { color: var(--dim); }
 .search input::-webkit-search-cancel-button { display: none; }
 .search kbd { font-size: 11px; padding: 3px 7px; border-radius: 6px; border: 1px solid var(--line-2); color: var(--dim); }
-.select select { appearance: none; height: 48px; padding: 0 40px 0 18px; border-radius: 999px; background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239b958c' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 14px center / 16px; border: 1px solid var(--line); font-size: 14px; cursor: pointer; outline: 0; }
+.select select { appearance: none; height: 48px; padding: 0 40px 0 18px; border-radius: 999px; background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239b9b87' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 14px center / 16px; border: 1px solid var(--line); font-size: 14px; cursor: pointer; outline: 0; }
 .select select:focus-visible { border-color: var(--accent); }
 
 .chips { display: flex; gap: 8px; flex-wrap: wrap; min-height: 36px; margin-bottom: 36px; }
