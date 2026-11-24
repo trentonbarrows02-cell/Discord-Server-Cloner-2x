@@ -45,12 +45,13 @@ namespace PlayShift.Grass
 
         [Header("Quality")]
         [SerializeField] private GrassQuality quality = GrassQuality.High;
-        // Blades are drawn only near the camera; beyond maxDrawDistance they fade into the ground shader
+        // Blades cover the whole field: full detail near, fewer and wider blades with distance (per blade, smooth),
+        // sparse wide "card" blades far away; beyond maxDrawDistance they fade into the ground shader
         // (PlayShift/GrassGround), which shows grown/cut grass from the same cell data at almost no cost.
-        [SerializeField] private QualityPreset low = new QualityPreset { bladesPerSquareMeter = 300, fullDetailDistance = 8f, midDetailDistance = 18f, maxDrawDistance = 32f, shadowCastDistance = 0f };
-        [SerializeField] private QualityPreset medium = new QualityPreset { bladesPerSquareMeter = 480, fullDetailDistance = 10f, midDetailDistance = 22f, maxDrawDistance = 42f, shadowCastDistance = 4f };
-        [SerializeField] private QualityPreset high = new QualityPreset { bladesPerSquareMeter = 720, fullDetailDistance = 13f, midDetailDistance = 28f, maxDrawDistance = 55f, shadowCastDistance = 6f };
-        [SerializeField] private QualityPreset ultra = new QualityPreset { bladesPerSquareMeter = 1100, fullDetailDistance = 18f, midDetailDistance = 38f, maxDrawDistance = 75f, shadowCastDistance = 10f };
+        [SerializeField] private QualityPreset low = new QualityPreset { bladesPerSquareMeter = 300, fullDetailDistance = 8f, midDetailDistance = 18f, maxDrawDistance = 100f, shadowCastDistance = 0f };
+        [SerializeField] private QualityPreset medium = new QualityPreset { bladesPerSquareMeter = 480, fullDetailDistance = 10f, midDetailDistance = 22f, maxDrawDistance = 120f, shadowCastDistance = 4f };
+        [SerializeField] private QualityPreset high = new QualityPreset { bladesPerSquareMeter = 720, fullDetailDistance = 13f, midDetailDistance = 28f, maxDrawDistance = 145f, shadowCastDistance = 6f };
+        [SerializeField] private QualityPreset ultra = new QualityPreset { bladesPerSquareMeter = 1100, fullDetailDistance = 18f, midDetailDistance = 38f, maxDrawDistance = 150f, shadowCastDistance = 10f };
         [Range(0.05f, 1f)] [SerializeField] private float midDetailFraction = 0.45f;
         [Range(0.02f, 1f)] [SerializeField] private float farDetailFraction = 0.2f;
 
@@ -58,6 +59,9 @@ namespace PlayShift.Grass
         [Tooltip("Chunk edge in metres for culling/LOD (independent of the cutting grid).")]
         [Range(0.5f, 8f)] [SerializeField] private float chunkMeters = 2f;
         [SerializeField] private int bladeSeed = 777;
+        [Tooltip("Far away, groups of N x N chunks are drawn with one draw call (fewer draws; the blades are exactly the " +
+                 "same as per-chunk drawing, so nothing pops). 1 = off.")]
+        [Range(1, 8)] [SerializeField] private int farChunkGroup = 4;
         [Range(3, 10)] [SerializeField] private int bladeSegments = 6;
         [Tooltip("Blade segments at mid and far distance (fewer triangles where the curve can't be seen).")]
         [Range(2, 6)] [SerializeField] private int midBladeSegments = 3;
@@ -136,6 +140,9 @@ namespace PlayShift.Grass
         private static readonly int PsGrassDryId = Shader.PropertyToID("_PsGrassDry");
         private static readonly int GrassShowUncutId = Shader.PropertyToID("_GrassShowUncut");
         private static readonly int PsChunkId = Shader.PropertyToID("_PsChunk");
+        private static readonly int SuperChunkId = Shader.PropertyToID("_SuperChunk");
+        private static readonly int PsChunkGridId = Shader.PropertyToID("_PsChunkGrid");
+        private static readonly int PsChunkGrid2Id = Shader.PropertyToID("_PsChunkGrid2");
 
         // ---- Diagnostics (capture tool / dev only; all off in the game) ----
         /// <summary>0 = normal; 1 = the ground shows the cut state (white = fine mask and cells agree, red = cell only,
@@ -423,8 +430,40 @@ namespace PlayShift.Grass
                 z1 = Mathf.Min(_chunksZ - 1, Mathf.FloorToInt((local.z + reach) / chunkMeters));
             }
 
-            for (int kz = z0; kz <= z1; kz++)
-            for (int kx = x0; kx <= x1; kx++)
+            var layout = _field.Layout;
+            grassMaterial.SetVector(PsChunkGridId, new Vector4(chunkMeters, _chunksX, _chunksZ, bladeSeed));
+            grassMaterial.SetVector(PsChunkGrid2Id, new Vector4(layout.SizeX, layout.SizeZ, _builtBladesPerM2, density));
+            int S = Mathf.Max(1, farChunkGroup);
+            for (int gz = z0 / S; gz <= z1 / S; gz++)
+            for (int gx = x0 / S; gx <= x1 / S; gx++)
+            {
+                int ax = gx * S, az = gz * S;
+                int bx = Mathf.Min(_chunksX - 1, ax + S - 1), bz = Mathf.Min(_chunksZ - 1, az + S - 1);
+                if (S > 1 && cull)
+                {
+                    // A whole group far away (beyond mid detail and grass shadows): one draw for all its chunks.
+                    var lb = new Bounds();
+                    lb.SetMinMax(_chunks[az * _chunksX + ax].LocalMin - new Vector3(tallest, 0f, tallest),
+                                 _chunks[bz * _chunksX + bx].LocalMax + new Vector3(tallest, tallest, tallest));
+                    Bounds gw = TransformBounds(m, lb);
+                    float gd = Mathf.Sqrt(gw.SqrDistance(camPos));
+                    if (gd > q.maxDrawDistance) continue;
+                    if (gd > q.midDetailDistance && gd > q.shadowCastDistance)
+                    {
+                        if (!GeometryUtility.TestPlanesAABB(_frustum, gw)) continue;
+                        float subFull = chunkMeters * chunkMeters * _builtBladesPerM2 * density;
+                        int per = Mathf.Max(1, Mathf.CeilToInt(subFull * LodFraction(q, gd)));
+                        drawn += per * S * S;
+                        calls++;
+                        _mpb.SetVector(SuperChunkId, new Vector4(S, ax, az, 0f));
+                        _mpb.SetFloat(ChunkCountId, 1f);
+                        _mpb.SetFloat(LodWidthScaleId, 1f);
+                        Graphics.DrawMeshInstancedProcedural(_bladeMeshFar, 0, grassMaterial, gw, per * S * S, _mpb, ShadowCastingMode.Off, true, layer, targetCamera);
+                        continue;
+                    }
+                }
+            for (int kz = az; kz <= bz; kz++)
+            for (int kx = ax; kx <= bx; kx++)
             {
                 ref Chunk c = ref _chunks[kz * _chunksX + kx];
 
@@ -455,10 +494,12 @@ namespace PlayShift.Grass
                 _mpb.SetFloat(ChunkSeedId, c.Seed);
                 _mpb.SetFloat(ChunkCountId, full);
                 _mpb.SetFloat(LodWidthScaleId, 1f);
+                _mpb.SetVector(SuperChunkId, Vector4.zero);
                 if (!visible && DebugNoBladeShadows) continue;
                 var shadows = DebugNoBladeShadows ? ShadowCastingMode.Off : !visible ? ShadowCastingMode.ShadowsOnly
                     : dist < q.shadowCastDistance ? ShadowCastingMode.On : ShadowCastingMode.Off;
                 Graphics.DrawMeshInstancedProcedural(mesh, 0, grassMaterial, world, count, _mpb, shadows, true, layer, targetCamera);
+            }
             }
             LastDrawnBlades = drawn;
             LastDrawCalls = calls;
@@ -470,7 +511,6 @@ namespace PlayShift.Grass
             q.shadowCastDistance = 0f;
             q.fullDetailDistance = Mathf.Min(q.fullDetailDistance, 20f);
             q.midDetailDistance = Mathf.Min(q.midDetailDistance, 32f);
-            q.maxDrawDistance = Mathf.Min(q.maxDrawDistance, 50f);
             return q;
         }
 
@@ -480,7 +520,8 @@ namespace PlayShift.Grass
             if (d <= q.fullDetailDistance) return 1f;
             float half = 0.5f * (q.fullDetailDistance + q.midDetailDistance);
             if (d <= half) return Mathf.Lerp(1f, midDetailFraction, (d - q.fullDetailDistance) / Mathf.Max(half - q.fullDetailDistance, 1e-3f));
-            return Mathf.Lerp(midDetailFraction, farDetailFraction, (d - half) / Mathf.Max(q.midDetailDistance - half, 1e-3f));
+            if (d <= q.midDetailDistance) return Mathf.Lerp(midDetailFraction, farDetailFraction, (d - half) / Mathf.Max(q.midDetailDistance - half, 1e-3f));
+            return Mathf.Max(0.004f, farDetailFraction * q.midDetailDistance * q.midDetailDistance / (d * d));
         }
 
         private static Bounds TransformBounds(Matrix4x4 m, Bounds b)

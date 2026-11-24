@@ -42,6 +42,12 @@ float _LodWidthScale;               // unused since per-blade LOD (kept so old m
 float4 _GrassLod;
 float4 _GrassLodFrac;
 float _ChunkCount;
+// Far chunk groups: one draw covers S x S chunks; instance i is blade i / (S*S) of sub-chunk i % (S*S), exactly the
+// blade that sub-chunk's own draw would make (same seed, rect, count), so nothing pops when a group switches between
+// one draw and per-chunk draws. x = S (0 = a single chunk), yz = first chunk (kx, kz).
+float4 _SuperChunk;
+float4 _PsChunkGrid;                // chunk size (m), chunks x, chunks z, blade seed
+float4 _PsChunkGrid2;               // field size x, z (m), blades per m2, level density
 float _GrassDebug;                  // global, diagnostics only (GrassFieldRenderer.DebugView)
 float4 _PsGrassAvg;                 // global: average blade colour (the ground's uncut colour uses the same)
 float _GrassShowUncut;              // global: 1 on the title screen (every blade standing; saved cuts untouched)
@@ -83,13 +89,14 @@ float PsU01(uint h) { return (h >> 8) * (1.0 / 16777216.0); }
 
 // Blade i of the current chunk: uniform random position inside the chunk + per-blade seed. Any prefix of the
 // sequence is a uniform subsample, which is what LOD relies on (draw the first N).
-float4 PsProceduralBlade(uint i)
+float4 PsProceduralBladeIn(uint i, float seed, float4 rect)
 {
-    uint h = PsPcg(i ^ PsPcg((uint)_ChunkSeed));
+    uint h = PsPcg(i ^ PsPcg((uint)seed));
     uint hx = PsPcg(h), hz = PsPcg(hx), hs = PsPcg(hz);
-    float2 p = _ChunkRect.xy + float2(PsU01(hx), PsU01(hz)) * _ChunkRect.zw;
+    float2 p = rect.xy + float2(PsU01(hx), PsU01(hz)) * rect.zw;
     return float4(p.x, p.y, 0.0, PsU01(hs));
 }
+float4 PsProceduralBlade(uint i) { return PsProceduralBladeIn(i, _ChunkSeed, _ChunkRect); }
 
 // Tiled cell lookup for a field-local position.
 float2 PsCellAt(float2 p)
@@ -113,7 +120,24 @@ float PsNoise(float2 p)
 GrassBlade BuildBlade(uint instanceID, float2 uv)
 {
     GrassBlade o;
-    float4 blade = PsProceduralBlade(instanceID);
+    float4 rect = _ChunkRect;
+    float seed = _ChunkSeed, chunkCount = _ChunkCount;
+    uint idx = instanceID;
+    if (_SuperChunk.x > 1.5)
+    {
+        uint S = (uint)_SuperChunk.x, n = S * S;
+        uint j = instanceID % n;
+        idx = instanceID / n;
+        uint kx = (uint)_SuperChunk.y + j % S, kz = (uint)_SuperChunk.z + j / S;
+        float cm = _PsChunkGrid.x;
+        float x0 = kx * cm, z0 = kz * cm;
+        rect = float4(x0, z0, min(_PsChunkGrid2.x, x0 + cm) - x0, min(_PsChunkGrid2.y, z0 + cm) - z0);
+        uint ci = kz * (uint)_PsChunkGrid.y + kx;
+        seed = (float)(((uint)_PsChunkGrid.w * 7919u + ci * 104729u) & 0xFFFFFFu);
+        chunkCount = max(1.0, round(rect.z * rect.w * _PsChunkGrid2.z)) * _PsChunkGrid2.w;
+        if (kx >= (uint)_PsChunkGrid.y || kz >= (uint)_PsChunkGrid.z) chunkCount = 0.0; // outside the field
+    }
+    float4 blade = PsProceduralBladeIn(idx, seed, rect);
     // Tufts: pull toward the jittered centre of this blade's tuft cell (stays inside the cell).
     float2 tufted = 0;
     if (_TuftSize > 0.0)
@@ -132,15 +156,19 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
     // widen to hold the same coverage. No chunk-shaped bands or squares.
     float lodF = 1.0, lodKeep = 1.0;
     float dl = distance(root, _WorldSpaceCameraPos);
-    if (_ChunkCount > 0.5 && _GrassLod.y > 0.0)
+    if (_SuperChunk.x > 1.5 && chunkCount < 0.5) lodKeep = 0.0;
+    else if (chunkCount > 0.5 && _GrassLod.y > 0.0)
     {
         // Full detail to x; down to the mid fraction halfway to y; the far fraction from y on (same blade budget as
         // the old per-chunk steps, without the steps).
+        // Beyond y the fraction keeps falling with distance squared (about the same number of blades per screen
+        // area at any distance): sparse, wide "card" blades cover the far field up to the draw end.
         float half = 0.5 * (_GrassLod.x + _GrassLod.y);
         lodF = dl <= _GrassLod.x ? 1.0
              : dl <= half ? lerp(1.0, _GrassLodFrac.x, (dl - _GrassLod.x) / max(half - _GrassLod.x, 1e-3))
-             : lerp(_GrassLodFrac.x, _GrassLodFrac.y, saturate((dl - half) / max(_GrassLod.y - half, 1e-3)));
-        float rank = ((float)instanceID + 0.5) / _ChunkCount;
+             : dl <= _GrassLod.y ? lerp(_GrassLodFrac.x, _GrassLodFrac.y, saturate((dl - half) / max(_GrassLod.y - half, 1e-3)))
+             : max(0.004, _GrassLodFrac.y * (_GrassLod.y * _GrassLod.y) / (dl * dl));
+        float rank = ((float)idx + 0.5) / chunkCount;
         lodKeep = saturate((lodF - rank) / (0.2 * lodF));
     }
     if (lodKeep <= 0.0)
@@ -239,7 +267,7 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
     // Varied widths; taller levels have thicker blades. Tapers to a point.
     float w = _BladeWidth * (0.55 + 0.9 * r4)
             * (1.0 + _WidthGrowth * (sqrt(max(full, 0.05) / 0.2) - 1.0))
-            * lerp(1.0, 1.35, ease) * min(2.5, rsqrt(lodF));
+            * lerp(1.0, 1.35, ease) * min(8.0, rsqrt(lodF));
     w *= 1.0 - pow(t, 1.25) * 0.97; // natural taper to a fine (not needle-sharp) tip
     // With no stubble (_StubbleHeight 0) a cut blade collapses completely: no sliver, no shadow, just lawn.
     w *= lerp(1.0, step(1e-4, _StubbleHeight), ease);

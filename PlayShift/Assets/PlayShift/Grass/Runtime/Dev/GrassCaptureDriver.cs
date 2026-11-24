@@ -914,6 +914,25 @@ namespace PlayShift.Grass.Dev
             // Elevated views (where the blade / flat-ground boundary showed): 9 m up looking across, and 40 m up.
             yield return Variants("G6_elevated", c + new Vector3(0f, 9f, -30f), Quaternion.Euler(24f, 0f, 0f), false, 0f, 62f, true);
             yield return Variants("G8_high", c + new Vector3(0f, 40f, -22f), Quaternion.Euler(62f, 0f, 0f), false, 0f, 62f, false);
+            // From each corner of the lawn, at the eye height and the maximum upward look, across to the far corner.
+            {
+                var rigD = FindAnyObjectByType<PlayShift.FirstPerson.PlayShiftFirstPersonRig>();
+                float eye = 2.28f, upPitch = rigD != null ? -rigD.MaxLookUp : 22f;
+                for (int k = 0; k < 4; k++)
+                {
+                    float sx = (k & 1) == 0 ? 2f : size.x - 2f, sz = (k & 2) == 0 ? 2f : size.y - 2f;
+                    Vector3 p = origin + new Vector3(sx, eye, sz);
+                    Vector3 toC = c - new Vector3(p.x, c.y, p.z);
+                    var rot = Quaternion.Euler(upPitch, Mathf.Atan2(toC.x, toC.z) * Mathf.Rad2Deg, 0f);
+                    yield return View(p, rot, false, 0f, playerCam.fieldOfView, $"G9_corner{k}_max_up_a_normal");
+                    if (k == 0)
+                    {
+                        GrassFieldRenderer.DebugView = 2;
+                        yield return View(p, rot, false, 0f, playerCam.fieldOfView, "G9_corner0_max_up_c_detail_levels");
+                        GrassFieldRenderer.DebugView = 0;
+                    }
+                }
+            }
 
             // A loaded save / new level rebuilds the fine mask from the 10 cm cells.
             fr.DebugRebuildMask();

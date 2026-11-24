@@ -199,25 +199,25 @@ MonoBehaviour:
     bladesPerSquareMeter: 300
     fullDetailDistance: 8
     midDetailDistance: 18
-    maxDrawDistance: 32
+    maxDrawDistance: 100
     shadowCastDistance: 0
   medium:
     bladesPerSquareMeter: 480
     fullDetailDistance: 10
     midDetailDistance: 22
-    maxDrawDistance: 42
+    maxDrawDistance: 120
     shadowCastDistance: 4
   high:
     bladesPerSquareMeter: 720
     fullDetailDistance: 13
     midDetailDistance: 28
-    maxDrawDistance: 55
+    maxDrawDistance: 145
     shadowCastDistance: 6
   ultra:
     bladesPerSquareMeter: 1100
     fullDetailDistance: 18
     midDetailDistance: 38
-    maxDrawDistance: 75
+    maxDrawDistance: 150
     shadowCastDistance: 10
   midDetailFraction: 0.45
   farDetailFraction: 0.2
