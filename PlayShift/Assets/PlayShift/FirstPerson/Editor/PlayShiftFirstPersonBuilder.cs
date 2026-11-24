@@ -149,7 +149,7 @@ namespace PlayShift.FirstPerson.Editor
             Num("strafeTiltAmount", 0f);
             Num("bobAmount", 0.006f);
             Num("bobSpeed", 10f);
-            Flag("useHeadBob", true);
+            Flag("useHeadBob", false);
             Flag("useCameraTilt", false);
             Flag("useFovKick", false);
             Flag("useClimbTilt", false);

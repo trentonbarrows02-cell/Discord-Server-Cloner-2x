@@ -123,6 +123,7 @@ namespace PlayShift.Grass
             if (!_pitchTouched && !UsesExternalController) _pitch = portrait ? portraitStartPitch : startPitch; // follows orientation until the player looks
             _yaw += input.Look.x;
             _pitch = Mathf.Clamp(_pitch + input.Look.y, minPitch, maxPitch);
+            if (rig != null && rig.VerticalLookLocked) _pitch = rig.LockedPitch; // fixed vertical look: mouse Y ignored
             transform.rotation = Quaternion.Euler(0f, _yaw, 0f);
             if (playerCamera != null) playerCamera.transform.localRotation = Quaternion.Euler(-_pitch, 0f, 0f);
 
@@ -155,7 +156,7 @@ namespace PlayShift.Grass
             if (scripted != _scripted)
             {
                 // Hand the view over so neither side snaps.
-                if (scripted) { _yaw = rig.Yaw; _pitch = rig.Pitch; }
+                if (scripted) { _yaw = rig.Yaw; _pitch = rig.VerticalLookLocked ? rig.LockedPitch : rig.Pitch; }
                 else rig.Pitch = _pitch;
                 _scripted = scripted;
             }
@@ -177,7 +178,7 @@ namespace PlayShift.Grass
             _velocity = rig.Velocity;
             Speed = rig.Speed;
             _yaw = rig.Yaw;
-            _pitch = rig.Pitch;
+            _pitch = rig.VerticalLookLocked ? rig.LockedPitch : rig.Pitch;
             return true;
         }
 

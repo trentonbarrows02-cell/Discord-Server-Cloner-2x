@@ -56,6 +56,28 @@ namespace PlayShift.Grass
         [Tooltip("How far ahead of the player the head's centre works (metres). Far enough that the blades are in view " +
                  "with the normal, slightly lowered look.")]
         [SerializeField] private float workReach = 3.3f;
+        [Header("Screen placement")]
+        [Tooltip("On: the cutting head sits under a fixed point of the screen (Head Viewport) on the ground, so it stays in " +
+                 "the same place on screen at any fixed camera angle and on any screen shape. Off: Work Reach ahead.")]
+        [SerializeField] private bool placeFromView = true;
+        [Tooltip("Where the centre of the cutting head sits on screen (0-1; x = left to right, y = bottom to top). " +
+                 "0.56, 0.3 = lower middle, a little right, with the whole head and blades in view.")]
+        [SerializeField] private Vector2 headViewport = new Vector2(0.56f, 0.3f);
+        [Tooltip("Nearest and furthest the head works on the ground (metres ahead of the player).")]
+        [SerializeField] private float minReach = 1.2f;
+        [SerializeField] private float maxReach = 8f;
+        [Tooltip("How much the handle end follows the view (0 = held at the hip, 1 = fixed just off the bottom-right " +
+                 "corner of the view). Keeps the shaft entering from the bottom-right corner.")]
+        [SerializeField, Range(0f, 1f)] private float gripFollowsView = 0.8f;
+        [Tooltip("Handle end in camera space (x right, y up, z forward), just outside the bottom-right of the view.")]
+        [SerializeField] private Vector3 viewGrip = new Vector3(0.55f, -0.7f, 0.35f);
+
+        [Header("Walking motion")]
+        [Tooltip("Gentle up/down of the handle end while walking (metres at walking speed). The cutting head itself stays " +
+                 "steady on the ground, so the cut never moves. 0 = none.")]
+        [SerializeField] private float walkBob = 0.012f;
+        [Tooltip("Handle bob cycles per metre walked.")]
+        [SerializeField] private float walkBobPerMetre = 0.85f;
         [Tooltip("Head offset to the right of the player's centre line (metres).")]
         [SerializeField] private float workRight = 0f;
         [Tooltip("Ground the head follows (everything but the player's Ignore Raycast layer; the grass has no colliders).")]
@@ -125,7 +147,7 @@ namespace PlayShift.Grass
         private void Start()
         {
             _yaw = transform.eulerAngles.y;
-            _rig = new GameObject("TrimmerRig").transform;
+            _rig = new GameObject("ToolRoot").transform; // follows the player's position and yaw only
             _bodyPivot = new GameObject("ShaftPivot").transform;
             _bodyPivot.SetParent(_rig, false);
             _mainHeadRoot = new GameObject("CuttingHead").transform;
@@ -290,9 +312,9 @@ namespace PlayShift.Grass
         }
 
         /// <summary>
-        /// Ground-following pose. The head works on the ground <see cref="workReach"/> ahead of the player, along the
-        /// player's yaw only: the camera's pitch never moves or lifts it, so looking up or down keeps cutting the same
-        /// spot. A downward ray finds the real ground under the head (grass has no colliders; the player is on Ignore
+        /// Ground-following pose. The head works on the ground ahead of the player along the player's yaw. With
+        /// <see cref="placeFromView"/> it sits on the ground under a fixed point of the screen (<see cref="headViewport"/>);
+        /// otherwise <see cref="workReach"/> ahead. A downward ray finds the real ground under the head (grass has no colliders; the player is on Ignore
         /// Raycast) and the head eases onto it at <see cref="cuttingHeight"/>, tilted to stay parallel with slopes.
         /// A sphere cast keeps it out of fences/walls. The shaft runs from the head to the hip grip. No allocations.
         /// </summary>
@@ -303,7 +325,26 @@ namespace PlayShift.Grass
             Vector3 right = _rig.right;
             float lawnY = m != null ? m.FieldTransform.position.y : feet.y;
 
-            Vector3 head = feet + flatDir * (workReach - pullBack) + right * workRight;
+            // Where the head works: under a fixed point of the screen (the camera's line of sight through Head Viewport
+            // meets the ground the player stands on), measured in the ToolRoot's frame (yaw only). With the camera at a
+            // fixed downward angle this is a constant spot ahead, so the tool never moves on screen.
+            float fwd = workReach, sideOff = workRight;
+            var cam = controller != null ? controller.Camera : null;
+            if (placeFromView && cam != null)
+            {
+                Ray ray = cam.ViewportPointToRay(new Vector3(headViewport.x, headViewport.y, 0f));
+                float planeY = feet.y + clearance;
+                if (ray.direction.y < -0.02f)
+                {
+                    Vector3 p = ray.origin + ray.direction * ((planeY - ray.origin.y) / ray.direction.y);
+                    Vector3 rel = p - feet;
+                    fwd = Vector3.Dot(rel, flatDir);
+                    sideOff = Vector3.Dot(rel, right);
+                }
+                else fwd = maxReach;
+                fwd = Mathf.Clamp(fwd, minReach, maxReach);
+            }
+            Vector3 head = feet + flatDir * (fwd - pullBack) + right * sideOff;
 
             // Keep the blades out of fences and walls: pull the head back to just before the first obstacle. Cast at
             // knee height above the player's own feet (not the lawn), and only walls count: a slope or step the player
@@ -362,6 +403,14 @@ namespace PlayShift.Grass
             // into view from the bottom-right corner). The model is stretched along its length to span the distance:
             // stretching by k along the model's z gives length L*sqrt(sin^2 a + k^2 cos^2 a) at rise atan(tan a / k).
             Vector3 grip = transform.TransformPoint(hipGrip);
+            if (cam != null && gripFollowsView > 0f)
+                grip = Vector3.Lerp(grip, cam.transform.TransformPoint(viewGrip), gripFollowsView);
+            // Gentle walking motion on the handle end only (the head stays on the ground, so the cut never moves).
+            if (walkBob > 0f && controller != null)
+            {
+                float k01 = Mathf.Clamp01(controller.Speed / 3.5f);
+                grip += Vector3.up * (Mathf.Sin(_walkPhase * walkBobPerMetre * 2f * Mathf.PI) * walkBob * k01);
+            }
             Vector3 toGrip = grip - head;
             Vector3 toGripFlat = new Vector3(toGrip.x, 0f, toGrip.z);
             float swing = toGripFlat.sqrMagnitude > 1e-4f ? -Vector3.SignedAngle(-flatDir, toGripFlat, Vector3.up) : handleSwing;

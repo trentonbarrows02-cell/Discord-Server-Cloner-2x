@@ -389,6 +389,8 @@ namespace PlayShift.Grass.Dev
         private bool _probeActive;
         private int _probeFrames, _probeGroundFrames, _probeMissFrames, _probeMaxMiss, _probeTotalMiss;
         private float _probeMaxLift, _probeMaxSide, _probeMinAhead, _probeMaxAhead, _probeMinGap, _probeMaxGap;
+        // Where the head (and its blade circle) shows on screen, as viewport fractions (0-1, y from the bottom).
+        private float _probeMinVx, _probeMaxVx, _probeMinVy, _probeMaxVy, _probeDiscMinVy, _probeDiscMinVx, _probeDiscMaxVx;
         private int _probeSinkLogs;
 
         /// <summary>Turns the player to face the middle of the field (room to walk in every test).</summary>
@@ -411,7 +413,32 @@ namespace PlayShift.Grass.Dev
             _probeMaxLift = _probeMaxSide = 0f;
             _probeMinAhead = float.MaxValue; _probeMaxAhead = float.MinValue;
             _probeMinGap = float.MaxValue; _probeMaxGap = float.MinValue;
+            _probeMinVx = _probeMinVy = _probeDiscMinVy = _probeDiscMinVx = float.MaxValue;
+            _probeMaxVx = _probeMaxVy = _probeDiscMaxVx = float.MinValue;
         }
+
+        /// <summary>Records where the head centre and the edges of its blade circle land on screen this frame.</summary>
+        private void ProbeScreen()
+        {
+            var cam = Camera.main;
+            if (cam == null || _probeVm == null) return;
+            Vector3 h = _probeVm.HeadPosition;
+            Vector3 v = cam.WorldToViewportPoint(h);
+            _probeMinVx = Mathf.Min(_probeMinVx, v.x); _probeMaxVx = Mathf.Max(_probeMaxVx, v.x);
+            _probeMinVy = Mathf.Min(_probeMinVy, v.y); _probeMaxVy = Mathf.Max(_probeMaxVy, v.y);
+            float r = _probeCutter != null ? _probeCutter.CutRadius : 0.5f;
+            Vector3 f = cam.transform.forward; f.y = 0f; f.Normalize();
+            Vector3 rt = Vector3.Cross(Vector3.up, f);
+            _probeDiscMinVy = Mathf.Min(_probeDiscMinVy, cam.WorldToViewportPoint(h - f * r).y); // near edge (lowest on screen)
+            _probeDiscMinVx = Mathf.Min(_probeDiscMinVx, cam.WorldToViewportPoint(h - rt * r).x);
+            _probeDiscMaxVx = Mathf.Max(_probeDiscMaxVx, cam.WorldToViewportPoint(h + rt * r).x);
+        }
+
+        private string ScreenSummary() =>
+            _probeMinVx < float.MaxValue
+                ? $"head centre on screen x {_probeMinVx:F2}-{_probeMaxVx:F2}, y {_probeMinVy:F2}-{_probeMaxVy:F2} (0-1, y from the bottom); " +
+                  $"blade circle spans x {_probeDiscMinVx:F2}-{_probeDiscMaxVx:F2}, lowest y {_probeDiscMinVy:F2} (fully in view if all within 0-1)"
+                : "head not measured on screen";
 
         /// <summary>
         /// Runs at the very end of the frame (after the trimmer placed its head and the cutter cut), i.e. exactly what
@@ -424,6 +451,7 @@ namespace PlayShift.Grass.Dev
             Vector3 local = _probeManager.FieldTransform.InverseTransformPoint(_probeVm.HeadPosition);
             float lift = local.y - _probeCutter.HeadClearance;
             _probeFrames++;
+            ProbeScreen();
             // Where the head is relative to the player: it must stay in front, not drift to the side.
             var pt = _probeVm.transform;
             Vector3 rel = _probeVm.HeadPosition - pt.position;
@@ -525,24 +553,62 @@ namespace PlayShift.Grass.Dev
             // 3) Looking around while cutting and walking: the head must stay on the ground at the same spot ahead
             //    (it follows yaw only) and cut exactly under the blades at every pitch. Absolute pitch targets.
             var fpc = _probeVm.GetComponent<FirstPersonController>();
+            var rig = fpc != null ? fpc.Rig : null;
             yield return FaceFieldCentre(manager);
-            foreach (var (label, target, shot) in new[]
-                     {
-                         ("straight ahead", 0f, "14_cut_looking_straight_ahead"), ("slightly up", 15f, "15_cut_looking_slightly_up"),
-                         ("slightly down", -15f, "15b_cut_looking_slightly_down"), ("steeply down", -55f, null), ("well up", 35f, null),
-                     })
+            if (rig != null && rig.VerticalLookLocked)
             {
-                for (int i = 0; i < 10; i++) { _input.Look = new Vector2(0f, (target - fpc.Pitch) / (10 - i)); yield return null; }
-                _input.Look = Vector2.zero;
-                long before = f.Remaining;
-                ResetProbe(); _probeActive = true;
-                for (int i = 0; i < 40; i++) { _input.Move = new Vector2(0f, 0.6f); yield return null; }
-                _input.Move = Vector2.zero; _probeActive = false;
-                _report.AppendLine($"  looking {label} (pitch {fpc.Pitch:F0} deg), walking: cut {before - f.Remaining:N0} units; {ProbeSummary()}");
-                if (shot != null) yield return Shot(shot);
+                // 3) Fixed downward camera: try each candidate angle. Mouse Y must do nothing; the head must stay at the
+                //    same place on screen with its whole blade circle in view, on the ground, cutting exactly under the
+                //    blades while walking forward, strafing and turning.
+                float keep = rig.FixedLookDown;
+                foreach (float angle in new[] { 15f, 20f, 25f, 30f })
+                {
+                    rig.FixedLookDown = angle;
+                    _input.Look = new Vector2(0f, 25f); // a big mouse-up flick: must be ignored
+                    yield return null;
+                    _input.Look = Vector2.zero;
+                    yield return null;
+                    float camDown = Camera.main != null ? Mathf.DeltaAngle(0f, Camera.main.transform.eulerAngles.x) : float.NaN;
+                    long before = f.Remaining;
+                    ResetProbe(); _probeActive = true;
+                    for (int i = 0; i < 40; i++) { _input.Move = new Vector2(0f, 0.6f); yield return null; }
+                    _input.Move = Vector2.zero; _probeActive = false;
+                    _report.AppendLine($"  camera {angle:F0} deg down (after a mouse-up flick the camera is at {camDown:F1} deg): walking: cut " +
+                                       $"{before - f.Remaining:N0} units; {ProbeSummary()}; {ScreenSummary()}");
+                    yield return Shot($"14_camera_{angle:F0}deg");
+                    ResetProbe(); _probeActive = true;
+                    for (int i = 0; i < 40; i++) { _input.Move = new Vector2(1f, 0f); yield return null; }
+                    _input.Move = Vector2.zero; _probeActive = false;
+                    _report.AppendLine($"    strafing right: {ProbeSummary()}; {ScreenSummary()}");
+                    ResetProbe(); _probeActive = true;
+                    for (int i = 0; i < 40; i++) { _input.Move = new Vector2(0f, 0.6f); _input.Look = new Vector2(4f, 0f); yield return null; }
+                    _input.Move = Vector2.zero; _input.Look = Vector2.zero; _probeActive = false;
+                    _report.AppendLine($"    walking + turning 120 deg/s: {ProbeSummary()}; {ScreenSummary()}");
+                    yield return FaceFieldCentre(manager);
+                }
+                rig.FixedLookDown = keep;
+                yield return null;
             }
-            for (int i = 0; i < 10; i++) { _input.Look = new Vector2(0f, (-18f - fpc.Pitch) / (10 - i)); yield return null; }
-            _input.Look = Vector2.zero;
+            else
+            {
+                foreach (var (label, target, shot) in new[]
+                         {
+                             ("straight ahead", 0f, "14_cut_looking_straight_ahead"), ("slightly up", 15f, "15_cut_looking_slightly_up"),
+                             ("slightly down", -15f, "15b_cut_looking_slightly_down"), ("down 30", -30f, null),
+                         })
+                {
+                    for (int i = 0; i < 10; i++) { _input.Look = new Vector2(0f, (target - fpc.Pitch) / (10 - i)); yield return null; }
+                    _input.Look = Vector2.zero;
+                    long before = f.Remaining;
+                    ResetProbe(); _probeActive = true;
+                    for (int i = 0; i < 40; i++) { _input.Move = new Vector2(0f, 0.6f); yield return null; }
+                    _input.Move = Vector2.zero; _probeActive = false;
+                    _report.AppendLine($"  looking {label} (pitch {fpc.Pitch:F0} deg), walking: cut {before - f.Remaining:N0} units; {ProbeSummary()}; {ScreenSummary()}");
+                    if (shot != null) yield return Shot(shot);
+                }
+                for (int i = 0; i < 10; i++) { _input.Look = new Vector2(0f, (-18f - fpc.Pitch) / (10 - i)); yield return null; }
+                _input.Look = Vector2.zero;
+            }
 
             // 4) Walking backwards while cutting.
             ResetProbe(); _probeActive = true;

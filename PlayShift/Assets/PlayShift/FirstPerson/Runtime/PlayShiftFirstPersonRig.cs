@@ -32,6 +32,20 @@ namespace PlayShift.FirstPerson
         [SerializeField] private float baseMouseSensitivity = 2f;
         [Tooltip("Look limits in degrees (negative = down).")]
         [SerializeField] private float minPitch = -80f, maxPitch = 60f;
+        [Tooltip("Turns off the controller's walking head bob so the view stays perfectly steady.")]
+        [SerializeField] private bool steadyCamera = true;
+        [Header("Fixed vertical look")]
+        [Tooltip("On: mouse up/down does nothing; the camera always looks Fixed Look Down below the horizon. Left/right " +
+                 "turning stays free (full 360).")]
+        [SerializeField] private bool lockVerticalLook = true;
+        [Tooltip("How far the camera looks down below the horizon (degrees) while the vertical look is locked.")]
+        [SerializeField, Range(0f, 60f)] private float fixedLookDown = 20f;
+
+        public bool VerticalLookLocked => lockVerticalLook;
+        /// <summary>Downward look angle in degrees while locked (changeable at runtime, e.g. by tests or settings).</summary>
+        public float FixedLookDown { get => fixedLookDown; set => fixedLookDown = Mathf.Clamp(value, 0f, 60f); }
+        /// <summary>The locked pitch (negative = down).</summary>
+        public float LockedPitch => -fixedLookDown;
 
         /// <summary>Set once by the game: true while menus are open (movement and look paused).</summary>
         public static Func<bool> InputBlocked;
@@ -109,6 +123,7 @@ namespace PlayShift.FirstPerson
                     return;
                 }
                 _ext = mb;
+                if (steadyCamera) t.GetField("useHeadBob", F)?.SetValue(mb, false);
                 _ext.useGUILayout = false; // it has an OnGUI debug label (off); skip the IMGUI layout pass
                 _baseWalk = (float)_fWalk.GetValue(mb);
                 _baseSprint = (float)_fSprint.GetValue(mb);
@@ -173,6 +188,16 @@ namespace PlayShift.FirstPerson
 
         private void LateUpdate()
         {
+            // Fixed vertical look: after every Update (the controller's mouse look included) and before anything that
+            // places a tool or renders, the camera is put back at the fixed angle, so mouse Y never shows. Roll is zeroed
+            // too. Also applies while scripted control (captures) drives the camera.
+            if (lockVerticalLook)
+            {
+                // (The controller's own pitch value is left alone: writing it via reflection would allocate every frame,
+                // and whatever it holds is overwritten here before anything uses or draws the camera.)
+                if (playerCamera != null) playerCamera.transform.localRotation = Quaternion.Euler(fixedLookDown, 0f, 0f);
+                return;
+            }
             // Game look limits (the controller allows +-90): keeps held tools reachable on screen.
             if (_ext == null || !_ext.enabled) return;
             float p = Pitch;
