@@ -7,12 +7,13 @@ namespace PlayShift.Grass
     /// <summary>
     /// Open-field map around the lawn, built at runtime (no imported art): completely flat ground, the lawn shaded by
     /// PlayShift/GrassGround (shows grown/cut grass from the cell data, so distant progress is visible without drawing
-    /// blades), a wooden privacy fence on all four sides with trees and bushes behind it (models in
-    /// Resources/OpenField), a few flowers and rocks, and a ring of distant mountains. No buildings, roads or paths.
-    /// Everything is merged into a handful of static meshes (one per material and side of the field, so the sides
-    /// behind the player are culled), so the scenery costs a few draw calls whatever the map size.
+    /// blades), a wooden privacy fence on all four sides closed in by a dense forest (see OpenFieldEnvironment.Forest;
+    /// models in Resources/OpenField), flowers and rocks under the trees, and a ring of distant mountains. No
+    /// buildings, roads or paths. Fence, rocks, flowers and mountains are merged into a handful of static meshes (one
+    /// per material and side of the field, so the sides behind the player are culled); trees and bushes are
+    /// instanced LODGroups.
     /// </summary>
-    public sealed class OpenFieldEnvironment : MonoBehaviour
+    public sealed partial class OpenFieldEnvironment : MonoBehaviour
     {
         [SerializeField] private GrassLevelManager manager;
         [Tooltip("Material using PlayShift/GrassGround (assigned by the setup menu so the shader ships in builds).")]
@@ -25,10 +26,10 @@ namespace PlayShift.Grass
         [SerializeField] private float fenceHeight = 1.5f;
 
         [Header("Scenery")]
-        [Tooltip("Trees in the band behind the fence, all around.")]
-        [SerializeField] private int backTreeCount = 80;
-        [Tooltip("Bushes just behind the fence, all around.")]
-        [SerializeField] private int backBushCount = 100;
+        [Tooltip("Average distance between trees along each of the four forest rows (m).")]
+        [SerializeField] private float treeSpacing = 4.6f;
+        [Tooltip("Average distance between bushes in the row right behind the fence (m).")]
+        [SerializeField] private float bushSpacing = 1.9f;
         [SerializeField] private int rockCount = 18;
         [SerializeField] private int flowerClusters = 48;
         [SerializeField] private int mountainCount = 18;
@@ -55,7 +56,7 @@ namespace PlayShift.Grass
             BuildGround(origin, size);
             BuildFence(origin, size);
             BuildFlowers(origin, size);
-            BuildTrees(origin, size);
+            BuildForest(origin, size);
             BuildRocks(origin, size);
             BuildMountains(origin + new Vector3(size.x * 0.5f, 0f, size.y * 0.5f));
             FlushBuckets();
@@ -200,8 +201,8 @@ namespace PlayShift.Grass
             };
             for (int k = 0; k < flowerClusters; k++)
             {
-                // On the strip between the lawn edge and the fence, all around.
-                Vector3 p = PerimeterPoint(origin, size, R(0.2f, fenceOffset - 0.3f));
+                // Behind the fence, in front of the bushes (nothing grows inside the yard).
+                Vector3 p = PerimeterPoint(origin, size, fenceOffset + R(0.35f, 0.9f));
                 var mat = colours[_rng.Next(colours.Length)];
                 int n = 5 + _rng.Next(6);
                 for (int i = 0; i < n; i++)
@@ -210,49 +211,6 @@ namespace PlayShift.Grass
                     AddBlob(mat, q + Vector3.up * R(0.05f, 0.14f), Vector3.one * R(0.05f, 0.08f));
                 }
             }
-        }
-
-        /// <summary>
-        /// Trees in a band behind the fence and bushes along its outside, all around (Resources/OpenField/Plants).
-        /// Trees keep a little space between them; each is a random kind, height and turn.
-        /// </summary>
-        private void BuildTrees(Vector3 origin, Vector2 size)
-        {
-            var mat = TexturedMat("TreesAndBushes", "Plants_BaseColor");
-            var kinds = new[] { LoadMesh("Plants", "TreeRound"), LoadMesh("Plants", "TreePine"), LoadMesh("Plants", "TreeSmall"), LoadMesh("Plants", "TreeTall") };
-            var heights = new[] { new Vector2(5.5f, 8.5f), new Vector2(6.5f, 10f), new Vector2(4.5f, 7f), new Vector2(7f, 10.5f) };
-            var placed = new List<Vector3>();
-            for (int k = 0, tries = 0; k < backTreeCount && tries < backTreeCount * 20; tries++)
-            {
-                Vector3 p = PerimeterPoint(origin, size, fenceOffset + R(3f, 24f), out int side);
-                bool clear = true;
-                for (int i = 0; i < placed.Count && clear; i++) clear = (placed[i] - p).sqrMagnitude > 4.5f * 4.5f;
-                if (!clear) continue;
-                int t = _rng.Next(kinds.Length);
-                if (kinds[t] == null) continue;
-                placed.Add(p);
-                k++;
-                AddOnGround(mat, kinds[t], p, R(heights[t].x, heights[t].y), side);
-            }
-
-            var bushes = new[] { LoadMesh("Plants", "BushCluster"), LoadMesh("Plants", "BushLong") };
-            for (int k = 0; k < backBushCount; k++)
-            {
-                var mesh = bushes[_rng.Next(bushes.Length)];
-                if (mesh == null) continue;
-                Vector3 p = PerimeterPoint(origin, size, fenceOffset + R(0.9f, 3.5f), out int side);
-                AddOnGround(mat, mesh, p, R(0.9f, 1.7f), side);
-            }
-        }
-
-        /// <summary>Adds a model scaled to a height, its base on the ground at p, turned randomly.</summary>
-        private void AddOnGround(Material mat, Mesh mesh, Vector3 p, float height, int group)
-        {
-            Bounds b = mesh.bounds;
-            float s = height / Mathf.Max(1e-4f, b.size.y);
-            var rot = Quaternion.Euler(0f, R(0f, 360f), 0f);
-            Vector3 local = new Vector3(b.center.x, b.min.y, b.center.z) * s;
-            Add(mat, mesh, p - rot * local, rot, Vector3.one * s, group);
         }
 
         private void BuildRocks(Vector3 origin, Vector2 size)

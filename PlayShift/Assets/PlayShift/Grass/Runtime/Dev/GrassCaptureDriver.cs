@@ -564,6 +564,17 @@ namespace PlayShift.Grass.Dev
                 _report.AppendLine($"  walked into the fence: player stopped {pl.z:F2} m from the lawn edge, head centre at {local.z:F2} m; " +
                                    $"uncut edge cells in front of the blades: {uncut}/{checkedCells} (must be 0)");
                 yield return Shot("16_lawn_edge_at_fence");
+
+                // Look along the fence into the corner (the forest must be as dense there), level view.
+                Vector3 corner = manager.FieldTransform.TransformPoint(new Vector3(-6f, 0f, -6f)) - player.position;
+                _input.Look = new Vector2(Mathf.DeltaAngle(player.eulerAngles.y, Mathf.Atan2(corner.x, corner.z) * Mathf.Rad2Deg), 2f - fpc.Pitch);
+                yield return null;
+                _input.Look = Vector2.zero;
+                yield return Frames(3);
+                yield return Shot("18_forest_corner");
+                _input.Look = new Vector2(0f, -18f - fpc.Pitch);
+                yield return null;
+                _input.Look = Vector2.zero;
             }
             _input.TrimmerHeld = false;
             Time.captureFramerate = 0;

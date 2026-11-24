@@ -33,6 +33,16 @@ namespace PlayShift.Grass.Editor
             ti.maxTextureSize = 1024;
             ti.mipmapEnabled = true;
             ti.anisoLevel = 4;
+            if (assetPath.Contains("Billboard"))
+            {
+                // Tree billboard atlas (4 kinds x side/top views, cut-out edges): keep 512 px per view, bleed colour
+                // into the clear pixels (no dark fringes) and keep the leaves' coverage in the small mip levels.
+                ti.maxTextureSize = 2048;
+                ti.alphaIsTransparency = true;
+                ti.mipMapsPreserveCoverage = true;
+                ti.alphaTestReferenceValue = 0.5f;
+                ti.wrapMode = UnityEngine.TextureWrapMode.Clamp;
+            }
         }
     }
 }
