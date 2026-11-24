@@ -30,11 +30,11 @@ namespace PlayShift.Grass.Editor
         private static void WaitUntilReady()
         {
             // Packages (glTFast) and the first asset import must finish before the trimmer model exists.
-            bool modelMissing = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PlayShift/Models/Trimmer.glb") == null;
+            bool modelMissing = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PlayShift/Models/StringTrimmer.glb") == null;
             if (EditorApplication.isCompiling || EditorApplication.isUpdating || (modelMissing && s_waits < 300))
             {
                 s_waits++;
-                if (modelMissing && s_waits == 100) AssetDatabase.ImportAsset("Assets/PlayShift/Models/Trimmer.glb", ImportAssetOptions.ForceUpdate);
+                if (modelMissing && s_waits == 100) AssetDatabase.ImportAsset("Assets/PlayShift/Models/StringTrimmer.glb", ImportAssetOptions.ForceUpdate);
                 EditorApplication.delayCall += WaitUntilReady;
                 return;
             }
@@ -49,8 +49,8 @@ namespace PlayShift.Grass.Editor
         public static void BuildForBatch()
         {
             bool ok = true;
-            if (AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PlayShift/Models/Trimmer.glb") == null)
-            { Debug.LogError("[PlayShift Grass] Trimmer.glb did not import (is glTFast installed?)."); ok = false; }
+            if (AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PlayShift/Models/StringTrimmer.glb") == null)
+            { Debug.LogError("[PlayShift Grass] StringTrimmer.glb did not import (is glTFast installed?)."); ok = false; }
             foreach (var name in new[] { GrassFieldRenderer.DefaultShaderName, "PlayShift/SkyClouds" })
                 if (Shader.Find(name) == null) { Debug.LogError($"[PlayShift Grass] Shader '{name}' missing or failed to compile."); ok = false; }
             BuildTestScene(askToSave: false);

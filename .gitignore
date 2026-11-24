@@ -7,3 +7,6 @@ node_modules
 # Asset Store assets: licence forbids redistributing them in this public repo. Import from Package Manager > My Assets.
 /PlayShift/Assets/EasyPeasyFirstPersonController/
 /PlayShift/Assets/EasyPeasyFirstPersonController.meta
+
+# Local model processing (source downloads, Blender scripts, previews)
+/ModelWork/

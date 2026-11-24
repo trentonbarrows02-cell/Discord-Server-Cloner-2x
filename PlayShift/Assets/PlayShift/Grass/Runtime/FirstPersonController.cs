@@ -27,8 +27,8 @@ namespace PlayShift.Grass
         [SerializeField] private bool invertY;
         [SerializeField] private float minPitch = -75f;
         [SerializeField] private float maxPitch = 55f;
-        [Tooltip("Looking slightly down keeps the cutting head in view.")]
-        [SerializeField] private float startPitch = -26f;
+        [Tooltip("A natural, slightly lowered look: the field ahead and the cutting head both in view. The head works on the ground whatever the pitch.")]
+        [SerializeField] private float startPitch = -18f;
         [Tooltip("Speed lost at full cutting load (thick, tall grass).")]
         [Range(0f, 0.8f)] [SerializeField] private float thickGrassResistance = 0.35f;
         [SerializeField] private GrassCutter cutter;

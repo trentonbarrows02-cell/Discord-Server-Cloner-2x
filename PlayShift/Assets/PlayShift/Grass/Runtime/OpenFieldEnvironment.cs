@@ -7,9 +7,10 @@ namespace PlayShift.Grass
     /// <summary>
     /// Open-field map around the lawn, built at runtime (no imported art): completely flat ground, the lawn shaded by
     /// PlayShift/GrassGround (shows grown/cut grass from the cell data, so distant progress is visible without drawing
-    /// blades), a dense continuous bush hedge on all four sides, a few flowers, trees and rocks around the outside,
-    /// and a ring of distant mountains. No buildings, roads or paths. Everything is merged into a handful of static
-    /// meshes (one per material), so the scenery costs a few draw calls whatever the map size.
+    /// blades), a wooden privacy fence on all four sides with trees and bushes behind it (models in
+    /// Resources/OpenField), a few flowers and rocks, and a ring of distant mountains. No buildings, roads or paths.
+    /// Everything is merged into a handful of static meshes (one per material and side of the field, so the sides
+    /// behind the player are culled), so the scenery costs a few draw calls whatever the map size.
     /// </summary>
     public sealed class OpenFieldEnvironment : MonoBehaviour
     {
@@ -18,13 +19,16 @@ namespace PlayShift.Grass
         [SerializeField] private Material lawnMaterial;
         [SerializeField] private int seed = 4242;
 
-        [Header("Hedge")]
-        [Tooltip("Distance from the lawn edge to the hedge centre line (m).")]
-        [SerializeField] private float hedgeOffset = 1.8f;
-        [SerializeField] private float hedgeHeight = 1.9f;
+        [Header("Fence")]
+        [Tooltip("Distance from the lawn edge to the fence line (m). The invisible wall keeps the player 0.6 m out.")]
+        [SerializeField] private float fenceOffset = 1.0f;
+        [SerializeField] private float fenceHeight = 1.5f;
 
         [Header("Scenery")]
-        [SerializeField] private int treeCount = 14;
+        [Tooltip("Trees in the band behind the fence, all around.")]
+        [SerializeField] private int backTreeCount = 80;
+        [Tooltip("Bushes just behind the fence, all around.")]
+        [SerializeField] private int backBushCount = 100;
         [SerializeField] private int rockCount = 18;
         [SerializeField] private int flowerClusters = 48;
         [SerializeField] private int mountainCount = 18;
@@ -34,9 +38,9 @@ namespace PlayShift.Grass
         private float R() => (float)_rng.NextDouble();
         private float R(float a, float b) => a + R() * (b - a);
 
-        // Merge buckets, one combined mesh per material.
-        private readonly Dictionary<Material, List<CombineInstance>> _buckets = new Dictionary<Material, List<CombineInstance>>();
-        private Mesh _blob, _cone6, _cone9, _cylinder;
+        // Merge buckets, one combined mesh per material and group (group = side of the field, so it can be culled).
+        private readonly Dictionary<(Material, int), List<CombineInstance>> _buckets = new Dictionary<(Material, int), List<CombineInstance>>();
+        private Mesh _blob, _cone9;
 
         private void Start()
         {
@@ -46,12 +50,10 @@ namespace PlayShift.Grass
             Vector3 origin = manager != null ? manager.FieldTransform.position : Vector3.zero;
 
             _blob = Icosphere(1, 0.12f);
-            _cone6 = Cone(6);
             _cone9 = Cone(9);
-            _cylinder = Cylinder(7);
 
             BuildGround(origin, size);
-            BuildHedge(origin, size);
+            BuildFence(origin, size);
             BuildFlowers(origin, size);
             BuildTrees(origin, size);
             BuildRocks(origin, size);
@@ -89,27 +91,46 @@ namespace PlayShift.Grass
             floor.transform.position = origin + new Vector3(size.x * 0.5f, -0.5f, size.y * 0.5f);
             floor.AddComponent<BoxCollider>().size = new Vector3(extent, 1f, extent);
 
-            // Keep the player out of the hedge: the walls' inner faces sit 0.6 m outside the lawn, at the front of the
+            // Keep the player off the fence: the walls' inner faces sit 0.6 m outside the lawn, at the front of the
             // foliage (they used to be in the middle of it, so the camera could walk 1.5 m into the leaves). The
             // trimmer is stopped by these walls too, and from 0.6 m out its blades still reach every edge cell.
             const float wallFace = 0.6f, wallThick = 0.6f;
-            float w = wallFace + wallThick * 0.5f, span = 2f * hedgeOffset;
+            float w = wallFace + wallThick * 0.5f, span = 2f * (fenceOffset + 1f);
             AddWall(origin + new Vector3(size.x * 0.5f, 1f, -w), new Vector3(size.x + span, 2f, wallThick));
             AddWall(origin + new Vector3(size.x * 0.5f, 1f, size.y + w), new Vector3(size.x + span, 2f, wallThick));
             AddWall(origin + new Vector3(-w, 1f, size.y * 0.5f), new Vector3(wallThick, 2f, size.y + span));
             AddWall(origin + new Vector3(size.x + w, 1f, size.y * 0.5f), new Vector3(wallThick, 2f, size.y + span));
         }
 
-        private void BuildHedge(Vector3 origin, Vector2 size)
+        private static Mesh LoadMesh(string file, string name)
         {
-            var greens = new[]
-            {
-                Mat("HedgeDark", new Color(0.13f, 0.33f, 0.09f)),
-                Mat("HedgeMid", new Color(0.2f, 0.44f, 0.12f)),
-                Mat("HedgeLight", new Color(0.3f, 0.55f, 0.16f)),
-            };
-            float o = hedgeOffset;
-            // Perimeter as a rectangle path; two staggered rows of puffy blobs, overlapping so it reads continuous.
+            var all = Resources.LoadAll<Mesh>("OpenField/" + file);
+            foreach (var m in all) if (m.name == name) return m;
+            Debug.LogWarning($"[PlayShift Grass] Mesh '{name}' not found in Resources/OpenField/{file} ({all.Length} meshes).");
+            return null;
+        }
+
+        private Material TexturedMat(string name, string texture)
+        {
+            if (_mats.TryGetValue(name, out var m)) return m;
+            var tex = Resources.Load<Texture2D>("OpenField/" + texture);
+            _mats[name] = m = PipelineMaterials.CreateLit(name, Color.white, tex);
+            return m;
+        }
+
+        /// <summary>
+        /// Wooden privacy fence all around the lawn. Each panel is a thin box (12 triangles) showing a picture of the
+        /// full-detail fence model (Resources/OpenField/Fence_Front, rendered from it), stretched slightly so each side
+        /// has a whole number of panels; one merged mesh per side.
+        /// </summary>
+        private void BuildFence(Vector3 origin, Vector2 size)
+        {
+            var mat = TexturedMat("Fence", "Fence_Front");
+            var tex = mat.mainTexture;
+            float aspect = tex != null ? tex.width / (float)tex.height : 1.16f; // the panel picture's width / height
+            float panel = fenceHeight * aspect;
+            var mesh = FencePanelMesh(0.06f / fenceHeight);
+            float o = fenceOffset;
             var corners = new[]
             {
                 origin + new Vector3(-o, 0f, -o), origin + new Vector3(size.x + o, 0f, -o),
@@ -117,20 +138,57 @@ namespace PlayShift.Grass
             };
             for (int side = 0; side < 4; side++)
             {
-                Vector3 a = corners[side], b = corners[(side + 1) % 4];
-                Vector3 dir = (b - a).normalized, outward = Vector3.Cross(Vector3.up, dir); // corners run anticlockwise
-                float len = Vector3.Distance(a, b);
-                for (int row = 0; row < 2; row++)
-                {
-                    float spacing = 1.05f, start = row * spacing * 0.5f;
-                    for (float d = start; d <= len; d += spacing)
-                    {
-                        Vector3 p = a + dir * d + outward * (row * 0.9f + R(-0.15f, 0.15f));
-                        float r = R(0.85f, 1.25f), h = hedgeHeight * R(0.75f, 1.05f) * (row == 0 ? 1f : 1.12f);
-                        AddBlob(greens[_rng.Next(greens.Length)], p + Vector3.up * (h * 0.48f), new Vector3(r * 1.25f, h * 0.55f, r * 1.25f));
-                    }
-                }
+                Vector3 a = corners[side], c = corners[(side + 1) % 4];
+                Vector3 dir = (c - a).normalized;
+                float len = Vector3.Distance(a, c);
+                int count = Mathf.Max(1, Mathf.CeilToInt(len / panel));
+                float seg = len / count;
+                var rot = Quaternion.LookRotation(Vector3.Cross(dir, Vector3.up), Vector3.up); // local x along the side, upright
+                var scale = new Vector3(seg, fenceHeight, fenceHeight);
+                for (int i = 0; i < count; i++)
+                    Add(mat, mesh, a + dir * (seg * (i + 0.5f)), rot, scale, side);
             }
+        }
+
+        /// <summary>
+        /// Unit fence panel: 1 wide (x, centred), 1 tall (y, base at 0), <paramref name="depth"/> thick (z, centred).
+        /// Front and back show the whole picture; the top and ends take a thin strip of it (wood colour).
+        /// </summary>
+        private static Mesh FencePanelMesh(float depth)
+        {
+            float x = 0.5f, z = depth * 0.5f;
+            var v = new List<Vector3>();
+            var n = new List<Vector3>();
+            var uv = new List<Vector2>();
+            var t = new List<int>();
+            void Quad(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, Vector3 normal, Vector2 u0, Vector2 u1, Vector2 u2, Vector2 u3)
+            {
+                int i = v.Count;
+                v.Add(p0); v.Add(p1); v.Add(p2); v.Add(p3);
+                n.Add(normal); n.Add(normal); n.Add(normal); n.Add(normal);
+                uv.Add(u0); uv.Add(u1); uv.Add(u2); uv.Add(u3);
+                t.Add(i); t.Add(i + 1); t.Add(i + 2); t.Add(i); t.Add(i + 2); t.Add(i + 3);
+            }
+            // Front (-z) and back (+z), both reading left-to-right from their own side.
+            Quad(new Vector3(-x, 0, -z), new Vector3(-x, 1, -z), new Vector3(x, 1, -z), new Vector3(x, 0, -z), Vector3.back,
+                 new Vector2(0, 0), new Vector2(0, 1), new Vector2(1, 1), new Vector2(1, 0));
+            Quad(new Vector3(x, 0, z), new Vector3(x, 1, z), new Vector3(-x, 1, z), new Vector3(-x, 0, z), Vector3.forward,
+                 new Vector2(0, 0), new Vector2(0, 1), new Vector2(1, 1), new Vector2(1, 0));
+            // Top and the two ends: a strip just inside the picture's top edge.
+            Vector2 s0 = new Vector2(0.02f, 0.985f), s1 = new Vector2(0.98f, 0.995f);
+            Quad(new Vector3(-x, 1, -z), new Vector3(-x, 1, z), new Vector3(x, 1, z), new Vector3(x, 1, -z), Vector3.up,
+                 new Vector2(s0.x, s0.y), new Vector2(s0.x, s1.y), new Vector2(s1.x, s1.y), new Vector2(s1.x, s0.y));
+            Quad(new Vector3(-x, 0, z), new Vector3(-x, 1, z), new Vector3(-x, 1, -z), new Vector3(-x, 0, -z), Vector3.left,
+                 new Vector2(0.01f, 0), new Vector2(0.01f, 1), new Vector2(0.03f, 1), new Vector2(0.03f, 0));
+            Quad(new Vector3(x, 0, -z), new Vector3(x, 1, -z), new Vector3(x, 1, z), new Vector3(x, 0, z), Vector3.right,
+                 new Vector2(0.97f, 0), new Vector2(0.97f, 1), new Vector2(0.99f, 1), new Vector2(0.99f, 0));
+            var m = new Mesh { name = "FencePanel" };
+            m.SetVertices(v);
+            m.SetNormals(n);
+            m.SetUVs(0, uv);
+            m.SetTriangles(t, 0);
+            m.RecalculateBounds();
+            return m;
         }
 
         private void BuildFlowers(Vector3 origin, Vector2 size)
@@ -142,8 +200,8 @@ namespace PlayShift.Grass
             };
             for (int k = 0; k < flowerClusters; k++)
             {
-                // On the strip between the lawn edge and the hedge, all around.
-                Vector3 p = PerimeterPoint(origin, size, R(0.35f, hedgeOffset - 0.9f));
+                // On the strip between the lawn edge and the fence, all around.
+                Vector3 p = PerimeterPoint(origin, size, R(0.2f, fenceOffset - 0.3f));
                 var mat = colours[_rng.Next(colours.Length)];
                 int n = 5 + _rng.Next(6);
                 for (int i = 0; i < n; i++)
@@ -154,24 +212,47 @@ namespace PlayShift.Grass
             }
         }
 
+        /// <summary>
+        /// Trees in a band behind the fence and bushes along its outside, all around (Resources/OpenField/Plants).
+        /// Trees keep a little space between them; each is a random kind, height and turn.
+        /// </summary>
         private void BuildTrees(Vector3 origin, Vector2 size)
         {
-            var bark = Mat("Bark", new Color(0.36f, 0.26f, 0.17f));
-            var leaves = new[] { Mat("LeavesA", new Color(0.18f, 0.42f, 0.13f)), Mat("LeavesB", new Color(0.26f, 0.5f, 0.16f)) };
-            for (int k = 0; k < treeCount; k++)
+            var mat = TexturedMat("TreesAndBushes", "Plants_BaseColor");
+            var kinds = new[] { LoadMesh("Plants", "TreeRound"), LoadMesh("Plants", "TreePine"), LoadMesh("Plants", "TreeSmall"), LoadMesh("Plants", "TreeTall") };
+            var heights = new[] { new Vector2(5.5f, 8.5f), new Vector2(6.5f, 10f), new Vector2(4.5f, 7f), new Vector2(7f, 10.5f) };
+            var placed = new List<Vector3>();
+            for (int k = 0, tries = 0; k < backTreeCount && tries < backTreeCount * 20; tries++)
             {
-                Vector3 p = PerimeterPoint(origin, size, hedgeOffset + R(5f, 26f));
-                float h = R(5f, 9f);
-                Add(bark, _cylinder, p, Quaternion.identity, new Vector3(0.35f, h * 0.62f, 0.35f));
-                var leaf = leaves[_rng.Next(leaves.Length)];
-                int blobs = 3 + _rng.Next(3);
-                for (int i = 0; i < blobs; i++)
-                {
-                    float r = R(1.6f, 2.6f) * h / 7f;
-                    Vector3 c = p + new Vector3(R(-1.2f, 1.2f), h * R(0.62f, 0.9f), R(-1.2f, 1.2f));
-                    AddBlob(leaf, c, new Vector3(r * 1.2f, r, r * 1.2f));
-                }
+                Vector3 p = PerimeterPoint(origin, size, fenceOffset + R(3f, 24f), out int side);
+                bool clear = true;
+                for (int i = 0; i < placed.Count && clear; i++) clear = (placed[i] - p).sqrMagnitude > 4.5f * 4.5f;
+                if (!clear) continue;
+                int t = _rng.Next(kinds.Length);
+                if (kinds[t] == null) continue;
+                placed.Add(p);
+                k++;
+                AddOnGround(mat, kinds[t], p, R(heights[t].x, heights[t].y), side);
             }
+
+            var bushes = new[] { LoadMesh("Plants", "BushCluster"), LoadMesh("Plants", "BushLong") };
+            for (int k = 0; k < backBushCount; k++)
+            {
+                var mesh = bushes[_rng.Next(bushes.Length)];
+                if (mesh == null) continue;
+                Vector3 p = PerimeterPoint(origin, size, fenceOffset + R(0.9f, 3.5f), out int side);
+                AddOnGround(mat, mesh, p, R(0.9f, 1.7f), side);
+            }
+        }
+
+        /// <summary>Adds a model scaled to a height, its base on the ground at p, turned randomly.</summary>
+        private void AddOnGround(Material mat, Mesh mesh, Vector3 p, float height, int group)
+        {
+            Bounds b = mesh.bounds;
+            float s = height / Mathf.Max(1e-4f, b.size.y);
+            var rot = Quaternion.Euler(0f, R(0f, 360f), 0f);
+            Vector3 local = new Vector3(b.center.x, b.min.y, b.center.z) * s;
+            Add(mat, mesh, p - rot * local, rot, Vector3.one * s, group);
         }
 
         private void BuildRocks(Vector3 origin, Vector2 size)
@@ -179,7 +260,7 @@ namespace PlayShift.Grass
             var rock = new[] { Mat("RockA", new Color(0.55f, 0.55f, 0.53f)), Mat("RockB", new Color(0.45f, 0.46f, 0.45f)) };
             for (int k = 0; k < rockCount; k++)
             {
-                Vector3 p = PerimeterPoint(origin, size, hedgeOffset + R(2.5f, 18f));
+                Vector3 p = PerimeterPoint(origin, size, fenceOffset + R(2.5f, 18f));
                 float s = R(0.35f, 1.1f);
                 AddBlob(rock[_rng.Next(rock.Length)], p + Vector3.up * s * 0.25f, new Vector3(s * R(1f, 1.6f), s * 0.6f, s * R(1f, 1.5f)));
             }
@@ -208,15 +289,22 @@ namespace PlayShift.Grass
         // ------------------------------------------------------------------ helpers
 
         /// <summary>Random point around the lawn at the given distance outside its edge.</summary>
-        private Vector3 PerimeterPoint(Vector3 origin, Vector2 size, float outside)
+        private Vector3 PerimeterPoint(Vector3 origin, Vector2 size, float outside) => PerimeterPoint(origin, size, outside, out _);
+
+        /// <summary>Random point <paramref name="outside"/> metres outside the lawn edge; side 0..3 = which edge.</summary>
+        private Vector3 PerimeterPoint(Vector3 origin, Vector2 size, float outside, out int side)
         {
             float perim = 2f * (size.x + size.y), t = R() * perim;
+            side = 0;
             if (t < size.x) return origin + new Vector3(t, 0f, -outside);
             t -= size.x;
+            side = 1;
             if (t < size.y) return origin + new Vector3(size.x + outside, 0f, t);
             t -= size.y;
+            side = 2;
             if (t < size.x) return origin + new Vector3(size.x - t, 0f, size.y + outside);
             t -= size.x;
+            side = 3;
             return origin + new Vector3(-outside, 0f, size.y - t);
         }
 
@@ -230,9 +318,9 @@ namespace PlayShift.Grass
         private void AddBlob(Material m, Vector3 pos, Vector3 scale) =>
             Add(m, _blob, pos, Quaternion.Euler(0f, R(0f, 360f), 0f), scale);
 
-        private void Add(Material m, Mesh mesh, Vector3 pos, Quaternion rot, Vector3 scale)
+        private void Add(Material m, Mesh mesh, Vector3 pos, Quaternion rot, Vector3 scale, int group = 0)
         {
-            if (!_buckets.TryGetValue(m, out var list)) _buckets[m] = list = new List<CombineInstance>();
+            if (!_buckets.TryGetValue((m, group), out var list)) _buckets[(m, group)] = list = new List<CombineInstance>();
             list.Add(new CombineInstance { mesh = mesh, transform = Matrix4x4.TRS(pos, rot, scale) });
         }
 
@@ -240,16 +328,17 @@ namespace PlayShift.Grass
         {
             foreach (var kv in _buckets)
             {
-                var combined = new Mesh { name = kv.Key.name + " (combined)", indexFormat = IndexFormat.UInt32 };
+                var mat = kv.Key.Item1;
+                var combined = new Mesh { name = $"{mat.name} {kv.Key.Item2} (combined)", indexFormat = IndexFormat.UInt32 };
                 combined.CombineMeshes(kv.Value.ToArray(), true, true);
                 combined.RecalculateBounds();
-                var go = new GameObject(kv.Key.name);
+                var go = new GameObject($"{mat.name} {kv.Key.Item2}");
                 go.transform.SetParent(transform, false);
                 go.AddComponent<MeshFilter>().sharedMesh = combined;
                 var mr = go.AddComponent<MeshRenderer>();
-                mr.sharedMaterial = kv.Key;
+                mr.sharedMaterial = mat;
                 // Mountains are far beyond the shadow distance; small things don't need to cast.
-                bool casts = kv.Key.name.StartsWith("Hedge") || kv.Key.name.StartsWith("Leaves") || kv.Key.name == "Bark";
+                bool casts = mat.name == "Fence" || mat.name == "TreesAndBushes";
                 mr.shadowCastingMode = casts ? ShadowCastingMode.On : ShadowCastingMode.Off;
             }
             _buckets.Clear();
@@ -274,7 +363,7 @@ namespace PlayShift.Grass
 
         private void AddWall(Vector3 centre, Vector3 size)
         {
-            var go = new GameObject("HedgeWall");
+            var go = new GameObject("FenceWall");
             go.transform.SetParent(transform, false);
             go.transform.position = centre;
             go.AddComponent<BoxCollider>().size = size;

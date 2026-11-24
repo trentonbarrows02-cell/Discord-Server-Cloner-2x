@@ -1,4 +1,4 @@
-﻿#if UNITY_EDITOR
+#if UNITY_EDITOR
 // Editor-only development tool (excluded from builds). Lives outside an Editor folder because Unity can't add
 // MonoBehaviours from editor assemblies to scene objects.
 using System;
@@ -339,13 +339,29 @@ namespace PlayShift.Grass.Dev
         private GrassLevelManager _probeManager;
         private bool _probeActive;
         private int _probeFrames, _probeGroundFrames, _probeMissFrames, _probeMaxMiss, _probeTotalMiss;
-        private float _probeMaxLift, _probeMaxSide, _probeMinAhead, _probeMaxAhead;
+        private float _probeMaxLift, _probeMaxSide, _probeMinAhead, _probeMaxAhead, _probeMinGap, _probeMaxGap;
+        private int _probeSinkLogs;
+
+        /// <summary>Turns the player to face the middle of the field (room to walk in every test).</summary>
+        private IEnumerator FaceFieldCentre(GrassLevelManager manager)
+        {
+            var f = manager.Field;
+            Vector3 centre = manager.FieldTransform.TransformPoint(new Vector3(f.CellsX * f.CellSizeX * 0.5f, 0f, f.CellsZ * f.CellSizeZ * 0.5f));
+            var pt = _probeVm.transform;
+            Vector3 d = centre - pt.position;
+            float yaw = Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg;
+            _input.Look = new Vector2(Mathf.DeltaAngle(pt.eulerAngles.y, yaw), 0f);
+            yield return null;
+            _input.Look = Vector2.zero;
+            yield return null;
+        }
 
         private void ResetProbe()
         {
             _probeFrames = _probeGroundFrames = _probeMissFrames = _probeMaxMiss = _probeTotalMiss = 0;
             _probeMaxLift = _probeMaxSide = 0f;
             _probeMinAhead = float.MaxValue; _probeMaxAhead = float.MinValue;
+            _probeMinGap = float.MaxValue; _probeMaxGap = float.MinValue;
         }
 
         /// <summary>
@@ -366,6 +382,17 @@ namespace PlayShift.Grass.Dev
             _probeMaxSide = Mathf.Max(_probeMaxSide, side);
             _probeMinAhead = Mathf.Min(_probeMinAhead, ahead);
             _probeMaxAhead = Mathf.Max(_probeMaxAhead, ahead);
+            // Gap between the lowest point of the blades and the real ground under the head (cutting height).
+            Vector3 hp = _probeVm.HeadPosition;
+            if (Physics.Raycast(hp + Vector3.up * 1.5f, Vector3.down, out var g, 4f, ~(1 << 2), QueryTriggerInteraction.Ignore))
+            {
+                float gap = hp.y - g.point.y - (_probeCutter.HeadClearance - _probeVm.CuttingHeight);
+                _probeMinGap = Mathf.Min(_probeMinGap, gap);
+                if (gap < -0.005f && _probeSinkLogs++ < 5)
+                    UnityEngine.Debug.LogWarning($"[Capture] blades {gap * 100f:F1} cm below ground: head {hp}, ground {g.point.y:F3} ({g.collider.name}), " +
+                                                 $"feet {_probeVm.transform.position}");
+                _probeMaxGap = Mathf.Max(_probeMaxGap, gap);
+            }
             if (lift > 0.05f) { _probeMaxLift = Mathf.Max(_probeMaxLift, lift); return; }
             _probeGroundFrames++;
             float r = _probeCutter.CutRadius, cs = f.CellSizeX, half = cs * 0.7072f, inner = r - half;
@@ -386,12 +413,14 @@ namespace PlayShift.Grass.Dev
         private string ProbeSummary() =>
             $"{_probeGroundFrames}/{_probeFrames} frames blades down, frames with grass left under the blades: {_probeMissFrames} " +
             $"(max {_probeMaxMiss} cells, total {_probeTotalMiss})" + (_probeMaxLift > 0f ? $", max lift {_probeMaxLift * 100f:F0} cm" : "") +
-            $"; head ahead {_probeMinAhead:F2}-{_probeMaxAhead:F2} m, max sideways {_probeMaxSide * 100f:F0} cm";
+            $"; head ahead {_probeMinAhead:F2}-{_probeMaxAhead:F2} m, max sideways {_probeMaxSide * 100f:F0} cm" +
+            (_probeMinGap < float.MaxValue ? $", blades {_probeMinGap * 100f:F1}-{_probeMaxGap * 100f:F1} cm above the ground" : "");
 
         /// <summary>
-        /// Moves the trimmer the way a player does (standing, spinning fast, looking down and up, sprint-strafing, looking
-        /// up with it running) at a fixed 30 fps and checks every frame that the grass is cut exactly under the blades,
-        /// not outside them, and not at all while the head is lifted.
+        /// Moves the trimmer the way a player does (standing, spinning fast, looking straight ahead / up / down while
+        /// walking, walking backwards, sprint-strafing, crossing a bump, walking into the fence) at a fixed 30 fps and
+        /// checks every frame that the grass is cut exactly under the blades and not outside them, that the head stays
+        /// put whatever the camera pitch, and that the blades keep their cutting height over the real ground.
         /// </summary>
         private IEnumerator CutAccuracyTest(GrassCutter cutter, GrassLevelManager manager)
         {
@@ -444,49 +473,76 @@ namespace PlayShift.Grass.Dev
             _input.Look = Vector2.zero; _probeActive = false;
             _report.AppendLine($"  fast turn 360 deg/s: {ProbeSummary()}");
 
-            // 3) Looking down and up while cutting: the head slides in and out across the lawn. Absolute pitch targets
-            //    (the start pitch depends on the window shape), from steeply down to just above the horizon and back.
+            // 3) Looking around while cutting and walking: the head must stay on the ground at the same spot ahead
+            //    (it follows yaw only) and cut exactly under the blades at every pitch. Absolute pitch targets.
             var fpc = _probeVm.GetComponent<FirstPersonController>();
-            ResetProbe(); _probeActive = true;
-            float minP = float.MaxValue, maxP = float.MinValue;
-            foreach (var (target, frames) in new[] { (-60f, 15), (5f, 40), (-30f, 25) })
-                for (int i = 0; i < frames; i++)
-                {
-                    _input.Look = new Vector2(0f, (target - fpc.Pitch) / (frames - i));
-                    yield return null;
-                    minP = Mathf.Min(minP, fpc.Pitch); maxP = Mathf.Max(maxP, fpc.Pitch);
-                }
-            _input.Look = Vector2.zero; _probeActive = false;
-            _report.AppendLine($"  looking down/up (pitch {minP:F0} to {maxP:F0} deg): {ProbeSummary()}");
-            yield return Shot("14_cut_after_pitch_sweep");
+            yield return FaceFieldCentre(manager);
+            foreach (var (label, target, shot) in new[]
+                     {
+                         ("straight ahead", 0f, "14_cut_looking_straight_ahead"), ("slightly up", 15f, "15_cut_looking_slightly_up"),
+                         ("slightly down", -15f, "15b_cut_looking_slightly_down"), ("steeply down", -55f, null), ("well up", 35f, null),
+                     })
+            {
+                for (int i = 0; i < 10; i++) { _input.Look = new Vector2(0f, (target - fpc.Pitch) / (10 - i)); yield return null; }
+                _input.Look = Vector2.zero;
+                long before = f.Remaining;
+                ResetProbe(); _probeActive = true;
+                for (int i = 0; i < 40; i++) { _input.Move = new Vector2(0f, 0.6f); yield return null; }
+                _input.Move = Vector2.zero; _probeActive = false;
+                _report.AppendLine($"  looking {label} (pitch {fpc.Pitch:F0} deg), walking: cut {before - f.Remaining:N0} units; {ProbeSummary()}");
+                if (shot != null) yield return Shot(shot);
+            }
+            for (int i = 0; i < 10; i++) { _input.Look = new Vector2(0f, (-18f - fpc.Pitch) / (10 - i)); yield return null; }
+            _input.Look = Vector2.zero;
 
-            // 4) Sprint-strafing diagonally while turning.
+            // 4) Walking backwards while cutting.
+            ResetProbe(); _probeActive = true;
+            for (int i = 0; i < 40; i++) { _input.Move = new Vector2(0f, -1f); yield return null; }
+            _input.Move = Vector2.zero; _probeActive = false;
+            _report.AppendLine($"  walking backwards: {ProbeSummary()}");
+
+            // 5) Sprint-strafing diagonally while turning.
             ResetProbe(); _probeActive = true;
             _input.Sprint = true;
             for (int i = 0; i < 45; i++) { _input.Move = new Vector2(1f, 0.6f); _input.Look = new Vector2(2f, 0f); yield return null; }
             _input.Sprint = false; _input.Move = Vector2.zero; _input.Look = Vector2.zero; _probeActive = false;
             _report.AppendLine($"  sprint-strafe + turn: {ProbeSummary()}");
 
-            // 5) Looking up with the trimmer running: the head lifts off the lawn and must not cut anything.
-            for (int i = 0; i < 20; i++) { _input.Look = new Vector2(0f, 3f); yield return null; }
-            _input.Look = Vector2.zero;
-            yield return Frames(3);
-            long beforeUp = f.Remaining;
-            ResetProbe(); _probeActive = true;
-            for (int i = 0; i < 30; i++) { _input.Move = new Vector2(0f, 1f); yield return null; }
-            _input.Move = Vector2.zero; _probeActive = false;
-            _report.AppendLine($"  looking up, trimmer on, walking: cut {beforeUp - f.Remaining:N0} units (must be 0); {ProbeSummary()}");
-            yield return Shot("15_looking_up_lifted");
+            // 5b) Uneven ground: a 12 cm step and a 9 deg ramp placed in front of the player (test-only colliders,
+            //     drawn so they show in the shot). The head must climb and come down without sinking in or floating.
+            yield return FaceFieldCentre(manager);
+            {
+                var pt = _probeVm.transform;
+                var bump = new GameObject("TestBump");
+                Vector3 c0 = pt.position + pt.forward * 3.5f;
+                var step = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                step.transform.SetParent(bump.transform, false);
+                step.transform.SetPositionAndRotation(c0 + Vector3.up * 0.06f, pt.rotation);
+                step.transform.localScale = new Vector3(5f, 0.12f, 2.5f);
+                var ramp = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                ramp.transform.SetParent(bump.transform, false);
+                ramp.transform.SetPositionAndRotation(c0 + pt.forward * 3.4f + Vector3.up * 0.05f, pt.rotation * Quaternion.Euler(-9f, 0f, 0f));
+                ramp.transform.localScale = new Vector3(5f, 0.3f, 4f);
+                yield return null;
+                ResetProbe(); _probeActive = true;
+                for (int i = 0; i < 150; i++)
+                {
+                    _input.Move = new Vector2(0f, 0.55f);
+                    if (i == 45) { _probeActive = false; yield return Shot("17_trimmer_on_bump"); _probeActive = true; }
+                    yield return null;
+                }
+                _input.Move = Vector2.zero; _probeActive = false;
+                _report.AppendLine($"  over a 12 cm step and a 9 deg ramp: blades {_probeMinGap * 100f:F1}-{_probeMaxGap * 100f:F1} cm above the ground " +
+                                   $"(cutting height {_probeVm.CuttingHeight * 100f:F0} cm; must never be below 0), head ahead {_probeMinAhead:F2}-{_probeMaxAhead:F2} m");
+                Destroy(bump);
+                yield return null;
+            }
 
-            // Back to the normal view.
-            for (int i = 0; i < 20; i++) { _input.Look = new Vector2(0f, -3f); yield return null; }
-            _input.Look = Vector2.zero;
-
-            // 6) Walk into the hedge with the trimmer running: the grass right at the lawn edge must still be cut
-            //    (the hedge wall stops the player and the head, but not short of the edge).
+            // 6) Walk into the fence with the trimmer running: the grass right at the lawn edge must still be cut
+            //    (the fence wall stops the player and the head, but not short of the edge).
             {
                 var player = _probeVm.transform;
-                _input.Look = new Vector2(Mathf.DeltaAngle(player.eulerAngles.y, 180f), 0f); // face the near (z = 0) hedge
+                _input.Look = new Vector2(Mathf.DeltaAngle(player.eulerAngles.y, 180f), 0f); // face the near (z = 0) fence
                 yield return null;
                 _input.Look = Vector2.zero;
                 _input.Move = new Vector2(0f, 1f);
@@ -505,9 +561,9 @@ namespace PlayShift.Grass.Dev
                         if (!f.IsCellCut(f.CellIndex(cx, cz))) uncut++;
                     }
                 Vector3 pl = manager.FieldTransform.InverseTransformPoint(player.position);
-                _report.AppendLine($"  walked into the hedge: player stopped {pl.z:F2} m from the lawn edge, head centre at {local.z:F2} m; " +
+                _report.AppendLine($"  walked into the fence: player stopped {pl.z:F2} m from the lawn edge, head centre at {local.z:F2} m; " +
                                    $"uncut edge cells in front of the blades: {uncut}/{checkedCells} (must be 0)");
-                yield return Shot("16_lawn_edge_at_hedge");
+                yield return Shot("16_lawn_edge_at_fence");
             }
             _input.TrimmerHeld = false;
             Time.captureFramerate = 0;

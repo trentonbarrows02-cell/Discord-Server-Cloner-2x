@@ -119,7 +119,7 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
---- !u!1 &377348678
+--- !u!1 &471175253
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -127,10 +127,533 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 377348679}
-  - component: {fileID: 377348682}
-  - component: {fileID: 377348681}
-  - component: {fileID: 377348680}
+  - component: {fileID: 471175257}
+  - component: {fileID: 471175256}
+  - component: {fileID: 471175255}
+  - component: {fileID: 471175254}
+  m_Layer: 0
+  m_Name: OpenField
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &471175254
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 471175253}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cf4a79553ddeee44da0e2998dde9d8c6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayShift.Grass.TikTokGiftReceiver
+  manager: {fileID: 0}
+  logGifts: 1
+  enableDebugKeys: 1
+--- !u!114 &471175255
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 471175253}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 35f2b8ee8f3001246b82240c406644be, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayShift.Grass.GrassLevelManager
+  settings: {fileID: 11400000, guid: 67f88f369cdb3ec47bc778716dd6c4ec, type: 2}
+  fieldRenderer: {fileID: 471175256}
+  hud: {fileID: 0}
+  startLevel: 1
+  autoStart: 1
+  saveProgress: 1
+  autosaveSeconds: 20
+  onLevelStarted:
+    m_PersistentCalls:
+      m_Calls: []
+  onLevelCleared:
+    m_PersistentCalls:
+      m_Calls: []
+  onAllLevelsCompleted:
+    m_PersistentCalls:
+      m_Calls: []
+--- !u!114 &471175256
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 471175253}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b77fad6f8dd174348aacad734a2535c8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayShift.Grass.GrassFieldRenderer
+  grassMaterial: {fileID: 2100000, guid: b149c8ccf68d7cc4e9036c1c218ebb44, type: 2}
+  quality: 2
+  low:
+    bladesPerSquareMeter: 380
+    fullDetailDistance: 8
+    midDetailDistance: 18
+    maxDrawDistance: 32
+    shadowCastDistance: 0
+  medium:
+    bladesPerSquareMeter: 600
+    fullDetailDistance: 10
+    midDetailDistance: 22
+    maxDrawDistance: 42
+    shadowCastDistance: 6
+  high:
+    bladesPerSquareMeter: 950
+    fullDetailDistance: 13
+    midDetailDistance: 28
+    maxDrawDistance: 55
+    shadowCastDistance: 10
+  ultra:
+    bladesPerSquareMeter: 1500
+    fullDetailDistance: 18
+    midDetailDistance: 38
+    maxDrawDistance: 75
+    shadowCastDistance: 16
+  midDetailFraction: 0.45
+  farDetailFraction: 0.2
+  chunkMeters: 8
+  bladeSeed: 777
+  bladeSegments: 6
+  maxTileUploadsPerFrame: 128
+  targetCamera: {fileID: 0}
+--- !u!4 &471175257
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 471175253}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 1743210450}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &486565495
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 486565497}
+  - component: {fileID: 486565496}
+  m_Layer: 0
+  m_Name: Directional Light
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!108 &486565496
+Light:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 486565495}
+  m_Enabled: 1
+  serializedVersion: 13
+  m_Type: 1
+  m_Color: {r: 1, g: 0.95, b: 0.86, a: 1}
+  m_Intensity: 1.25
+  m_Range: 10
+  m_SpotAngle: 30
+  m_InnerSpotAngle: 21.80208
+  m_CookieSize2D: {x: 0.5, y: 0.5}
+  m_Shadows:
+    m_Type: 2
+    m_Resolution: -1
+    m_CustomResolution: -1
+    m_Strength: 0.85
+    m_Bias: 0.05
+    m_NormalBias: 0.4
+    m_NearPlane: 0.2
+    m_CullingMatrixOverride:
+      e00: 1
+      e01: 0
+      e02: 0
+      e03: 0
+      e10: 0
+      e11: 1
+      e12: 0
+      e13: 0
+      e20: 0
+      e21: 0
+      e22: 1
+      e23: 0
+      e30: 0
+      e31: 0
+      e32: 0
+      e33: 1
+    m_UseCullingMatrixOverride: 0
+  m_Cookie: {fileID: 0}
+  m_DrawHalo: 0
+  m_Flare: {fileID: 0}
+  m_RenderMode: 0
+  m_CullingMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_RenderingLayerMask: 1
+  m_Lightmapping: 4
+  m_LightShadowCasterMode: 0
+  m_AreaSize: {x: 1, y: 1}
+  m_BounceIntensity: 1
+  m_ColorTemperature: 6570
+  m_UseColorTemperature: 0
+  m_BoundingSphereOverride: {x: 0, y: 0, z: 0, w: 0}
+  m_UseBoundingSphereOverride: 0
+  m_UseViewFrustumForShadowCasterCull: 1
+  m_ForceVisible: 0
+  m_ShapeRadius: 0.025
+  m_ShadowAngle: 0
+  m_LightUnit: 1
+  m_LuxAtDistance: 1
+  m_EnableSpotReflector: 1
+--- !u!4 &486565497
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 486565495}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0.12458954, y: 0.8735453, z: -0.30078575, w: 0.36183432}
+  m_LocalPosition: {x: 0, y: 3, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 50, y: -30, z: 0}
+--- !u!1 &782938296
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 782938297}
+  - component: {fileID: 782938299}
+  - component: {fileID: 782938298}
+  m_Layer: 0
+  m_Name: TrimmerAudio
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &782938297
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 782938296}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1903568455}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &782938298
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 782938296}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c46fc299740c94441aa5c98154d9bc74, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayShift.Grass.TrimmerAudio
+  blades: {fileID: 1903568459}
+  cutter: {fileID: 1903568458}
+  masterVolume: 0.55
+  synthesizeMotor: 1
+  synthesizeCutting: 1
+  idleHz: 38
+  fullHz: 118
+  strainPitchDrop: 0.14
+  startupClip: {fileID: 0}
+  motorLoopClip: {fileID: 0}
+  shutdownClip: {fileID: 0}
+  cutLightLoopClip: {fileID: 0}
+  cutThickLoopClip: {fileID: 0}
+  clippingOneShots: []
+--- !u!82 &782938299
+AudioSource:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 782938296}
+  m_Enabled: 1
+  serializedVersion: 4
+  OutputAudioMixerGroup: {fileID: 0}
+  m_audioClip: {fileID: 0}
+  m_Resource: {fileID: 0}
+  m_PlayOnAwake: 1
+  m_Volume: 1
+  m_Pitch: 1
+  Loop: 0
+  Mute: 0
+  Spatialize: 0
+  SpatializePostEffects: 0
+  Priority: 128
+  DopplerLevel: 1
+  MinDistance: 1
+  MaxDistance: 500
+  Pan2D: 0
+  rolloffMode: 0
+  BypassEffects: 0
+  BypassListenerEffects: 0
+  BypassReverbZones: 0
+  rolloffCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    - serializedVersion: 3
+      time: 1
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  panLevelCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  spreadCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  reverbZoneMixCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+--- !u!1 &1157337558
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1157337561}
+  - component: {fileID: 1157337560}
+  - component: {fileID: 1157337559}
+  m_Layer: 0
+  m_Name: Main Camera
+  m_TagString: MainCamera
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 0
+--- !u!81 &1157337559
+AudioListener:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1157337558}
+  m_Enabled: 1
+--- !u!20 &1157337560
+Camera:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1157337558}
+  m_Enabled: 1
+  serializedVersion: 2
+  m_ClearFlags: 1
+  m_BackGroundColor: {r: 0.19215687, g: 0.3019608, b: 0.4745098, a: 0}
+  m_projectionMatrixMode: 1
+  m_GateFitMode: 2
+  m_FOVAxisMode: 0
+  m_Iso: 200
+  m_ShutterSpeed: 0.005
+  m_Aperture: 16
+  m_FocusDistance: 10
+  m_FocalLength: 50
+  m_BladeCount: 5
+  m_Curvature: {x: 2, y: 11}
+  m_BarrelClipping: 0.25
+  m_Anamorphism: 0
+  m_SensorSize: {x: 36, y: 24}
+  m_LensShift: {x: 0, y: 0}
+  m_NormalizedViewPortRect:
+    serializedVersion: 2
+    x: 0
+    y: 0
+    width: 1
+    height: 1
+  near clip plane: 0.3
+  far clip plane: 1000
+  field of view: 60
+  orthographic: 0
+  orthographic size: 5
+  m_Depth: -1
+  m_CullingMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_RenderingPath: -1
+  m_TargetTexture: {fileID: 0}
+  m_TargetDisplay: 0
+  m_TargetEye: 3
+  m_HDR: 1
+  m_AllowMSAA: 1
+  m_AllowDynamicResolution: 0
+  m_ForceIntoRT: 0
+  m_OcclusionCulling: 1
+  m_StereoConvergence: 10
+  m_StereoSeparation: 0.022
+--- !u!4 &1157337561
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1157337558}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 1, z: -10}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1743210449
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1743210450}
+  - component: {fileID: 1743210451}
+  m_Layer: 0
+  m_Name: Environment
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1743210450
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1743210449}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 471175257}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1743210451
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1743210449}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dbd734fee18cc32499882227c2993e05, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayShift.Grass.OpenFieldEnvironment
+  manager: {fileID: 471175255}
+  lawnMaterial: {fileID: 2100000, guid: 6b0ae17e9f072a24a877f41f725504d2, type: 2}
+  seed: 4242
+  fenceOffset: 1
+  fenceHeight: 1.5
+  backTreeCount: 90
+  backBushCount: 110
+  rockCount: 18
+  flowerClusters: 48
+  mountainCount: 18
+  mountainDistance: 780
+--- !u!1 &1827985364
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1827985365}
+  - component: {fileID: 1827985368}
+  - component: {fileID: 1827985367}
+  - component: {fileID: 1827985366}
   m_Layer: 0
   m_Name: GrassClippings
   m_TagString: Untagged
@@ -138,47 +661,47 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &377348679
+--- !u!4 &1827985365
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 377348678}
+  m_GameObject: {fileID: 1827985364}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 1225670097}
+  m_Father: {fileID: 1903568455}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &377348680
+--- !u!114 &1827985366
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 377348678}
+  m_GameObject: {fileID: 1827985364}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 977a425cdd5927045a12c8a7814af2dd, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayShift.Grass.GrassClippings
-  cutter: {fileID: 1225670100}
+  cutter: {fileID: 1903568458}
   clippingMaterial: {fileID: 2100000, guid: 292170866def04544a1b66be1aaabb9f, type: 2}
   maxParticles: 900
   perHundredUnits: 0.9
   maxPerFrame: 40
   spinDirection: -1
---- !u!199 &377348681
+--- !u!199 &1827985367
 ParticleSystemRenderer:
   serializedVersion: 7
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 377348678}
+  m_GameObject: {fileID: 1827985364}
   m_Enabled: 1
   m_CastShadows: 0
   m_ReceiveShadows: 0
@@ -251,13 +774,13 @@ ParticleSystemRenderer:
   m_MeshWeighting1: 1
   m_MeshWeighting2: 1
   m_MeshWeighting3: 1
---- !u!198 &377348682
+--- !u!198 &1827985368
 ParticleSystem:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 377348678}
+  m_GameObject: {fileID: 1827985364}
   serializedVersion: 8
   lengthInSec: 5
   simulationSpeed: 1
@@ -2436,475 +2959,7 @@ ParticleSystem:
         m_PostInfinity: 2
         m_RotationOrder: 4
     vectorLabel1_3: W
---- !u!1 &471175253
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 471175257}
-  - component: {fileID: 471175256}
-  - component: {fileID: 471175255}
-  - component: {fileID: 471175254}
-  m_Layer: 0
-  m_Name: OpenField
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &471175254
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 471175253}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: cf4a79553ddeee44da0e2998dde9d8c6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayShift.Grass.TikTokGiftReceiver
-  manager: {fileID: 0}
-  logGifts: 1
-  enableDebugKeys: 1
---- !u!114 &471175255
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 471175253}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 35f2b8ee8f3001246b82240c406644be, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayShift.Grass.GrassLevelManager
-  settings: {fileID: 11400000, guid: 67f88f369cdb3ec47bc778716dd6c4ec, type: 2}
-  fieldRenderer: {fileID: 471175256}
-  hud: {fileID: 0}
-  startLevel: 1
-  autoStart: 1
-  saveProgress: 1
-  autosaveSeconds: 20
-  onLevelStarted:
-    m_PersistentCalls:
-      m_Calls: []
-  onLevelCleared:
-    m_PersistentCalls:
-      m_Calls: []
-  onAllLevelsCompleted:
-    m_PersistentCalls:
-      m_Calls: []
---- !u!114 &471175256
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 471175253}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b77fad6f8dd174348aacad734a2535c8, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayShift.Grass.GrassFieldRenderer
-  grassMaterial: {fileID: 2100000, guid: b149c8ccf68d7cc4e9036c1c218ebb44, type: 2}
-  quality: 2
-  low:
-    bladesPerSquareMeter: 380
-    fullDetailDistance: 8
-    midDetailDistance: 18
-    maxDrawDistance: 32
-    shadowCastDistance: 0
-  medium:
-    bladesPerSquareMeter: 600
-    fullDetailDistance: 10
-    midDetailDistance: 22
-    maxDrawDistance: 42
-    shadowCastDistance: 6
-  high:
-    bladesPerSquareMeter: 950
-    fullDetailDistance: 13
-    midDetailDistance: 28
-    maxDrawDistance: 55
-    shadowCastDistance: 10
-  ultra:
-    bladesPerSquareMeter: 1500
-    fullDetailDistance: 18
-    midDetailDistance: 38
-    maxDrawDistance: 75
-    shadowCastDistance: 16
-  midDetailFraction: 0.45
-  farDetailFraction: 0.2
-  chunkMeters: 8
-  bladeSeed: 777
-  bladeSegments: 6
-  maxTileUploadsPerFrame: 128
-  targetCamera: {fileID: 0}
---- !u!4 &471175257
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 471175253}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 1743210450}
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &486565495
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 486565497}
-  - component: {fileID: 486565496}
-  m_Layer: 0
-  m_Name: Directional Light
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!108 &486565496
-Light:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 486565495}
-  m_Enabled: 1
-  serializedVersion: 13
-  m_Type: 1
-  m_Color: {r: 1, g: 0.95, b: 0.86, a: 1}
-  m_Intensity: 1.25
-  m_Range: 10
-  m_SpotAngle: 30
-  m_InnerSpotAngle: 21.80208
-  m_CookieSize2D: {x: 0.5, y: 0.5}
-  m_Shadows:
-    m_Type: 2
-    m_Resolution: -1
-    m_CustomResolution: -1
-    m_Strength: 0.85
-    m_Bias: 0.05
-    m_NormalBias: 0.4
-    m_NearPlane: 0.2
-    m_CullingMatrixOverride:
-      e00: 1
-      e01: 0
-      e02: 0
-      e03: 0
-      e10: 0
-      e11: 1
-      e12: 0
-      e13: 0
-      e20: 0
-      e21: 0
-      e22: 1
-      e23: 0
-      e30: 0
-      e31: 0
-      e32: 0
-      e33: 1
-    m_UseCullingMatrixOverride: 0
-  m_Cookie: {fileID: 0}
-  m_DrawHalo: 0
-  m_Flare: {fileID: 0}
-  m_RenderMode: 0
-  m_CullingMask:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  m_RenderingLayerMask: 1
-  m_Lightmapping: 4
-  m_LightShadowCasterMode: 0
-  m_AreaSize: {x: 1, y: 1}
-  m_BounceIntensity: 1
-  m_ColorTemperature: 6570
-  m_UseColorTemperature: 0
-  m_BoundingSphereOverride: {x: 0, y: 0, z: 0, w: 0}
-  m_UseBoundingSphereOverride: 0
-  m_UseViewFrustumForShadowCasterCull: 1
-  m_ForceVisible: 0
-  m_ShapeRadius: 0.025
-  m_ShadowAngle: 0
-  m_LightUnit: 1
-  m_LuxAtDistance: 1
-  m_EnableSpotReflector: 1
---- !u!4 &486565497
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 486565495}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0.12458954, y: 0.8735453, z: -0.30078575, w: 0.36183432}
-  m_LocalPosition: {x: 0, y: 3, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 50, y: -30, z: 0}
---- !u!1 &644599041
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 644599042}
-  - component: {fileID: 644599044}
-  - component: {fileID: 644599043}
-  m_Layer: 0
-  m_Name: TrimmerAudio
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &644599042
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 644599041}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 1225670097}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &644599043
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 644599041}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c46fc299740c94441aa5c98154d9bc74, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayShift.Grass.TrimmerAudio
-  blades: {fileID: 1225670101}
-  cutter: {fileID: 1225670100}
-  masterVolume: 0.55
-  synthesizeMotor: 1
-  synthesizeCutting: 1
-  idleHz: 38
-  fullHz: 118
-  strainPitchDrop: 0.14
-  startupClip: {fileID: 0}
-  motorLoopClip: {fileID: 0}
-  shutdownClip: {fileID: 0}
-  cutLightLoopClip: {fileID: 0}
-  cutThickLoopClip: {fileID: 0}
-  clippingOneShots: []
---- !u!82 &644599044
-AudioSource:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 644599041}
-  m_Enabled: 1
-  serializedVersion: 4
-  OutputAudioMixerGroup: {fileID: 0}
-  m_audioClip: {fileID: 0}
-  m_Resource: {fileID: 0}
-  m_PlayOnAwake: 1
-  m_Volume: 1
-  m_Pitch: 1
-  Loop: 0
-  Mute: 0
-  Spatialize: 0
-  SpatializePostEffects: 0
-  Priority: 128
-  DopplerLevel: 1
-  MinDistance: 1
-  MaxDistance: 500
-  Pan2D: 0
-  rolloffMode: 0
-  BypassEffects: 0
-  BypassListenerEffects: 0
-  BypassReverbZones: 0
-  rolloffCustomCurve:
-    serializedVersion: 2
-    m_Curve:
-    - serializedVersion: 3
-      time: 0
-      value: 1
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0.33333334
-      outWeight: 0.33333334
-    - serializedVersion: 3
-      time: 1
-      value: 0
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0.33333334
-      outWeight: 0.33333334
-    m_PreInfinity: 2
-    m_PostInfinity: 2
-    m_RotationOrder: 4
-  panLevelCustomCurve:
-    serializedVersion: 2
-    m_Curve:
-    - serializedVersion: 3
-      time: 0
-      value: 0
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0.33333334
-      outWeight: 0.33333334
-    m_PreInfinity: 2
-    m_PostInfinity: 2
-    m_RotationOrder: 4
-  spreadCustomCurve:
-    serializedVersion: 2
-    m_Curve:
-    - serializedVersion: 3
-      time: 0
-      value: 0
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0.33333334
-      outWeight: 0.33333334
-    m_PreInfinity: 2
-    m_PostInfinity: 2
-    m_RotationOrder: 4
-  reverbZoneMixCustomCurve:
-    serializedVersion: 2
-    m_Curve:
-    - serializedVersion: 3
-      time: 0
-      value: 1
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0.33333334
-      outWeight: 0.33333334
-    m_PreInfinity: 2
-    m_PostInfinity: 2
-    m_RotationOrder: 4
---- !u!1 &1157337558
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1157337561}
-  - component: {fileID: 1157337560}
-  - component: {fileID: 1157337559}
-  m_Layer: 0
-  m_Name: Main Camera
-  m_TagString: MainCamera
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 0
---- !u!81 &1157337559
-AudioListener:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1157337558}
-  m_Enabled: 1
---- !u!20 &1157337560
-Camera:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1157337558}
-  m_Enabled: 1
-  serializedVersion: 2
-  m_ClearFlags: 1
-  m_BackGroundColor: {r: 0.19215687, g: 0.3019608, b: 0.4745098, a: 0}
-  m_projectionMatrixMode: 1
-  m_GateFitMode: 2
-  m_FOVAxisMode: 0
-  m_Iso: 200
-  m_ShutterSpeed: 0.005
-  m_Aperture: 16
-  m_FocusDistance: 10
-  m_FocalLength: 50
-  m_BladeCount: 5
-  m_Curvature: {x: 2, y: 11}
-  m_BarrelClipping: 0.25
-  m_Anamorphism: 0
-  m_SensorSize: {x: 36, y: 24}
-  m_LensShift: {x: 0, y: 0}
-  m_NormalizedViewPortRect:
-    serializedVersion: 2
-    x: 0
-    y: 0
-    width: 1
-    height: 1
-  near clip plane: 0.3
-  far clip plane: 1000
-  field of view: 60
-  orthographic: 0
-  orthographic size: 5
-  m_Depth: -1
-  m_CullingMask:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  m_RenderingPath: -1
-  m_TargetTexture: {fileID: 0}
-  m_TargetDisplay: 0
-  m_TargetEye: 3
-  m_HDR: 1
-  m_AllowMSAA: 1
-  m_AllowDynamicResolution: 0
-  m_ForceIntoRT: 0
-  m_OcclusionCulling: 1
-  m_StereoConvergence: 10
-  m_StereoSeparation: 0.022
---- !u!4 &1157337561
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1157337558}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1, z: -10}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1001 &1225670093
+--- !u!1001 &1903568451
 PrefabInstance:
   m_ObjectHideFlags: 0
   serializedVersion: 2
@@ -2965,82 +3020,84 @@ PrefabInstance:
     m_AddedGameObjects:
     - targetCorrespondingSourceObject: {fileID: 6300939672739162107, guid: 7051a4b2cc89f8247953154f294d7792, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 377348679}
+      addedObject: {fileID: 1827985365}
     - targetCorrespondingSourceObject: {fileID: 6300939672739162107, guid: 7051a4b2cc89f8247953154f294d7792, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 644599042}
+      addedObject: {fileID: 782938297}
     m_AddedComponents:
     - targetCorrespondingSourceObject: {fileID: 8812169412245313626, guid: 7051a4b2cc89f8247953154f294d7792, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 1225670101}
+      addedObject: {fileID: 1903568459}
     - targetCorrespondingSourceObject: {fileID: 8812169412245313626, guid: 7051a4b2cc89f8247953154f294d7792, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 1225670100}
+      addedObject: {fileID: 1903568458}
     - targetCorrespondingSourceObject: {fileID: 8812169412245313626, guid: 7051a4b2cc89f8247953154f294d7792, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 1225670099}
+      addedObject: {fileID: 1903568457}
     - targetCorrespondingSourceObject: {fileID: 8812169412245313626, guid: 7051a4b2cc89f8247953154f294d7792, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 1225670098}
+      addedObject: {fileID: 1903568456}
   m_SourcePrefab: {fileID: 100100000, guid: 7051a4b2cc89f8247953154f294d7792, type: 3}
---- !u!1 &1225670094 stripped
+--- !u!1 &1903568452 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 8812169412245313626, guid: 7051a4b2cc89f8247953154f294d7792, type: 3}
-  m_PrefabInstance: {fileID: 1225670093}
+  m_PrefabInstance: {fileID: 1903568451}
   m_PrefabAsset: {fileID: 0}
---- !u!20 &1225670095 stripped
+--- !u!20 &1903568453 stripped
 Camera:
   m_CorrespondingSourceObject: {fileID: 6479067711778470023, guid: 7051a4b2cc89f8247953154f294d7792, type: 3}
-  m_PrefabInstance: {fileID: 1225670093}
+  m_PrefabInstance: {fileID: 1903568451}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &1225670096 stripped
+--- !u!114 &1903568454 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 7898781724657355030, guid: 7051a4b2cc89f8247953154f294d7792, type: 3}
-  m_PrefabInstance: {fileID: 1225670093}
+  m_PrefabInstance: {fileID: 1903568451}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1225670094}
+  m_GameObject: {fileID: 1903568452}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f17c80b39356ec4409012479c11fa52e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: PlayShift.FirstPerson::PlayShift.FirstPerson.PlayShiftFirstPersonRig
---- !u!4 &1225670097 stripped
+--- !u!4 &1903568455 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 6300939672739162107, guid: 7051a4b2cc89f8247953154f294d7792, type: 3}
-  m_PrefabInstance: {fileID: 1225670093}
+  m_PrefabInstance: {fileID: 1903568451}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &1225670098
+--- !u!114 &1903568456
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1225670094}
+  m_GameObject: {fileID: 1903568452}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d727b27c44663e04fa7b62104fa38797, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayShift.Grass.TrimmerViewmodel
-  controller: {fileID: 1225670099}
-  cutter: {fileID: 1225670100}
-  blades: {fileID: 1225670101}
-  trimmerModel: {fileID: -8829636304305632867, guid: f7e96817120dfce48b58e1ae1e360c71, type: 3}
+  controller: {fileID: 1903568457}
+  cutter: {fileID: 1903568458}
+  blades: {fileID: 1903568459}
+  trimmerModel: {fileID: 7815015384307082447, guid: a1f355bdc296462eb06373d2ac2b39e8, type: 3}
   cutterHeadName: CutterHead
   modelScale: 1.85
-  shaftStretch: 1.7
+  shaftStretch: 1
   hideHandle: 0
   headOffset: {x: 0.05, y: 1.4}
   portraitHeadForward: 1.15
   portraitHeadRight: -0.12
-  shaftPitch: 17
+  shaftPitch: 0
   handleSwing: 34
-  headHeight: 0.035
-  cameraRelative: 1
-  headScreenMargin: 12
-  headScreenRight: 0.06
-  minReach: 1
-  maxReach: 1.7
-  maxLift: 0.6
+  cuttingHeight: 0.04
+  groundFollow: 1
+  workReach: 1.9
+  workRight: 0.12
+  groundMask:
+    serializedVersion: 2
+    m_Bits: 4294967291
+  groundFollowRate: 18
+  maxGroundTilt: 20
   hipGrip: {x: 0.45, y: 0.8, z: 0.1}
   obstacleMask:
     serializedVersion: 2
@@ -3055,19 +3112,19 @@ MonoBehaviour:
   thickGrassPullBack: 0.06
   extraHeadSpacing: 1.4
   crossbarMaterial: {fileID: 0}
---- !u!114 &1225670099
+--- !u!114 &1903568457
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1225670094}
+  m_GameObject: {fileID: 1903568452}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b34fe8a1513e1f545889c6c96da33b79, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayShift.Grass.FirstPersonController
-  playerCamera: {fileID: 1225670095}
+  playerCamera: {fileID: 1903568453}
   eyeHeight: 1.7
   walkSpeed: 3.5
   sprintSpeed: 5.5
@@ -3076,21 +3133,21 @@ MonoBehaviour:
   invertY: 0
   minPitch: -75
   maxPitch: 55
-  startPitch: -26
+  startPitch: -18
   thickGrassResistance: 0.35
-  cutter: {fileID: 1225670100}
-  blades: {fileID: 1225670101}
+  cutter: {fileID: 1903568458}
+  blades: {fileID: 1903568459}
   lockCursor: 1
   portraitStartPitch: -14
   maxVerticalFov: 130
-  rig: {fileID: 1225670096}
---- !u!114 &1225670100
+  rig: {fileID: 1903568454}
+--- !u!114 &1903568458
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1225670094}
+  m_GameObject: {fileID: 1903568452}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 55bb69a299068ce45a9e84264316bedc, type: 3}
@@ -3099,18 +3156,18 @@ MonoBehaviour:
   manager: {fileID: 0}
   heads: []
   cutRadius: 0.65
-  blades: {fileID: 1225670101}
+  blades: {fileID: 1903568459}
   minSpinToCut: 0.55
   teleportDistance: 8
   maxHeightAboveLawn: 0.6
   bladeContactTolerance: 0.05
---- !u!114 &1225670101
+--- !u!114 &1903568459
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1225670094}
+  m_GameObject: {fileID: 1903568452}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 17bdc15dafc0ba046b5c9c5d6cd21cd1, type: 3}
@@ -3124,60 +3181,6 @@ MonoBehaviour:
   motionBlurRing: 1
   blurRadius: 0.65
   blurOpacity: 0.5
---- !u!1 &1743210449
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1743210450}
-  - component: {fileID: 1743210451}
-  m_Layer: 0
-  m_Name: Environment
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &1743210450
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1743210449}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 471175257}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1743210451
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1743210449}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: dbd734fee18cc32499882227c2993e05, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayShift.Grass.OpenFieldEnvironment
-  manager: {fileID: 471175255}
-  lawnMaterial: {fileID: 2100000, guid: 6b0ae17e9f072a24a877f41f725504d2, type: 2}
-  seed: 4242
-  hedgeOffset: 1.8
-  hedgeHeight: 1.9
-  treeCount: 14
-  rockCount: 18
-  flowerClusters: 48
-  mountainCount: 18
-  mountainDistance: 780
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -3185,4 +3188,4 @@ SceneRoots:
   - {fileID: 1157337561}
   - {fileID: 486565497}
   - {fileID: 471175257}
-  - {fileID: 1225670093}
+  - {fileID: 1903568451}

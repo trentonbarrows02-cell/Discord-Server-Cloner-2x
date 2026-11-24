@@ -16,7 +16,7 @@ namespace PlayShift.Grass.Editor
     public static partial class GrassSetupMenu
     {
         private const string AssetFolder = "Assets/PlayShift/Grass/Generated";
-        private const string TrimmerModelPath = "Assets/PlayShift/Models/Trimmer.glb";
+        private const string TrimmerModelPath = "Assets/PlayShift/Models/StringTrimmer.glb";
 
         [MenuItem("PlayShift/Grass/Create Test Area (first-person)", priority = 0)]
         public static void CreateTestArea()

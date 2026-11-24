@@ -19,12 +19,12 @@ namespace PlayShift.Grass
         [SerializeField] private FirstPersonController controller;
         [SerializeField] private GrassCutter cutter;
         [SerializeField] private TrimmerBlades blades;
-        [Tooltip("The trimmer model (e.g. Assets/PlayShift/Models/Trimmer.glb). Must contain a child named 'CutterHead'.")]
+        [Tooltip("The trimmer model (Assets/PlayShift/Models/StringTrimmer.glb). Must contain a child named 'CutterHead'.")]
         [SerializeField] private GameObject trimmerModel;
         [SerializeField] private string cutterHeadName = "CutterHead";
         [SerializeField] private float modelScale = 1.85f;
         [Tooltip("Lengthens only the shaft (model Z) so it reaches from the head on the ground up to the bottom-right corner. The cutting head keeps its real size.")]
-        [SerializeField] private float shaftStretch = 1.7f;
+        [SerializeField] private float shaftStretch = 1f;
         [Tooltip("Hide the loop handle (Resources/TrimmerBody_NoHandle). Off by default: owner wants the handle. Either way the " +
                  "loose blade fragment is dropped (Resources/TrimmerBody_Clean). Both built by TrimmerMeshTools.")]
         [SerializeField] private bool hideHandle;
@@ -37,26 +37,30 @@ namespace PlayShift.Grass
         [Tooltip("Head sideways offset on portrait screens (negative = left), so it sits lower-middle with the shaft from the bottom-right.")]
         [SerializeField] private float portraitHeadRight = -0.12f;
         [Tooltip("Shaft rise: raises the handle end towards the player.")]
-        [SerializeField] private float shaftPitch = 17f;
+        [SerializeField] private float shaftPitch = 0f;
         [Tooltip("Swings the handle end to the right so the shaft enters from the bottom-right of the screen.")]
         [SerializeField] private float handleSwing = 34f;
-        [Tooltip("Gap between the lowest point of the cutting head (blades included) and the ground. Keeps the blades from clipping into the lawn, even while vibrating.")]
-        [SerializeField] private float headHeight = 0.035f;
+        [Tooltip("Cutting height: gap between the lowest point of the cutting head (blades included) and the ground " +
+                 "(3-8 cm). Keeps the blades from clipping into the lawn, even while vibrating.")]
+        [SerializeField, Range(0.03f, 0.08f)] private float cuttingHeight = 0.04f;
 
-        [Header("Camera-relative tool")]
-        [Tooltip("On (default): the cutting head sits at a fixed place in the lower view, on the ground where that line of " +
-                 "sight meets the lawn (looking down cuts close, looking further reaches out). Looking up lifts it along " +
-                 "the view so it stays visible and stops cutting. The shaft runs from the head to the rig's bottom-right " +
-                 "ToolAnchor. Off: the older pose planted at Operating Position.")]
-        [SerializeField] private bool cameraRelative = true;
-        [Tooltip("Degrees above the bottom edge of the view where the head's centre sits.")]
-        [SerializeField] private float headScreenMargin = 12f;
-        [Tooltip("Head offset to the right of the view centre (tangent units; 0 = centred).")]
-        [SerializeField] private float headScreenRight = 0.06f;
-        [Tooltip("Closest / furthest the head goes from the player on the ground (metres).")]
-        [SerializeField] private float minReach = 1.0f, maxReach = 1.7f;
-        [Tooltip("Highest the head is lifted above the lawn when looking up (metres).")]
-        [SerializeField] private float maxLift = 0.6f;
+        [Header("Ground-following tool")]
+        [Tooltip("On (default): the cutting head works on the ground at a fixed spot ahead of the player. It follows the " +
+                 "player's turning (yaw) only, never the camera's up/down look, so looking up or down never lifts it or " +
+                 "moves the cut. A downward ray keeps it at Cutting Height over the real ground. Off: the older pose " +
+                 "planted at Operating Position.")]
+        [SerializeField] private bool groundFollow = true;
+        [Tooltip("How far ahead of the player the head's centre works (metres). Far enough that the blades are in view " +
+                 "with the normal, slightly lowered look.")]
+        [SerializeField] private float workReach = 1.9f;
+        [Tooltip("Head offset to the right of the player's centre line (metres).")]
+        [SerializeField] private float workRight = 0.12f;
+        [Tooltip("Ground the head follows (everything but the player's Ignore Raycast layer; the grass has no colliders).")]
+        [SerializeField] private LayerMask groundMask = ~(1 << 2);
+        [Tooltip("How quickly the head settles onto a new ground height (1/s). Higher = tighter, lower = smoother.")]
+        [SerializeField] private float groundFollowRate = 18f;
+        [Tooltip("Most the head tilts to stay parallel with sloped ground (degrees).")]
+        [SerializeField] private float maxGroundTilt = 20f;
         [Tooltip("Where the trimmer is held, relative to the player's feet (x right, y up, z forward): the right hip. The " +
                  "shaft always runs back towards it, out of the bottom-right of the view.")]
         [SerializeField] private Vector3 hipGrip = new Vector3(0.45f, 0.8f, 0.1f);
@@ -88,9 +92,14 @@ namespace PlayShift.Grass
         private Vector3 _prevHead;
         private float _headLift; // distance from the head pivot down to the lowest blade/head vertex
         private float _bladeRadius; // horizontal reach of the blade tips from the head centre (measured)
+        private float _groundY;
+        private Vector3 _groundN = Vector3.up;
+        private bool _groundInit;
 
         /// <summary>World position of the main cutting head (on the ground).</summary>
         public Vector3 HeadPosition => _mainHeadRoot != null ? _mainHeadRoot.position : transform.position;
+        /// <summary>Gap kept between the lowest point of the blades and the ground (m).</summary>
+        public float CuttingHeight => cuttingHeight;
         public Vector3 HeadVelocity { get; private set; }
 
         private void Awake()
@@ -232,12 +241,12 @@ namespace PlayShift.Grass
                 _mainHeadRoot.localScale = Vector3.one * scale;
                 for (int i = 0; i < _extraRoots.Count; i++) _extraRoots[i].localScale = Vector3.one * scale;
             }
-            float clearance = _headLift * scale + headHeight;
+            float clearance = _headLift * scale + cuttingHeight;
             if (cutter != null) cutter.HeadClearance = clearance;
 
-            if (cameraRelative && cam != null)
+            if (groundFollow)
             {
-                PlaceCameraRelative(cam, m, clearance, sway, jx, Mathf.Abs(jy), -pull);
+                PlaceOnGround(m, clearance, sway, jx, Mathf.Abs(jy), -pull, dt);
                 HeadVelocity = (HeadPosition - _prevHead) / Mathf.Max(dt, 1e-4f);
                 _prevHead = HeadPosition;
                 return;
@@ -264,53 +273,72 @@ namespace PlayShift.Grass
         }
 
         /// <summary>
-        /// Camera-relative pose: the head sits <see cref="headScreenMargin"/> degrees above the bottom of the view. Where
-        /// that line of sight meets the lawn (within reach) the head rests on the grass and cuts; looking higher holds
-        /// it at full reach along the view, lifted (visible, not cutting). A sphere cast keeps it out of hedges/walls.
-        /// The shaft is aimed from the head to the bottom-right grip. No allocations.
+        /// Ground-following pose. The head works on the ground <see cref="workReach"/> ahead of the player, along the
+        /// player's yaw only: the camera's pitch never moves or lifts it, so looking up or down keeps cutting the same
+        /// spot. A downward ray finds the real ground under the head (grass has no colliders; the player is on Ignore
+        /// Raycast) and the head eases onto it at <see cref="cuttingHeight"/>, tilted to stay parallel with slopes.
+        /// A sphere cast keeps it out of fences/walls. The shaft runs from the head to the hip grip. No allocations.
         /// </summary>
-        private void PlaceCameraRelative(Camera cam, GrassLevelManager m, float clearance, float sway, float jx, float lift, float pullBack)
+        private void PlaceOnGround(GrassLevelManager m, float clearance, float sway, float jx, float lift, float pullBack, float dt)
         {
-            var ct = cam.transform;
-            Vector3 camPos = ct.position;
-            float baseY = (m != null ? m.FieldTransform.position.y : transform.position.y) + clearance;
-            // Always straight ahead of the player (yaw), never sideways: the distance comes from how far down the line
-            // of sight to the head's screen spot points. (Projecting that line onto the ground flipped it backwards
-            // when looking steeply down on tall screens, which swung the head out to the side.)
+            Vector3 feet = transform.position;
             Vector3 flatDir = _rig.forward;
             Vector3 right = _rig.right;
-            float pitch = -Mathf.DeltaAngle(0f, ct.eulerAngles.x); // negative = looking down
-            float below = -pitch + Mathf.Max(5f, cam.fieldOfView * 0.5f - headScreenMargin); // degrees below the horizon
-            float h = camPos.y - baseY;
-            float reach = below >= 89f ? 0f : below > 0.5f ? h / Mathf.Tan(below * Mathf.Deg2Rad) : float.PositiveInfinity;
-            Vector3 head;
-            if (reach <= maxReach)
-            {
-                reach = Mathf.Max(reach, minReach) - pullBack;
-                head = new Vector3(camPos.x, baseY, camPos.z) + flatDir * reach;
-            }
-            else
-            {
-                // Looking up: held at full reach and lifted along the line of sight (visible, not cutting), at most
-                // maxLift above the lawn: look further up and it stays down there like a real trimmer.
-                float y = camPos.y - maxReach * Mathf.Tan(below * Mathf.Deg2Rad);
-                head = new Vector3(camPos.x, Mathf.Clamp(y, baseY, baseY + maxLift), camPos.z) + flatDir * (maxReach - pullBack);
-            }
-            head += right * (reach <= maxReach ? reach : maxReach) * headScreenRight;
+            float lawnY = m != null ? m.FieldTransform.position.y : feet.y;
 
-            // Keep the blades out of hedges and walls: pull the head back to just before the first obstacle.
-            var from = new Vector3(camPos.x, head.y + 0.3f, camPos.z);
-            Vector3 to = head + Vector3.up * 0.3f, d = to - from;
+            Vector3 head = feet + flatDir * (workReach - pullBack) + right * workRight;
+
+            // Keep the blades out of fences and walls: pull the head back to just before the first obstacle. Cast at
+            // knee height above the player's own feet (not the lawn), and only walls count: a slope or step the player
+            // stands on or walks towards is ground, which the head climbs instead.
+            float bladeR = Mathf.Max(0.2f, _bladeRadius) * (_mainHeadRoot != null ? _mainHeadRoot.localScale.x : 1f);
+            float castY = Mathf.Max(feet.y, lawnY) + 0.5f;
+            var from = new Vector3(feet.x, castY, feet.z);
+            Vector3 d = new Vector3(head.x, castY, head.z) - from;
             float dist = d.magnitude;
-            float bladeR = Mathf.Max(0.2f, _bladeRadius);
-            if (dist > 1e-3f && Physics.SphereCast(from, 0.12f, d / dist, out var hit, dist + bladeR, obstacleMask, QueryTriggerInteraction.Ignore))
+            if (dist > 1e-3f && Physics.SphereCast(from, 0.12f, d / dist, out var hit, dist + bladeR, obstacleMask, QueryTriggerInteraction.Ignore)
+                && hit.normal.y < 0.6f)
             {
                 float keep = Mathf.Max(0.3f, hit.distance - bladeR);
-                if (keep < dist) head = from + d / dist * keep - Vector3.up * 0.3f;
+                if (keep < dist) { Vector3 p = from + d / dist * keep; head.x = p.x; head.z = p.z; }
             }
 
+            // Ground under the blades: downward rays from well above at the centre and four points round the blade
+            // rim (walls/fences are kept out of reach above). Any surface counts for height, so the edge of a step or
+            // ramp is never missed; only fairly flat ones set the head's tilt.
+            float top = Mathf.Max(feet.y, lawnY) + 1.5f;
+            Vector3 groundN = _groundInit ? _groundN : Vector3.up;
+            if (Physics.Raycast(new Vector3(head.x, top, head.z), Vector3.down, out var g, 4f, groundMask, QueryTriggerInteraction.Ignore)
+                && g.normal.y > 0.5f)
+                groundN = g.normal;
+            float k = _groundInit ? 1f - Mathf.Exp(-groundFollowRate * dt) : 1f;
+            _groundN = _groundInit ? Vector3.Slerp(_groundN, groundN, k).normalized : groundN;
+            // The blade disc's plane (tilted with the ground, limited): its height changes by grad.x per metre right
+            // (world x) and grad.y per metre forward (world z) from the centre.
+            Vector3 nT = Vector3.RotateTowards(Vector3.up, _groundN, maxGroundTilt * Mathf.Deg2Rad, 0f);
+            float gx = -nT.x / nT.y, gz = -nT.z / nT.y;
+            // Lowest centre height that keeps every sampled point of the disc on or above the ground under it.
+            float groundY = float.NegativeInfinity;
+            float rim = 0.85f * bladeR;
+            for (int i = 0; i < 5; i++)
+            {
+                Vector3 o = i == 0 ? Vector3.zero : i == 1 ? flatDir * rim : i == 2 ? -flatDir * rim : i == 3 ? right * rim : -right * rim;
+                if (Physics.Raycast(new Vector3(head.x + o.x, top, head.z + o.z), Vector3.down, out var hit2, 4f, groundMask,
+                        QueryTriggerInteraction.Ignore)
+                    && hit2.point.y < top - 0.9f) // above knee height = a wall top beside the head, not ground under it
+                    groundY = Mathf.Max(groundY, hit2.point.y - (gx * o.x + gz * o.z));
+            }
+            if (float.IsNegativeInfinity(groundY)) groundY = _groundInit ? _groundY : lawnY; // off the map: hold
+            // Ease onto the ground (no snapping, no jitter); first frame snaps. Never below the ground it is over this
+            // frame (the blades must not sink in while easing up a bump).
+            _groundY = Mathf.Lerp(_groundY, groundY, k);
+            _groundInit = true;
+            head.y = Mathf.Max(_groundY, groundY) + clearance;
+
             head += right * (sway + jx) + Vector3.up * lift; // walk sway + motor hum (lift only: never into the lawn)
-            var headRot = Quaternion.LookRotation(flatDir, Vector3.up);
+            var flatRot = Quaternion.LookRotation(flatDir, Vector3.up);
+            var tilt = Quaternion.FromToRotation(Vector3.up, Vector3.RotateTowards(Vector3.up, _groundN, maxGroundTilt * Mathf.Deg2Rad, 0f));
+            var headRot = tilt * flatRot;
             _mainHeadRoot.SetPositionAndRotation(head, headRot);
 
             // Shaft: held at the right hip. It runs from the head back towards the hip grip (off-screen, bottom-right),
@@ -323,19 +351,19 @@ namespace PlayShift.Grass
             swing = Mathf.Clamp(Mathf.Max(swing, handleSwing), 12f, 55f);
             float riseToHip = Mathf.Atan2(toHip.y, Mathf.Max(0.05f, toHipFlat.magnitude)) * Mathf.Rad2Deg;
             float rise = Mathf.Min(shaftPitch, riseToHip);
-            _bodyPivot.SetPositionAndRotation(head, headRot * Quaternion.Euler(rise, -swing, 0f));
+            _bodyPivot.SetPositionAndRotation(head, flatRot * Quaternion.Euler(rise, -swing, 0f));
 
             for (int i = 0; i < _extraRoots.Count; i++)
             {
                 float side = (i % 2 == 0 ? -1f : 1f) * extraHeadSpacing * (i / 2 + 1);
-                _extraRoots[i].SetPositionAndRotation(head + right * side, headRot);
+                _extraRoots[i].SetPositionAndRotation(head + headRot * new Vector3(side, 0f, 0f), headRot);
             }
         }
 
         /// <summary>
         /// How far the head's meshes reach below its pivot (the blades can hang below the hub). Measured once, while
         /// the head is still level, from the renderers' world bounds; the head only spins about its vertical axis, so
-        /// this holds at every blade angle. Tilt from vibration is tiny and covered by <see cref="headHeight"/>.
+        /// this holds at every blade angle. Tilt from vibration is tiny and covered by <see cref="cuttingHeight"/>.
         /// </summary>
         /// <summary>Replaces the body mesh with a pre-built cleaned version (no loose blade fragment; optionally no handle).</summary>
         private void SwapBody(Transform model, string resourceName)
