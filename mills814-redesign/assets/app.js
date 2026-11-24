@@ -465,16 +465,19 @@
   addEventListener("scroll", () => { if (!ticking) { ticking = true; requestAnimationFrame(onScroll); } }, { passive: true });
   addEventListener("resize", moveSegPill);
 
-  /* ── hero: water beading on fresh coating ─────────────────────────── */
-  // Beads sit on the "paint". A cursor wipes them like a drying towel; they
+  /* ── hero: subdued flag + water beading ──────────────────────────── */
+  // A subdued (tactical-patch style) American flag waves behind the headline.
+  // Water beads sit on top: a cursor wipes them like a drying towel and they
   // bead back up a few seconds later. Big beads now and then run downhill,
-  // and a soft studio-light reflection sweeps across.
+  // and a soft light reflection sweeps across.
   function initBeads() {
     const cv = $("#beads"), hero = $(".hero");
     if (!cv || !cv.getContext) return;
     const ctx = cv.getContext("2d");
     const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent-rgb").trim().split(/\s+/).join(",") || "143,178,74";
+    const bone = "234,236,223";
     const sprites = new Map();
+    let flag = null, flagStart = 0;
     let W = 0, H = 0, dpr = 1, drops = [], trails = [], raf = 0, visible = true, lastT = 0, nextSlide = 0, wiped = false;
     const rand = (a, b) => a + Math.random() * (b - a);
     const radius = () => { const k = Math.random(); return k < 0.62 ? rand(1.1, 2.6) : k < 0.9 ? rand(2.6, 4.8) : rand(4.8, 8.5); };
@@ -513,6 +516,89 @@
       return d;
     }
 
+    // Flat flag, drawn once per resize: 13 stripes, 0.76-hoist canton, 50 stars in 9 rows.
+    const pageBg = getComputedStyle(document.documentElement).getPropertyValue("--bg-rgb").trim().split(/\s+/).map(Number);
+    const mix = (rgb, a) => rgb.split(",").map((v, i) => Math.round((pageBg[i] || 0) + a * (+v - (pageBg[i] || 0)))).join(",");
+    let layer = null, lctx = null;
+
+    function buildFlag() {
+      const narrow = W < 820;
+      layer = document.createElement("canvas");
+      layer.width = cv.width; layer.height = cv.height;
+      lctx = layer.getContext("2d");
+      lctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const hoist = narrow ? H * 0.46 : Math.min(H * 0.86, W * 0.6);
+      const fly = hoist * 1.9;
+      const c = document.createElement("canvas");
+      c.width = Math.ceil(fly * dpr); c.height = Math.ceil(hoist * dpr);
+      const g = c.getContext("2d");
+      g.scale(dpr, dpr);
+      const sh = hoist / 13;
+      for (let i = 0; i < 13; i++) {
+        g.fillStyle = i % 2 === 0 ? `rgb(${mix(accent, 0.36)})` : `rgb(${mix(bone, 0.07)})`;
+        g.fillRect(0, i * sh, fly, sh + 0.5);
+      }
+      const cw = hoist * 0.76, ch = sh * 7;
+      g.fillStyle = `rgb(${mix(accent, 0.12)})`; g.fillRect(0, 0, cw, ch);
+      const G = hoist * 0.063, E = hoist * 0.054, R = hoist * 0.0308;
+      g.fillStyle = `rgb(${mix(bone, 0.58)})`;
+      for (let row = 0; row < 9; row++) {
+        const odd = row % 2, n = odd ? 5 : 6;
+        for (let k = 0; k < n; k++) {
+          const cx = G * (odd ? 2 + 2 * k : 1 + 2 * k), cy = E * (row + 1);
+          g.beginPath();
+          for (let i = 0; i < 10; i++) {
+            const a = -Math.PI / 2 + (i * Math.PI) / 5, rr = i % 2 ? R * 0.382 : R;
+            g.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+          }
+          g.closePath(); g.fill();
+        }
+      }
+      flag = {
+        c, hoist, fly, narrow,
+        x0: narrow ? -W * 0.18 : W * 0.38,
+        y0: narrow ? H * 0.05 : (H - hoist) * 0.3,
+      };
+    }
+
+    // Draw the flag in thin vertical slices, each lifted by a travelling wave and
+    // shaded by the slope of the fold, then fade it out toward the headline.
+    function drawFlag(t) {
+      const f = flag;
+      if (!f) return;
+      if (!flagStart) flagStart = t;
+      const fade = reduceMotion ? 1 : Math.min(1, (t - flagStart) / 1800);
+      const time = reduceMotion ? 0 : t / 1000, slice = 5, A = f.hoist * 0.03;
+      lctx.clearRect(0, 0, W, H);
+      for (let x = 0; x < f.fly; x += slice) {
+        const u = x / f.fly, ph = u * 8.5 - time * 2.1, reach = 0.12 + 0.88 * u;
+        const dy = Math.sin(ph) * A * reach;
+        const w = Math.min(slice, f.fly - x);
+        lctx.drawImage(f.c, x * dpr, 0, Math.min(w + 1, f.fly - x) * dpr, f.c.height, f.x0 + x, f.y0 + dy, Math.min(w + 1, f.fly - x), f.hoist);
+        const s = Math.cos(ph) * reach;
+        lctx.fillStyle = s < 0 ? `rgba(0,0,0,${-s * 0.34})` : `rgba(${bone},${s * 0.05})`;
+        lctx.fillRect(f.x0 + x, f.y0 + dy, w, f.hoist);
+      }
+      ctx.globalAlpha = fade * (f.narrow ? 0.7 : 1);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(layer, 0, 0);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = "destination-out";
+      const side = f.narrow
+        ? ctx.createLinearGradient(0, H * 0.12, 0, H * 0.52)
+        : ctx.createLinearGradient(W * 0.36, 0, W * 0.66, 0);
+      side.addColorStop(0, f.narrow ? "rgba(0,0,0,.3)" : "rgba(0,0,0,.8)");
+      side.addColorStop(1, f.narrow ? "rgba(0,0,0,1)" : "rgba(0,0,0,0)");
+      ctx.fillStyle = side;
+      ctx.fillRect(0, 0, W, H);
+      const foot = ctx.createLinearGradient(0, H * 0.62, 0, H * 0.95);
+      foot.addColorStop(0, "rgba(0,0,0,0)"); foot.addColorStop(1, "rgba(0,0,0,1)");
+      ctx.fillStyle = foot;
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalCompositeOperation = "source-over";
+    }
+
     function size() {
       const r = hero.getBoundingClientRect();
       dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -523,6 +609,7 @@
       const n = Math.min(260, Math.round((W * H) / 6500));
       drops = Array.from({ length: n }, () => spawn({}, 0, true));
       trails = [];
+      buildFlag();
     }
 
     function wipe(x0, y0, x1, y1, now) {
@@ -541,6 +628,7 @@
       const dt = Math.min(50, t - (lastT || t)) / 1000;
       lastT = t;
       ctx.clearRect(0, 0, W, H);
+      drawFlag(t);
 
       // a big bead runs downhill every few seconds, picking up the small ones in its path
       if (!reduceMotion && t > nextSlide) {
@@ -613,7 +701,6 @@
       const r = hero.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
       if (last && !reduceMotion) { wipe(last[0], last[1], x, y, performance.now()); kick(); }
       last = [x, y];
-      if (!reduceMotion) $("#lights").style.setProperty("--lx", `${(e.clientX / innerWidth - 0.5) * -40}px`);
     }, { passive: true });
     hero.addEventListener("pointerleave", () => (last = null));
   }
