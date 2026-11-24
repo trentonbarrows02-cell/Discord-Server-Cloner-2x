@@ -45,8 +45,8 @@ namespace PlayShift.Grass
         [Tooltip("Colour far hills fade to (aerial haze); also the fog colour.")]
         [SerializeField] private Color hazeColour = new Color(0.68f, 0.78f, 0.88f);
         [Tooltip("Linear fog: starts and ends (m from the camera). Light, so the yard stays crisp.")]
-        [SerializeField] private float fogStart = 70f;
-        [SerializeField] private float fogEnd = 1150f;
+        [SerializeField] private float fogStart = 110f;
+        [SerializeField] private float fogEnd = 900f;
 
         [Header("Sunlight")]
         [SerializeField] private bool applyLighting = true;
@@ -298,13 +298,16 @@ namespace PlayShift.Grass
                 for (int i = 0; i < seg; i++)
                 {
                     float a = i / (float)seg * Mathf.PI * 2f;
-                    float n1 = 0.5f + 0.22f * Mathf.Sin(3f * a + ph1 + r * 0.004f) + 0.15f * Mathf.Sin(7f * a + ph2 - r * 0.006f)
-                               + 0.08f * Mathf.Sin(13f * a + ph3 + r * 0.011f) + 0.05f * Mathf.Sin(23f * a + r * 0.02f);
-                    float n2 = 0.5f + 0.3f * Mathf.Sin(2f * a + ph2 + 1.7f) + 0.2f * Mathf.Sin(5f * a + ph1 + r * 0.002f);
-                    float n3 = 0.5f + 0.3f * Mathf.Sin(9f * a + ph3 + r * 0.017f) + 0.2f * Mathf.Sin(17f * a - r * 0.009f);
-                    float rise = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(r0, r0 + 110f, r));
-                    float far = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(r0 + 200f, r1, r));
-                    float h = rise * (5f + 24f * n1) + far * (30f + 110f * n2);
+                    // Rolling hills: layered 2D value noise over the ground plane (rounded hills behind one another,
+                    // no ridged walls), low near the forest and only gently higher far away.
+                    float wx = Mathf.Cos(a) * r, wz = Mathf.Sin(a) * r;
+                    float n1 = HillNoise(wx / 170f + ph1, wz / 170f) * 0.62f + HillNoise(wx / 75f, wz / 75f + ph2) * 0.28f
+                               + HillNoise(wx / 32f + ph3, wz / 32f) * 0.10f;
+                    float n2 = HillNoise(wx / 420f + ph2, wz / 420f + ph1);
+                    float n3 = HillNoise(wx / 60f + 11f, wz / 60f - 7f);
+                    float rise = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(r0, r0 + 140f, r));
+                    float far = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(r0 + 160f, r1, r));
+                    float h = rise * (3f + 22f * n1 * n1) + far * (8f + 42f * n2 * n1);
                     v.Add(centre + new Vector3(Mathf.Cos(a) * r, h - 0.4f, Mathf.Sin(a) * r));
                     float wooded = Mathf.Max(Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.42f, 0.6f, n3)), 1f - Mathf.InverseLerp(r0, r0 + 80f, r));
                     Color c = Color.Lerp(hillGrass, hillForest, wooded);
@@ -363,6 +366,17 @@ namespace PlayShift.Grass
 
         /// <summary>Matte scenery material (PlayShift/Foliage: instanced, LOD cross-fade, fog). Falls back to the
         /// pipeline's lit material when the shader is missing.</summary>
+        /// <summary>Smooth 2D value noise (0..1) for the hills.</summary>
+        private static float HillNoise(float x, float z)
+        {
+            float ix = Mathf.Floor(x), iz = Mathf.Floor(z);
+            float fx = x - ix, fz = z - iz;
+            fx = fx * fx * (3f - 2f * fx); fz = fz * fz * (3f - 2f * fz);
+            float H(float a, float b) { float h = Mathf.Sin(a * 127.1f + b * 311.7f) * 43758.5453f; return h - Mathf.Floor(h); }
+            float v00 = H(ix, iz), v10 = H(ix + 1f, iz), v01 = H(ix, iz + 1f), v11 = H(ix + 1f, iz + 1f);
+            return Mathf.Lerp(Mathf.Lerp(v00, v10, fx), Mathf.Lerp(v01, v11, fx), fz);
+        }
+
         private Material FoliageMat(string name, Texture tex, Color tint)
         {
             if (_mats.TryGetValue(name, out var m)) return m;

@@ -84,9 +84,11 @@ namespace PlayShift.Grass
         [Header("Title screen")]
         [Tooltip("The title screen shows an untouched lawn (no cut paths). Only the look: saved progress is not touched.")]
         [SerializeField] private bool untouchedLawnOnTitle = true;
-        [Tooltip("Grass drawing for the high orbiting title camera: no grass shadows and shorter detail distances " +
-                 "(everything there is far away; the ground carries the field's colour).")]
+        [Tooltip("Title screen lawn: the ground shader carries the field; blades only near the camera (Title Blade " +
+                 "Distance), no grass shadows. Far away from the orbit camera blades are sub-pixel and only add noise.")]
         [SerializeField] private bool titleScreenGrassProfile = true;
+        [Tooltip("Title screen: blades only this close to the camera (m), fading into the ground lawn beyond.")]
+        [SerializeField] private float titleBladeDistance = 38f;
 
         private GrassField _field;
         private GrassCutMask _mask;
@@ -514,9 +516,13 @@ namespace PlayShift.Grass
         private QualityPreset ForTitle(QualityPreset q)
         {
             if (!titleScreenGrassProfile || !MainMenu.IsOpen) return q;
+            // From the high orbiting title camera most of the lawn is far away: blades there are thinner than a pixel
+            // and only sparkle (the grainy look). The title screen draws blades only near the camera; the ground shader
+            // (the blades' average colour, anti-aliased grain) carries the rest: smooth, and a fraction of the cost.
             q.shadowCastDistance = 0f;
-            q.fullDetailDistance = Mathf.Min(q.fullDetailDistance, 20f);
-            q.midDetailDistance = Mathf.Min(q.midDetailDistance, 32f);
+            q.fullDetailDistance = Mathf.Min(q.fullDetailDistance, 18f);
+            q.midDetailDistance = Mathf.Min(q.midDetailDistance, 26f);
+            q.maxDrawDistance = Mathf.Min(q.maxDrawDistance, titleBladeDistance);
             return q;
         }
 

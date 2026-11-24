@@ -384,6 +384,20 @@ namespace PlayShift.Grass.Dev
         }
 
         /// <summary>HUD-only camera layered over the game image in the same render target.</summary>
+/// <summary>Changes the capture resolution (game + HUD targets), e.g. to check the menu at other screen sizes.</summary>
+        private void ResizeCapture(int w, int h)
+        {
+            Width = w & ~1; Height = h & ~1;
+            var oldRt = _rt; var oldOut = _out;
+            _rt = new RenderTexture(Width, Height, 24, RenderTextureFormat.ARGB32) { antiAliasing = 4, name = "CaptureRT" };
+            _out = new RenderTexture(Width, Height, 24, RenderTextureFormat.ARGB32) { name = "CaptureOut" };
+            _frame = new Texture2D(Width, Height, TextureFormat.RGBA32, false);
+            if (_uiCam != null) _uiCam.targetTexture = _out;
+            if (_cam != null && _cam.targetTexture == oldRt) _cam.targetTexture = _rt;
+            if (oldRt != null) oldRt.Release();
+            if (oldOut != null) oldOut.Release();
+        }
+
         private Camera UiCamera()
         {
             if (_uiCam != null) return _uiCam;
@@ -1002,6 +1016,36 @@ namespace PlayShift.Grass.Dev
                 MainMenu.Instance.Play();
                 yield return Frames(10);
                 _report.AppendLine($"  title screen over saved cuts: grass left before {remainingBefore:N0}, after {f.Remaining:N0} (must be equal)");
+
+            }
+            // Title screen at other screen sizes, and what it costs to draw.
+            if (MainMenu.Instance != null)
+            {
+                MainMenu.Instance.Show();
+                yield return Frames(10);
+                var mapCam2 = MainMenu.Instance.MenuCamera;
+                if (mapCam2 != null)
+                {
+                    int w0 = Width, h0 = Height;
+                    _cam = mapCam2;
+                    mapCam2.targetTexture = _rt;
+                    _measureRequested = true;
+                    while (_measureRequested) yield return null;
+                    _report.AppendLine($"  title screen: {_probeMs:F2} ms per 1080p frame, {fr.LastDrawnBlades:N0} blades in {fr.LastDrawCalls} draws, " +
+                                       $"target frame rate {Application.targetFrameRate}, vSync {QualitySettings.vSyncCount}");
+                    foreach (var (w, h) in new[] { (1920, 1080), (2560, 1440), (3840, 2160), (2560, 1080), (1280, 720), (1600, 700) })
+                    {
+                        ResizeCapture(w, h);
+                        mapCam2.targetTexture = _rt;
+                        yield return Frames(4);
+                        yield return Shot($"M_menu_{w}x{h}");
+                    }
+                    ResizeCapture(w0, h0);
+                    mapCam2.targetTexture = null;
+                    _cam = playerCam;
+                }
+                MainMenu.Instance.Play();
+                yield return Frames(10);
                 yield return View(c + new Vector3(0f, 60f, 0f), down, true, size.y * 0.52f, 60f, "G7_after_menu_whole_lawn_normal");
             }
             // Grass through the trimmer: are the tool's materials opaque, depth-writing, in the opaque queue? Then the head

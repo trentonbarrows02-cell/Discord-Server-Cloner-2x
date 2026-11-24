@@ -31,16 +31,21 @@ namespace PlayShift.Grass
 
         [Header("Map view behind the title")]
         [Tooltip("Degrees per second the camera circles the yard (slow, cinematic).")]
-        [SerializeField] private float menuOrbitSpeed = 2f;
-        [Tooltip("How far outside the yard's corners the camera circles (m): just over the treetops by the fence.")]
-        [SerializeField] private float menuOrbitBeyondCorner = 11f;
-        [Tooltip("Camera height above the ground (m): above the canopy, low enough to feel like a backyard view.")]
-        [SerializeField] private float menuCameraHeight = 21f;
+        [SerializeField] private float menuOrbitSpeed = 1.2f;
+        [Tooltip("How far outside the yard's corners the camera circles (m); negative = inside the fence, so no trees " +
+                 "block the foreground.")]
+        [SerializeField] private float menuOrbitBeyondCorner = -8f;
+        [Tooltip("Camera height above the ground (m).")]
+        [SerializeField] private float menuCameraHeight = 15f;
+        [Tooltip("Frame rate cap while the title screen is open (the game's own setting returns on Play). 0 = no cap.")]
+        [SerializeField] private int menuFrameRate = 60;
+        private int _savedTargetFps = -1, _savedVSync = -1;
+        private bool _fpsCapped;
         [Tooltip("Height of the point it looks at over the yard centre (m): higher puts the lawn lower under the title.")]
         [SerializeField] private float menuLookHeight = 5f;
         [SerializeField] private float orbitFov = 50f;
         [Tooltip("Size the title layout was designed for (canvas units). It is scaled to fit the screen's height and width.")]
-        [SerializeField] private Vector2 layoutSize = new Vector2(1100f, 1500f);
+        [SerializeField] private Vector2 layoutSize = new Vector2(1100f, 1580f); // a margin above the title on every screen
 
         private Camera _menuCam, _playerCam;
         private float _orbitAngle = 35f;
@@ -91,7 +96,13 @@ namespace PlayShift.Grass
             Vector3 centre = origin + new Vector3(size.x * 0.5f, 0f, size.y * 0.5f);
             float radius = 0.5f * Mathf.Sqrt(size.x * size.x + size.y * size.y) + menuOrbitBeyondCorner;
             float a = _orbitAngle * Mathf.Deg2Rad;
-            _menuCam.transform.position = centre + new Vector3(Mathf.Sin(a) * radius, menuCameraHeight, Mathf.Cos(a) * radius);
+            Vector3 pos = centre + new Vector3(Mathf.Sin(a) * radius, menuCameraHeight, Mathf.Cos(a) * radius);
+            // Inside the fence all the way round (a circle through the corners would pass over the forest mid-side):
+            // nothing between the camera and the lawn.
+            const float inset = 3f;
+            pos.x = Mathf.Clamp(pos.x, origin.x + inset, origin.x + size.x - inset);
+            pos.z = Mathf.Clamp(pos.z, origin.z + inset, origin.z + size.y - inset);
+            _menuCam.transform.position = pos;
             _menuCam.transform.LookAt(centre + new Vector3(0f, menuLookHeight, 0f));
         }
 
@@ -157,6 +168,14 @@ namespace PlayShift.Grass
         /// <summary>Opens the title screen (start of game, or MAIN MENU from settings).</summary>
         public void Show()
         {
+            if (menuFrameRate > 0 && !_fpsCapped)
+            {
+                _fpsCapped = true;
+                _savedTargetFps = Application.targetFrameRate;
+                _savedVSync = QualitySettings.vSyncCount;
+                QualitySettings.vSyncCount = 0;          // so the cap also holds on 120-240 Hz screens
+                Application.targetFrameRate = menuFrameRate;
+            }
             if (_root == null) return;
             IsOpen = true;
             _root.SetActive(true);
@@ -167,8 +186,17 @@ namespace PlayShift.Grass
             Apply(true);
         }
 
+        private void RestoreFrameRate()
+        {
+            if (!_fpsCapped) return;
+            _fpsCapped = false;
+            Application.targetFrameRate = _savedTargetFps;
+            QualitySettings.vSyncCount = _savedVSync;
+        }
+
         public void Play()
         {
+            RestoreFrameRate();
             if (_root == null) return;
             IsOpen = false;
             _root.SetActive(false);
@@ -226,6 +254,7 @@ namespace PlayShift.Grass
                 text.characterSpacing = 6f;
             }
             b.onClick.AddListener(onClick);
+            b.gameObject.AddComponent<MenuButtonMotion>().Shadow = shadow.rectTransform;
             return text;
         }
     }

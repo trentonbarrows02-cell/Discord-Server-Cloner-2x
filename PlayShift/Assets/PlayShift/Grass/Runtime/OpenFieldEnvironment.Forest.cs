@@ -37,7 +37,7 @@ namespace PlayShift.Grass
         [Tooltip("Leaves: 0 = the texture's bright lime/yellow greens, 1 = natural forest green.")]
         [SerializeField, Range(0f, 1f)] private float leafNaturalize = 1f;
         [Tooltip("Leaf colour saturation (1 = as the texture).")]
-        [SerializeField, Range(0f, 1.5f)] private float leafSaturation = 0.85f;
+        [SerializeField, Range(0f, 1.5f)] private float leafSaturation = 0.8f;
 
         private struct Plant
         {
