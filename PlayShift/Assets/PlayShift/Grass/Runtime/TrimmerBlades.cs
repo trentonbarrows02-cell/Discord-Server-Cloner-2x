@@ -54,6 +54,13 @@ namespace PlayShift.Grass
 
         private readonly List<Renderer> _blurRings = new List<Renderer>();
         private readonly List<Renderer> _bladeRenderers = new List<Renderer>();
+        [Header("Blade material")]
+        [Tooltip("Blades and the mounting plate in brushed silver steel (the model's own texel reads as blue plastic).")]
+        [SerializeField] private bool steelBlades = true;
+        [SerializeField] private Color steelColour = new Color(0.56f, 0.57f, 0.6f, 1f);
+        [Range(0f, 1f)] [SerializeField] private float steelMetallic = 0.9f;
+        [Range(0f, 1f)] [SerializeField] private float steelSmoothness = 0.36f;
+        private static Material s_steel;
         private bool _bladesShown = true;
         private MaterialPropertyBlock _mpb;
         private static Texture2D s_blurTex;
@@ -100,6 +107,29 @@ namespace PlayShift.Grass
                     Vector3 d = mf.sharedMesh.bounds.center; d.y = 0f;
                     if (d.sqrMagnitude > 1e-8f) c.localPosition += d.normalized * bladeAttachmentOffset;
                 }
+            }
+            if (steelBlades)
+            {
+                if (s_steel == null)
+                {
+                    var sh = Shader.Find("Standard");
+                    if (sh != null)
+                    {
+                        s_steel = new Material(sh) { name = "TrimmerBrushedSteel" };
+                        s_steel.SetColor("_Color", steelColour);
+                        s_steel.SetFloat("_Metallic", steelMetallic);
+                        s_steel.SetFloat("_Glossiness", steelSmoothness);
+                    }
+                }
+                if (s_steel != null)
+                    foreach (var s in spinners)
+                        if (s != null)
+                            foreach (Transform c in s)
+                                if (c.name.StartsWith("Blade") || c.name.StartsWith("CentralMountingPlate"))
+                                {
+                                    var mr = c.GetComponent<MeshRenderer>();
+                                    if (mr != null) mr.sharedMaterial = s_steel;
+                                }
             }
             foreach (var r in _blurRings) if (r != null) Destroy(r.gameObject);
             _blurRings.Clear();

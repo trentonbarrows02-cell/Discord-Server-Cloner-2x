@@ -332,7 +332,7 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
     // wide (no sparkle), and a seamless hand-over to the ground beyond the draw distance.
     if (_GrassFade.y > 0.0 && _GrassLod.x > 0.0)
     {
-        float farMix = smoothstep(_GrassLod.x, _GrassFade.y, dl) * 0.6;
+        float farMix = smoothstep(_GrassLod.x, _GrassFade.y, dl) * 0.8;
         o.color = lerp(o.color, _PsGrassAvg.rgb * lerp(0.8, 1.05, t), farMix * (1.0 - ease));
     }
     if (_GrassDebug > 1.5)

@@ -18,9 +18,10 @@ Shader "PlayShift/GrassGround"
         _FarStart ("Far colour starts at (x blade fade start)", Range(0, 1)) = 0.55
         _CutTint ("Fresh-cut turf tint (multiplies lawn)", Color) = (0.9, 0.98, 0.84, 1)
         _CutDetail ("Fresh-cut turf: short-grass grain", Range(0, 1)) = 0.6
-        _CutBright ("Fresh-cut turf: brightness vs the uncut grass", Range(0.8, 1.6)) = 1.22
+        _CutBright ("Fresh-cut turf: brightness vs the uncut grass", Range(0.8, 1.6)) = 1.16
+        _CutSaturation ("Fresh-cut turf: saturation", Range(0, 1.5)) = 0.9
         _CutFine ("Fresh-cut turf: fine detail mix", Range(0, 1)) = 0.5
-        _EdgeShade ("Shade on the cut lawn along the uncut grass", Range(0, 1)) = 0.35
+        _EdgeShade ("Shade on the cut lawn along the uncut grass", Range(0, 1)) = 0.1
         _UnderShade ("Uncut grass: shade under the blades (near)", Range(0.4, 1)) = 0.8
         _GrassMatch ("Uncut grass: brightness match to the blades", Range(0.5, 2)) = 1
     }
@@ -48,7 +49,7 @@ Shader "PlayShift/GrassGround"
             sampler2D _MainTex;
             float _Tiling;
             float4 _UnderColor, _FarYellow, _FarGolden, _FarDark, _CutTint;
-            float _FarStart, _CutFine, _EdgeShade, _CutDetail, _UnderShade, _GrassMatch, _CutBright;
+            float _FarStart, _CutFine, _EdgeShade, _CutDetail, _UnderShade, _GrassMatch, _CutBright, _CutSaturation;
             float4 _PsGrassDry;       // global: rgb = dry colour, a = dry amount
             float4 _PsLodDist;        // global: full, mid, max draw, fade start (m)
             float4 _PsChunk;          // global: chunk size (m), tallest blade (m)
@@ -85,6 +86,8 @@ Shader "PlayShift/GrassGround"
                 // lighter, at every distance (the texture's own colour used to be darker than the uncut field far away).
                 float3 lawnAvg = max(tex2Dlod(_MainTex, float4(0.5, 0.5, 0, 12)).rgb, 0.02);
                 turf = turf / lawnAvg * _PsGrassAvg.rgb * _CutBright;
+                // A natural freshly mown lawn: a little less saturated than the standing grass.
+                turf = lerp(dot(turf, float3(0.299, 0.587, 0.114)).xxx, turf, _CutSaturation);
                 // Short-grass grain: two fine noise layers (~3 cm and ~1 cm), faded out with distance so it never
                 // shimmers far away. Gives the mown lawn a real turf texture instead of a flat sheet.
                 {

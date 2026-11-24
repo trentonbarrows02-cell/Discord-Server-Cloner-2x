@@ -1392,7 +1392,9 @@ namespace PlayShift.Grass.Dev
                 else _report.AppendLine("  rotor: no spinning part found");
             }
 
-            // 4) Walking backwards while cutting.
+            // 4) Walking backwards while cutting (trimmer back on: the rotor test above leaves it off).
+            _input.TrimmerHeld = true;
+            yield return Frames(10);
             ResetProbe(); _probeActive = true;
             for (int i = 0; i < 40; i++) { _input.Move = new Vector2(0f, -1f); yield return null; }
             _input.Move = Vector2.zero; _probeActive = false;

@@ -25,7 +25,7 @@ namespace PlayShift.Grass
         [Tooltip("Child of the cutter head holding only the blades: the only part that spins (the cap, collar and " +
                  "spool stay fixed to the shaft). Without it the whole head spins.")]
         [SerializeField] private string bladesName = "BladeRotor";
-        [SerializeField] private float modelScale = 1.85f;
+        [SerializeField] private float modelScale = 2f;
         [Tooltip("Lengthens only the shaft (model Z) so it reaches from the head on the ground up to the bottom-right corner. The cutting head keeps its real size.")]
         [SerializeField] private float shaftStretch = 1f;
         [Tooltip("Hide the loop handle (Resources/TrimmerBody_NoHandle). Off by default: owner wants the handle. Either way the " +
@@ -61,8 +61,8 @@ namespace PlayShift.Grass
                  "the same place on screen at any fixed camera angle and on any screen shape. Off: Work Reach ahead.")]
         [SerializeField] private bool placeFromView = true;
         [Tooltip("Trimmer position: where the centre of the cutting head sits on screen at the default camera angle " +
-                 "(0-1; x = left to right, y = bottom to top). 0.56, 0.34 = lower third, a little right; the shaft runs to the bottom-right corner.")]
-        [SerializeField] private Vector2 headViewport = new Vector2(0.56f, 0.34f);
+                 "(0-1; x = left to right, y = bottom to top). 0.56, 0.39 = a little below the middle-low, a little right; the shaft runs to the bottom-right corner.")]
+        [SerializeField] private Vector2 headViewport = new Vector2(0.56f, 0.39f);
         [Tooltip("How much the head follows the camera's up/down look (0 = stays at the default-angle spot on the ground and " +
                  "slides across the screen; 1 = stays at the same spot on screen). It always stays on the ground, level " +
                  "with it, at the cutting height: looking up never lifts it and looking down never pushes it in.")]

@@ -3081,7 +3081,7 @@ MonoBehaviour:
   blades: {fileID: 1903568459}
   trimmerModel: {fileID: 7815015384307082447, guid: a1f355bdc296462eb06373d2ac2b39e8, type: 3}
   cutterHeadName: CutterHead
-  modelScale: 1.85
+  modelScale: 2
   shaftStretch: 1
   hideHandle: 0
   headOffset: {x: 0.05, y: 1.4}
