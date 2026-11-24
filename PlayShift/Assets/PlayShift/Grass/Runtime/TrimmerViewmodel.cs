@@ -66,7 +66,7 @@ namespace PlayShift.Grass
         [Tooltip("How much the head follows the camera's up/down look (0 = stays at the default-angle spot on the ground and " +
                  "slides across the screen; 1 = stays at the same spot on screen). It always stays on the ground, level " +
                  "with it, at the cutting height: looking up never lifts it and looking down never pushes it in.")]
-        [SerializeField, Range(0f, 1f)] private float pitchFollow = 0.5f;
+        [SerializeField, Range(0f, 1f)] private float pitchFollow = 0.7f;
         [Tooltip("Nearest and furthest the head works on the ground (metres ahead of the player).")]
         [SerializeField] private float minReach = 1.2f;
         [SerializeField] private float maxReach = 8f;

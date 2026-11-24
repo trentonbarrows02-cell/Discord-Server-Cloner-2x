@@ -30,12 +30,17 @@ namespace PlayShift.Grass
         private Canvas _canvas;
 
         [Header("Map view behind the title")]
-        [Tooltip("Degrees per second the camera circles the map.")]
-        [SerializeField] private float orbitSpeed = 3f;
-        [Tooltip("Orbit radius as a multiple of the lawn size (plus a margin), i.e. how far zoomed out.")]
-        [SerializeField] private float orbitDistance = 1.15f;
-        [SerializeField] private float orbitHeight = 0.55f;
+        [Tooltip("Degrees per second the camera circles the yard (slow, cinematic).")]
+        [SerializeField] private float menuOrbitSpeed = 2f;
+        [Tooltip("How far outside the yard's corners the camera circles (m): just over the treetops by the fence.")]
+        [SerializeField] private float menuOrbitBeyondCorner = 11f;
+        [Tooltip("Camera height above the ground (m): above the canopy, low enough to feel like a backyard view.")]
+        [SerializeField] private float menuCameraHeight = 21f;
+        [Tooltip("Height of the point it looks at over the yard centre (m): higher puts the lawn lower under the title.")]
+        [SerializeField] private float menuLookHeight = 5f;
         [SerializeField] private float orbitFov = 50f;
+        [Tooltip("Size the title layout was designed for (canvas units). It is scaled to fit the screen's height and width.")]
+        [SerializeField] private Vector2 layoutSize = new Vector2(1100f, 1500f);
 
         private Camera _menuCam, _playerCam;
         private float _orbitAngle = 35f;
@@ -55,11 +60,12 @@ namespace PlayShift.Grass
 
         private void Update()
         {
-            // Wide (landscape) screens: the tall layout is scaled to fit the height.
-            if (_canvas != null)
+            // Fit the title layout inside the canvas (height and width), so the title is never cropped on short,
+            // ultrawide, windowed or portrait screens.
+            if (_canvas != null && _content != null)
             {
-                var r = _canvas.pixelRect;
-                float s = r.height > r.width ? 1f : 0.68f;
+                var r = ((RectTransform)_canvas.transform).rect;
+                float s = Mathf.Min(1f, Mathf.Min(r.height / layoutSize.y, r.width / layoutSize.x));
                 if (!Mathf.Approximately(_content.localScale.x, s)) _content.localScale = new Vector3(s, s, 1f);
             }
             if (IsOpen)
@@ -71,20 +77,22 @@ namespace PlayShift.Grass
             }
         }
 
-        /// <summary>Wide view of the whole map: a camera circling high above the lawn.</summary>
+        /// <summary>
+        /// Cinematic backyard view: the camera circles slowly just outside the yard's corners, over the treetops,
+        /// looking across the lawn, so the fence and forest frame the shot and the forest runs off every edge.
+        /// </summary>
         private void Orbit(float dt)
         {
             if (_menuCam == null) return;
-            _orbitAngle += orbitSpeed * dt;
+            _orbitAngle += menuOrbitSpeed * dt;
             var m = GrassLevelManager.Instance;
             Vector2 size = m != null && m.Settings != null ? m.Settings.fieldSizeMeters : new Vector2(24f, 24f);
             Vector3 origin = m != null ? m.FieldTransform.position : Vector3.zero;
             Vector3 centre = origin + new Vector3(size.x * 0.5f, 0f, size.y * 0.5f);
-            float radius = Mathf.Max(size.x, size.y) * orbitDistance + 8f;
+            float radius = 0.5f * Mathf.Sqrt(size.x * size.x + size.y * size.y) + menuOrbitBeyondCorner;
             float a = _orbitAngle * Mathf.Deg2Rad;
-            _menuCam.transform.position = centre + new Vector3(Mathf.Sin(a) * radius, radius * orbitHeight, Mathf.Cos(a) * radius);
-            // Aim a little past the centre so the lawn sits in the lower half, under the title.
-            _menuCam.transform.LookAt(centre + new Vector3(0f, radius * 0.18f, 0f));
+            _menuCam.transform.position = centre + new Vector3(Mathf.Sin(a) * radius, menuCameraHeight, Mathf.Cos(a) * radius);
+            _menuCam.transform.LookAt(centre + new Vector3(0f, menuLookHeight, 0f));
         }
 
         private void EnsureMenuCamera()
@@ -102,7 +110,7 @@ namespace PlayShift.Grass
             }
             _menuCam.fieldOfView = orbitFov;
             _menuCam.nearClipPlane = 0.3f;
-            _menuCam.farClipPlane = 900f;
+            _menuCam.farClipPlane = 2000f; // the hills reach the horizon
             _menuCam.enabled = false;
         }
 

@@ -113,6 +113,7 @@ namespace PlayShift.Grass.Dev
             {
                 string[] statNames = { "Draw Calls Count", "SetPass Calls Count", "Triangles Count", "Shadow Casters Count" };
                 var stats = new Unity.Profiling.ProfilerRecorder[statNames.Length];
+                var mainThread = Unity.Profiling.ProfilerRecorder.StartNew(Unity.Profiling.ProfilerCategory.Internal, "Main Thread", 30);
                 for (int i = 0; i < stats.Length; i++)
                     stats[i] = Unity.Profiling.ProfilerRecorder.StartNew(Unity.Profiling.ProfilerCategory.Render, statNames[i]);
                 foreach (var q in new[] { GrassQuality.Low, GrassQuality.Medium, GrassQuality.High, GrassQuality.Ultra })
@@ -130,8 +131,16 @@ namespace PlayShift.Grass.Dev
                                        $"grass CPU {fieldRenderer.LastCpuMs:F3} ms, field total {fieldRenderer.TotalBlades:N0} blades; " +
                                        $"per frame {per[0]:N0} draw calls, {per[1]:N0} set-pass, {per[2] / 1000:N0}k tris, {per[3]:N0} shadow casters; " +
                                        $"shadows {QualitySettings.shadows} x{QualitySettings.shadowCascades} to {QualitySettings.shadowDistance:0} m, LOD bias {QualitySettings.lodBias:0.##}");
+                    yield return Frames(30); // normal frames, for the CPU main-thread time
+                    double cpuNs = 0; int cpuN = 0;
+                    for (int i = 0; i < mainThread.Count; i++) { cpuNs += mainThread.GetSample(i).Value; cpuN++; }
+                    _report.AppendLine($"    CPU main thread {(cpuN > 0 ? cpuNs / cpuN / 1e6 : 0):F2} ms per frame (editor batch frame, all scripts + culling + submit)");
                     yield return Shot("09_quality_" + q.ToString().ToLowerInvariant());
                 }
+                mainThread.Dispose();
+                _report.AppendLine($"Memory: {UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong() / 1048576.0:F0} MB allocated by Unity, " +
+                                   $"{UnityEngine.Profiling.Profiler.GetAllocatedMemoryForGraphicsDriver() / 1048576.0:F0} MB graphics driver, " +
+                                   $"{UnityEngine.Profiling.Profiler.GetMonoUsedSizeLong() / 1048576.0:F0} MB managed heap in use");
                 foreach (var r in stats) r.Dispose();
                 fieldRenderer.Quality = GrassQuality.High;
                 _report.AppendLine($"Grass GPU memory: {fieldRenderer.GpuBytes / 1048576.0:F2} MB (cells only; blades are procedural)");
@@ -273,6 +282,7 @@ namespace PlayShift.Grass.Dev
             yield return Shot("05_fresh_cut_lawn_closeup");
 
             yield return CutAccuracyTest(cutter, manager);
+            yield return EnvironmentTour(manager);
 
             // Real gift path (receiver -> router -> HUD): two "Ice Cream Cone" (remove 15k) from the same viewer stack
             // into one "-30,000 / DEC282" popup under the counter.
@@ -499,6 +509,105 @@ namespace PlayShift.Grass.Dev
         /// checks every frame that the grass is cut exactly under the blades and not outside them, that the head stays
         /// put whatever the camera pitch, and that the blades keep their cutting height over the real ground.
         /// </summary>
+        /// <summary>
+        /// Map tour: checks every tree/bush LOD group (cross-fade on, nothing ever culled), then shots from all four
+        /// corners, a full 360 at the centre, a sprint across the whole map, and two title-screen views.
+        /// </summary>
+        private IEnumerator EnvironmentTour(GrassLevelManager manager)
+        {
+            var vm = FindAnyObjectByType<TrimmerViewmodel>();
+            if (vm == null) yield break;
+            var player = vm.transform;
+            var cc = player.GetComponent<CharacterController>();
+            int groups = 0, fade = 0, culled = 0;
+            foreach (var g in FindObjectsByType<LODGroup>(FindObjectsSortMode.None))
+            {
+                groups++;
+                if (g.fadeMode == LODFadeMode.CrossFade) fade++;
+                var lods = g.GetLODs();
+                if (lods.Length > 0 && lods[lods.Length - 1].screenRelativeTransitionHeight > 1e-5f) culled++;
+            }
+            _report.AppendLine($"Environment: {groups} tree/bush LOD groups, {fade} with cross-fade, {culled} that can disappear at a distance (must be 0)");
+            long sceneryTris = 0; int sceneryRenderers = 0;
+            var env = FindAnyObjectByType<OpenFieldEnvironment>();
+            if (env != null)
+                foreach (var mf in env.GetComponentsInChildren<MeshFilter>())
+                    if (mf.sharedMesh != null && !mf.name.StartsWith("LOD1")) { sceneryTris += mf.sharedMesh.triangles.LongLength / 3; sceneryRenderers++; }
+            _report.AppendLine($"  scenery meshes (near trees at full detail): {sceneryRenderers} renderers, {sceneryTris / 1000:N0}k triangles in total (before culling)");
+
+            var f = manager.Field;
+            Vector2 size = new Vector2(f.CellsX * f.CellSizeX, f.CellsZ * f.CellSizeZ);
+            Vector3 origin = manager.FieldTransform.position;
+            Vector3 centre = origin + new Vector3(size.x * 0.5f, 0f, size.y * 0.5f);
+            _input.TrimmerHeld = false;
+
+            void Teleport(Vector3 p)
+            {
+                if (cc != null) cc.enabled = false;
+                player.position = new Vector3(p.x, player.position.y, p.z);
+                if (cc != null) cc.enabled = true;
+            }
+            IEnumerator Face(Vector3 dir)
+            {
+                float yaw = Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg;
+                _input.Look = new Vector2(Mathf.DeltaAngle(player.eulerAngles.y, yaw), 0f);
+                yield return null;
+                _input.Look = Vector2.zero;
+                yield return Frames(20); // LOD cross-fades settle
+            }
+
+            // Four corners: stand 4 m in from each corner, looking out across the corner into the forest.
+            var corners = new[] { new Vector2(0f, 0f), new Vector2(size.x, 0f), new Vector2(size.x, size.y), new Vector2(0f, size.y) };
+            for (int i = 0; i < 4; i++)
+            {
+                Vector3 c = origin + new Vector3(corners[i].x, 0f, corners[i].y);
+                Vector3 inward = (centre - c).normalized;
+                Teleport(c + inward * 5.5f);
+                yield return Face(-inward);
+                yield return Shot($"20_corner_{i}");
+            }
+            // Full 360 at the centre, every 45 degrees.
+            Teleport(centre);
+            for (int k = 0; k < 8; k++)
+            {
+                float a = k * 45f * Mathf.Deg2Rad;
+                yield return Face(new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a)));
+                yield return Shot($"21_turn_{k * 45:000}");
+            }
+            // Sprint corner to corner across the whole map.
+            Teleport(origin + new Vector3(3f, 0f, 3f));
+            yield return Face(new Vector3(size.x, 0f, size.y));
+            int frames = 0;
+            _input.Sprint = true;
+            float dStart = Vector3.Distance(player.position, origin + new Vector3(size.x - 3f, player.position.y, size.y - 3f));
+            while (frames < 1200 && Vector3.Distance(new Vector3(player.position.x, 0f, player.position.z), origin + new Vector3(size.x - 4f, 0f, size.y - 4f)) > 2f)
+            {
+                _input.Move = new Vector2(0f, 1f);
+                yield return null;
+                frames++;
+            }
+            _input.Move = Vector2.zero; _input.Sprint = false;
+            _report.AppendLine($"  sprinted corner to corner ({dStart:F0} m) in {frames} frames at 30 fps");
+            yield return Shot("22_far_corner_arrival");
+
+            // Title screen: the cinematic backyard view at two points of its slow orbit.
+            if (MainMenu.Instance != null)
+            {
+                MainMenu.Instance.Show();
+                yield return Frames(10);
+                var playerCam = _cam;
+                var mapCam = MainMenu.Instance.MenuCamera;
+                if (mapCam != null) { _cam = mapCam; _cam.targetTexture = _rt; }
+                yield return Shot("23_menu_a");
+                yield return Frames(450); // 15 s of orbit
+                yield return Shot("23_menu_b");
+                if (mapCam != null) { _cam.targetTexture = null; _cam = playerCam; }
+                MainMenu.Instance.Play();
+                yield return Frames(10);
+            }
+            Step("environment tour done");
+        }
+
         private IEnumerator CutAccuracyTest(GrassCutter cutter, GrassLevelManager manager)
         {
             _probeVm = FindAnyObjectByType<TrimmerViewmodel>();
@@ -626,7 +735,7 @@ namespace PlayShift.Grass.Dev
                             float step = Mathf.Repeat(tb.RotorAngle - last, 360f);
                             last = tb.RotorAngle;
                             minStep = Mathf.Min(minStep, step); maxStep = Mathf.Max(maxStep, step);
-                            if (slow && i % 12 == 0 && i <= 36) yield return Shot($"19_rotor_slow_{i / 12}");
+                            if (slow && i % 3 == 0 && i <= 9) yield return Shot($"19_rotor_slow_{i / 3}");
                         }
                         _report.AppendLine($"  rotor {(slow ? "slow check" : "full speed")}: tilt against the housing max {maxTilt:F3} deg, centre moved max " +
                                            $"{maxDrift * 1000f:F2} mm, angle step per frame {minStep:F2}-{maxStep:F2} deg (steady = equal)");

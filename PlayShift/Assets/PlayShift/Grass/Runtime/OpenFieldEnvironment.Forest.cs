@@ -5,54 +5,65 @@ using UnityEngine.Rendering;
 namespace PlayShift.Grass
 {
     /// <summary>
-    /// The forest round the Open Field: the yard reads as a big private backyard closed in by woods.
-    ///  - Four staggered rows of trees (8-15 m) all round the fence, on paths that run parallel to the fence and turn
-    ///    round each corner in a quarter circle, so corners are exactly as dense as the sides. Spacing, row
-    ///    distance, kind, height, width and turn all vary, so nothing lines up.
-    ///  - Bushes in two rows right behind the fence, and undergrowth between the tree rows.
-    ///  - A backdrop of flat tree cards two rows deep behind the last trees, and a darker forest floor, so no open
-    ///    meadow shows through the trunks.
-    /// Performance: each tree is a LODGroup (full model near, lighter model mid-distance, a cross-shaped card far
-    /// away) drawn with GPU-instanced materials (Resources/OpenField/TreesLit, TreeBillboards); bushes drop to a
-    /// lighter model then disappear; cards and backdrop cast no shadows; no colliders, light or reflection probes.
-    /// Nothing is placed inside the fence.
+    /// The forest round the Open Field: the yard reads as a big private backyard in a natural wood.
+    ///  - Trees are scattered (not in rows) through a band beyond the fence, with spacing checks so trunks never
+    ///    overlap and canopies only touch a little; kind, height, width and turn all vary. Corners round off naturally.
+    ///  - Detail by distance band, fixed at build time: the near band (what the player sees up close) uses the full
+    ///    models, the far band the lighter ones. Both are merged into static meshes, one per direction round the yard
+    ///    (12), so whole directions behind the camera are culled. Nothing switches level or culls by distance at
+    ///    runtime, so no tree or bush can ever pop in or out. Near trees cast shadows; far trees and bushes don't.
+    ///  - Bushes, rocks and flowers scattered behind the fence and under the trees. Nothing inside the fence.
+    /// Materials: one shared matte foliage material (PlayShift/Foliage, GPU instanced, LOD cross-fade).
     /// </summary>
     public sealed partial class OpenFieldEnvironment
     {
         private static readonly string[] TreeKinds = { "TreeRound", "TreePine", "TreeSmall", "TreeTall" };
         private static readonly Vector2[] TreeHeights =
             { new Vector2(9f, 12.5f), new Vector2(10.5f, 15f), new Vector2(8f, 10.5f), new Vector2(11f, 15f) };
-        private static readonly float[] TreeWeights = { 0.28f, 0.30f, 0.17f, 0.25f };
+        private static readonly float[] TreeWeights = { 0.30f, 0.28f, 0.18f, 0.24f };
+
+        [Header("Forest")]
+        [Tooltip("Depth of the near forest band beyond the fence (m): full trees with LOD cross-fade.")]
+        [SerializeField] private float nearForestDepth = 24f;
+        [Tooltip("Total forest depth beyond the fence (m); past the near band the trees are merged light models.")]
+        [SerializeField] private float forestDepth = 72f;
+        [Tooltip("Trees per 100 m2 in the near band and in the far band.")]
+        [SerializeField] private float nearTreesPer100m2 = 6.2f;
+        [SerializeField] private float farTreesPer100m2 = 3.4f;
+        [Tooltip("How much neighbouring canopies may overlap (0.75 = up to a quarter of their width).")]
+        [SerializeField, Range(0.4f, 1f)] private float canopySpacing = 0.75f;
+        [Tooltip("Tint on the trees' texture (slightly under 1 calms the greens).")]
+        [SerializeField] private Color foliageTint = new Color(0.9f, 0.93f, 0.88f, 1f);
 
         private struct Plant
         {
-            public Mesh Lod0, Lod1, Billboard;
+            public Mesh Lod0, Lod1;
             public Bounds Bounds;
             public string Name;
         }
 
-        private Material _litMat, _billboardMat;
-        private int _treeCount, _bushCount;
+        private struct Placed { public float X, Z, Canopy, Core; public bool Tree; }
+
+        private Material _litMat, _nearMat, _bushMat;
+        private int _treeCount, _farTreeCount, _bushCount;
         private Transform _forest;
+        private readonly List<Placed> _placed = new List<Placed>();
+        private readonly Dictionary<long, List<int>> _placedGrid = new Dictionary<long, List<int>>();
+        private const float GridCell = 4f;
 
         private void BuildForest(Vector3 origin, Vector2 size)
         {
-            _litMat = Resources.Load<Material>("OpenField/TreesLit");
-            if (_litMat == null) { _litMat = TexturedMat("TreesLitFallback", "Plants_BaseColor"); _litMat.enableInstancing = true; }
-            _billboardMat = Resources.Load<Material>("OpenField/TreeBillboards");
-            if (_billboardMat == null)
-            {
-                _billboardMat = PipelineMaterials.CreateLit("TreeBillboardsFallback", Color.white,
-                    Resources.Load<Texture2D>("OpenField/TreeBillboards"), alphaClip: true, cutoff: 0.5f);
-                _billboardMat.enableInstancing = true;
-            }
+            var src = Resources.Load<Material>("OpenField/TreesLit");
+            var tex = src != null ? src.mainTexture : Resources.Load<Texture2D>("OpenField/Plants_BaseColor");
+            _litMat = FoliageMat("ForestFar", tex, foliageTint);
+            _nearMat = FoliageMat("ForestNear", tex, foliageTint);   // casts shadows (see FlushBuckets)
+            _bushMat = FoliageMat("ForestBushes", tex, foliageTint);
 
             var trees = new Plant[TreeKinds.Length];
             for (int i = 0; i < trees.Length; i++)
             {
                 trees[i] = LoadPlant(TreeKinds[i]);
                 if (trees[i].Lod0 == null) return;
-                trees[i].Billboard = TreeBillboardMesh(trees[i].Bounds, i, true);
             }
             var bushes = new[] { LoadPlant("BushCluster"), LoadPlant("BushLong") };
             if (bushes[0].Lod0 == null || bushes[1].Lod0 == null) return;
@@ -61,62 +72,131 @@ namespace PlayShift.Grass
             _forest.SetParent(transform, false);
             float f = fenceOffset;
 
-            // Trees: four staggered rows, the rows offset along the fence so trunks never line up front to back.
-            float[] rows = { f + 5.0f, f + 8.6f, f + 12.2f, f + 15.8f };
-            for (int r = 0; r < rows.Length; r++)
-            {
-                float d = rows[r], len = PathLength(size, d);
-                for (float t = R(0f, treeSpacing) + r * treeSpacing * 0.5f, end = t + len - treeSpacing * 0.4f; t < end;
-                     t += treeSpacing * R(0.7f, 1.3f))
-                {
-                    Vector3 p = PathPoint(origin, size, d + R(-1.3f, 1.3f), t, out _);
-                    int k = PickTree();
-                    float s = R(TreeHeights[k].x, TreeHeights[k].y) / trees[k].Bounds.size.y, w = R(0.88f, 1.12f);
-                    PlacePlant(trees[k], p, Quaternion.Euler(0f, R(0f, 360f), 0f), new Vector3(s * w, s, s * w * R(0.92f, 1.08f)), true);
-                }
-            }
+            // Near trees first (they matter most), then far trees, then bushes fill the gaps.
+            ScatterTrees(origin, size, trees, f + 4.2f, f + nearForestDepth, nearTreesPer100m2, near: true);
+            ScatterTrees(origin, size, trees, f + nearForestDepth, f + forestDepth, farTreesPer100m2, near: false);
 
-            // Bushes: two close rows right behind the fence, then undergrowth between the tree rows. The garden bushes
-            // are low and wide, so each lies along the fence with its depth capped (it never reaches through the
-            // fence) and is stretched up a little (at most 2.4x) towards its height.
-            void BushRow(float d, float spacing, float jitter, float hMin, float hMax, float maxDepth)
-            {
-                float len = PathLength(size, d);
-                for (float t = R(0f, spacing), end = t + len - spacing * 0.4f; t < end; t += spacing * R(0.7f, 1.3f))
-                {
-                    Vector3 p = PathPoint(origin, size, d + R(-jitter, jitter), t, out Vector3 n);
-                    var bush = bushes[_rng.Next(bushes.Length)];
-                    Bounds b = bush.Bounds;
-                    float sh = Mathf.Min(R(hMin, hMax) / b.size.y, maxDepth / b.size.z), sv = Mathf.Min(R(hMin, hMax) / b.size.y, sh * 2.4f);
-                    var rot = Quaternion.LookRotation(n, Vector3.up) * Quaternion.Euler(0f, R(-15f, 15f) + (R() < 0.5f ? 180f : 0f), 0f);
-                    PlacePlant(bush, p, rot, new Vector3(sh * R(0.85f, 1.15f), sv, sh), false);
-                }
-            }
-            BushRow(f + 1.3f, bushSpacing, 0.2f, 1.4f, 2.0f, 1.5f);
-            BushRow(f + 3.0f, bushSpacing * 1.4f, 0.4f, 1.3f, 2.2f, 2.0f);
-            BushRow(f + 6.8f, bushSpacing * 2.6f, 1.0f, 1.4f, 2.6f, 3.0f);
-            BushRow(f + 10.4f, bushSpacing * 2.6f, 1.0f, 1.4f, 2.6f, 3.0f);
-            BushRow(f + 14.0f, bushSpacing * 2.6f, 1.0f, 1.4f, 2.6f, 3.0f);
+            // Bushes: a dense, irregular hedge just behind the fence, then undergrowth under the trees.
+            ScatterBushes(origin, size, bushes, f + 0.9f, f + 4.5f, 22f, 1.3f, 2.2f);
+            ScatterBushes(origin, size, bushes, f + 4.5f, f + nearForestDepth, 2.2f, 1.2f, 2.4f);
 
-            // Backdrop: two rows of tree cards behind the last trees (crossed, with a canopy card on top so they also
-            // read from the title screen's aerial view), merged, one mesh per side.
-            for (int r = 0; r < 2; r++)
-            {
-                float d = f + 19.6f + r * 3.4f, len = PathLength(size, d), spacing = treeSpacing * 0.8f;
-                for (float t = R(0f, spacing) + r * spacing * 0.5f, end = t + len - spacing * 0.4f; t < end; t += spacing * R(0.75f, 1.25f))
-                {
-                    Vector3 p = PathPoint(origin, size, d + R(-1f, 1f), t, out Vector3 n);
-                    int k = PickTree();
-                    var b = trees[k].Bounds;
-                    float s = R(TreeHeights[k].x, TreeHeights[k].y) * 1.1f / b.size.y;
-                    var rot = Quaternion.LookRotation(-n, Vector3.up) * Quaternion.Euler(0f, R(-25f, 25f), 0f);
-                    Vector3 off = new Vector3(b.center.x, b.min.y, b.center.z) * s;
-                    Add(_billboardMat, trees[k].Billboard, p - rot * off, rot, Vector3.one * s, SideOf(n));
-                }
-            }
+            BuildForestFloor(origin, size, f + 0.4f, f + forestDepth + 6f);
+            Debug.Log($"[PlayShift Grass] Forest: {_treeCount} near trees (full models), {_farTreeCount} far trees (light models), " +
+                      $"{_bushCount} bushes; all merged per direction, no runtime LOD switching.");
+        }
 
-            BuildForestFloor(origin, size, f + 0.4f, f + 27f);
-            Debug.Log($"[PlayShift Grass] Forest: {_treeCount} trees (4 rows), {_bushCount} bushes, backdrop cards behind.");
+        /// <summary>Distance from a point (relative to the field origin) to the lawn rectangle; 0 inside.</summary>
+        private static float DistToYard(float x, float z, Vector2 size)
+        {
+            float dx = Mathf.Max(0f, Mathf.Max(-x, x - size.x)), dz = Mathf.Max(0f, Mathf.Max(-z, z - size.y));
+            return Mathf.Sqrt(dx * dx + dz * dz);
+        }
+
+        /// <summary>Random point (relative to the origin) whose distance from the yard lies in [inner, outer).</summary>
+        private bool BandPoint(Vector2 size, float inner, float outer, out float x, out float z)
+        {
+            for (int tries = 0; tries < 30; tries++)
+            {
+                x = R(-outer, size.x + outer);
+                z = R(-outer, size.y + outer);
+                float d = DistToYard(x, z, size);
+                if (d >= inner && d < outer) return true;
+            }
+            x = z = 0f;
+            return false;
+        }
+
+        private static float BandArea(Vector2 size, float inner, float outer) =>
+            2f * (size.x + size.y) * (outer - inner) + Mathf.PI * (outer * outer - inner * inner);
+
+        private bool Fits(float x, float z, float canopy, float core, bool tree)
+        {
+            int cx = Mathf.FloorToInt(x / GridCell), cz = Mathf.FloorToInt(z / GridCell);
+            int reach = Mathf.CeilToInt((canopy * 2f + 1f) / GridCell);
+            for (int gz = cz - reach; gz <= cz + reach; gz++)
+                for (int gx = cx - reach; gx <= cx + reach; gx++)
+                {
+                    if (!_placedGrid.TryGetValue(((long)gx << 32) ^ (uint)gz, out var list)) continue;
+                    foreach (int i in list)
+                    {
+                        var o = _placed[i];
+                        float dx = o.X - x, dz = o.Z - z, d2 = dx * dx + dz * dz;
+                        // Trees keep their canopies apart; anything else only needs clear trunks / bush bodies.
+                        float need = tree && o.Tree ? canopySpacing * (canopy + o.Canopy) : core + o.Core;
+                        if (d2 < need * need) return false;
+                    }
+                }
+            return true;
+        }
+
+        private void Remember(float x, float z, float canopy, float core, bool tree)
+        {
+            _placed.Add(new Placed { X = x, Z = z, Canopy = canopy, Core = core, Tree = tree });
+            long key = ((long)Mathf.FloorToInt(x / GridCell) << 32) ^ (uint)Mathf.FloorToInt(z / GridCell);
+            if (!_placedGrid.TryGetValue(key, out var list)) _placedGrid[key] = list = new List<int>();
+            list.Add(_placed.Count - 1);
+        }
+
+        private void ScatterTrees(Vector3 origin, Vector2 size, Plant[] trees, float inner, float outer, float per100, bool near)
+        {
+            int target = Mathf.RoundToInt(BandArea(size, inner, outer) * per100 / 100f);
+            int placed = 0;
+            for (int attempt = 0; attempt < target * 12 && placed < target; attempt++)
+            {
+                if (!BandPoint(size, inner, outer, out float x, out float z)) continue;
+                int k = PickTree();
+                Bounds b = trees[k].Bounds;
+                float s = R(TreeHeights[k].x, TreeHeights[k].y) / b.size.y, w = R(0.86f, 1.14f);
+                float canopy = Mathf.Max(b.extents.x, b.extents.z) * s * w;
+                if (!Fits(x, z, canopy, 0.7f, true)) continue;
+                Remember(x, z, canopy, 0.7f, true);
+                placed++;
+                var rot = Quaternion.Euler(0f, R(0f, 360f), 0f);
+                var scale = new Vector3(s * w, s, s * w * R(0.92f, 1.08f));
+                Vector3 p = origin + new Vector3(x, 0f, z);
+                Vector3 off = Vector3.Scale(new Vector3(b.center.x, b.min.y, b.center.z), scale);
+                Vector3 at = p - rot * off - Vector3.up * (0.006f * b.size.y * s);
+                if (near) { Add(_nearMat, trees[k].Lod0, at, rot, scale, 200 + Sector(origin, size, p)); _treeCount++; }
+                else { Add(_litMat, trees[k].Lod1, at, rot, scale, 100 + Sector(origin, size, p)); _farTreeCount++; }
+            }
+        }
+
+        private void ScatterBushes(Vector3 origin, Vector2 size, Plant[] bushes, float inner, float outer, float per100, float hMin, float hMax)
+        {
+            int target = Mathf.RoundToInt(BandArea(size, inner, outer) * per100 / 100f);
+            int placed = 0;
+            for (int attempt = 0; attempt < target * 5 && placed < target; attempt++)
+            {
+                if (!BandPoint(size, inner, outer, out float x, out float z)) continue;
+                var bush = bushes[_rng.Next(bushes.Length)];
+                Bounds b = bush.Bounds;
+                float h = R(hMin, hMax), sv = h / b.size.y, sh = Mathf.Min(sv * R(0.8f, 1.2f), 2.6f / Mathf.Max(b.size.x, b.size.z));
+                // Close to the fence, keep the bush from reaching through it.
+                float d = DistToYard(x, z, size), maxHalf = Mathf.Max(0.4f, d - fenceOffset - 0.25f);
+                float half = Mathf.Max(b.extents.x, b.extents.z) * sh;
+                if (half > maxHalf) { sh *= maxHalf / half; half = maxHalf; }
+                float core = half * 0.8f;
+                if (!Fits(x, z, half, core, false)) continue;
+                Remember(x, z, half, core, false);
+                placed++;
+                var rot = Quaternion.Euler(0f, R(0f, 360f), 0f);
+                var scale = new Vector3(sh, Mathf.Min(sv, sh * 2.4f), sh * R(0.85f, 1.15f));
+                Vector3 p = origin + new Vector3(x, 0f, z);
+                Vector3 off = Vector3.Scale(new Vector3(b.center.x, b.min.y, b.center.z), scale);
+                // Full model in the hedge by the fence, the lighter one for undergrowth under the trees.
+                Add(_bushMat, d < fenceOffset + 5f ? bush.Lod0 : bush.Lod1, p - rot * off - Vector3.up * (0.006f * b.size.y * scale.y), rot, scale,
+                    300 + Sector(origin, size, p));
+                _bushCount++;
+            }
+        }
+
+        /// <summary>Which of 12 directions round the yard centre a point lies in (one merged mesh each, so the ones behind
+        /// the camera are culled).</summary>
+        private static int Sector(Vector3 origin, Vector2 size, Vector3 p)
+        {
+            Vector3 c = origin + new Vector3(size.x * 0.5f, 0f, size.y * 0.5f);
+            float a = Mathf.Atan2(p.z - c.z, p.x - c.x) + Mathf.PI;
+            return Mathf.Clamp(Mathf.FloorToInt(a / (Mathf.PI * 2f) * 12f), 0, 11);
         }
 
         private int PickTree()
@@ -134,140 +214,11 @@ namespace PlayShift.Grass
             return p;
         }
 
-        /// <summary>
-        /// One tree or bush at p (base centre, sunk a little into the ground), turned and scaled. Trees: full model
-        /// near, lighter model mid-distance, card far away. Bushes: full, lighter, then nothing.
-        /// </summary>
-        private void PlacePlant(in Plant plant, Vector3 p, Quaternion rot, Vector3 scale, bool tree)
-        {
-            Bounds b = plant.Bounds;
-            var go = new GameObject(plant.Name);
-            var t = go.transform;
-            t.SetParent(_forest, false);
-            t.SetPositionAndRotation(p - Vector3.up * (0.006f * b.size.y * scale.y), rot);
-            t.localScale = scale;
-            Vector3 off = -new Vector3(b.center.x, b.min.y, b.center.z);
-            // Shadows only from near trees (the lighter models are mostly past the shadow distance; bushes sit in the
-            // trees' shade anyway).
-            var lod0 = PlantPart(t, "LOD0", plant.Lod0, _litMat, off, tree ? ShadowCastingMode.On : ShadowCastingMode.Off);
-            var lod1 = PlantPart(t, "LOD1", plant.Lod1, _litMat, off, ShadowCastingMode.Off);
-            if (tree) _treeCount++; else _bushCount++;
-            var lg = go.AddComponent<LODGroup>();
-            if (tree)
-            {
-                var card = PlantPart(t, "Card", plant.Billboard, _billboardMat, off, ShadowCastingMode.Off);
-                // Screen height share: full model within ~40 m, lighter to ~75 m, card beyond (never culled).
-                lg.SetLODs(new[] { new LOD(0.22f, new[] { lod0 }), new LOD(0.12f, new[] { lod1 }), new LOD(0.0015f, new[] { card }) });
-            }
-            else
-                lg.SetLODs(new[] { new LOD(0.05f, new[] { lod0 }), new LOD(0.012f, new[] { lod1 }) });
-            lg.RecalculateBounds();
-        }
-
-        private static Renderer PlantPart(Transform parent, string name, Mesh mesh, Material mat, Vector3 offset, ShadowCastingMode shadows)
-        {
-            var go = new GameObject(name);
-            go.transform.SetParent(parent, false);
-            go.transform.localPosition = offset;
-            go.AddComponent<MeshFilter>().sharedMesh = mesh;
-            var mr = go.AddComponent<MeshRenderer>();
-            mr.sharedMaterial = mat;
-            mr.shadowCastingMode = shadows;
-            mr.receiveShadows = true;
-            mr.lightProbeUsage = LightProbeUsage.Off;       // per-object probes would split the instanced batches
-            mr.reflectionProbeUsage = ReflectionProbeUsage.Off;
-            mr.motionVectorGenerationMode = MotionVectorGenerationMode.Camera;
-            return mr;
-        }
-
-        /// <summary>
-        /// Tree card from the billboard atlas (Resources/OpenField/TreeBillboards: top half side views, bottom half top
-        /// views, one quarter-wide column per kind; rendered from the same models with the framing used here). In the
-        /// model's own space so it swaps in for the full model. Cross: two crossed double-sided cards plus a canopy
-        /// card seen from above. Single: one card facing +z (backdrop). Normals point up so every card is lit evenly.
-        /// </summary>
-        private static Mesh TreeBillboardMesh(Bounds b, int kind, bool cross)
-        {
-            float H = b.size.y, S = Mathf.Max(b.size.x, Mathf.Max(b.size.y, b.size.z)) * 1.02f;
-            float St = Mathf.Max(b.size.x, b.size.z) * 1.02f;
-            Vector3 c = new Vector3(b.center.x, b.min.y + H * 0.5f, b.center.z);
-            float u0 = kind * 0.25f, h = S * 0.5f;
-            var v = new List<Vector3>();
-            var uv = new List<Vector2>();
-            var tri = new List<int>();
-            void Quad(Vector3 a, Vector3 bb, Vector3 cc, Vector3 d, Vector2 ua, Vector2 ub, Vector2 uc, Vector2 ud, bool twoSided)
-            {
-                int i = v.Count;
-                v.Add(a); v.Add(bb); v.Add(cc); v.Add(d);
-                uv.Add(ua); uv.Add(ub); uv.Add(uc); uv.Add(ud);
-                tri.Add(i); tri.Add(i + 1); tri.Add(i + 2); tri.Add(i); tri.Add(i + 2); tri.Add(i + 3);
-                if (twoSided) { tri.Add(i); tri.Add(i + 2); tri.Add(i + 1); tri.Add(i); tri.Add(i + 3); tri.Add(i + 2); }
-            }
-            // Side picture: left/right edges of the tile, bottom/top half of the atlas' upper half.
-            Vector2 sl0 = new Vector2(u0, 0.5f), sl1 = new Vector2(u0, 1f), sr1 = new Vector2(u0 + 0.25f, 1f), sr0 = new Vector2(u0 + 0.25f, 0.5f);
-            // Card in the x/y plane, front facing +z: the picture was rendered looking along -z (Unity flips the model's
-            // x on import), where +x is on the left, so the tile's left edge goes on +x.
-            Quad(c + new Vector3(h, -h, 0), c + new Vector3(h, h, 0), c + new Vector3(-h, h, 0), c + new Vector3(-h, -h, 0),
-                 sl0, sl1, sr1, sr0, cross);
-            if (cross)
-            {
-                Quad(c + new Vector3(0, -h, -h), c + new Vector3(0, h, -h), c + new Vector3(0, h, h), c + new Vector3(0, -h, h),
-                     sl0, sl1, sr1, sr0, true);
-                // Canopy from above, at the upper canopy (image up = -z, image right = -x).
-                float y = b.min.y + H * 0.78f, ht = St * 0.5f;
-                Quad(new Vector3(c.x + ht, y, c.z + ht), new Vector3(c.x + ht, y, c.z - ht), new Vector3(c.x - ht, y, c.z - ht), new Vector3(c.x - ht, y, c.z + ht),
-                     new Vector2(u0, 0f), new Vector2(u0, 0.5f), new Vector2(u0 + 0.25f, 0.5f), new Vector2(u0 + 0.25f, 0f), false);
-            }
-            var n = new List<Vector3>(v.Count);
-            for (int i = 0; i < v.Count; i++) n.Add(Vector3.up);
-            var m = new Mesh { name = TreeKinds[kind] + (cross ? "_Billboard" : "_Card") };
-            m.SetVertices(v);
-            m.SetNormals(n);
-            m.SetUVs(0, uv);
-            m.SetTriangles(tri, 0);
-            m.RecalculateBounds();
-            return m;
-        }
-
-        // ---- path round the yard: parallel to the fence at distance d from the lawn edge, quarter circles at corners
-
-        private static float PathLength(Vector2 size, float d) => 2f * (size.x + size.y) + 2f * Mathf.PI * d;
-
-        private static Vector3 PathPoint(Vector3 origin, Vector2 size, float d, float t, out Vector3 outward)
-        {
-            float sx = size.x, sz = size.y, arc = Mathf.PI * 0.5f * d;
-            t = Mathf.Repeat(t, 2f * (sx + sz) + 4f * arc);
-            Vector3 Corner(float cx, float cz, float a0, float u, out Vector3 n)
-            {
-                float a = (a0 + 90f * u) * Mathf.Deg2Rad;
-                n = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
-                return origin + new Vector3(cx, 0f, cz) + n * d;
-            }
-            if (t < sx) { outward = Vector3.back; return origin + new Vector3(t, 0f, -d); }
-            t -= sx;
-            if (t < arc) return Corner(sx, 0f, -90f, t / arc, out outward);
-            t -= arc;
-            if (t < sz) { outward = Vector3.right; return origin + new Vector3(sx + d, 0f, t); }
-            t -= sz;
-            if (t < arc) return Corner(sx, sz, 0f, t / arc, out outward);
-            t -= arc;
-            if (t < sx) { outward = Vector3.forward; return origin + new Vector3(sx - t, 0f, sz + d); }
-            t -= sx;
-            if (t < arc) return Corner(0f, sz, 90f, t / arc, out outward);
-            t -= arc;
-            if (t < sz) { outward = Vector3.left; return origin + new Vector3(-d, 0f, sz - t); }
-            t -= sz;
-            return Corner(0f, 0f, 180f, Mathf.Clamp01(t / arc), out outward);
-        }
-
-        private static int SideOf(Vector3 outward) =>
-            Mathf.Abs(outward.x) > Mathf.Abs(outward.z) ? (outward.x > 0f ? 1 : 3) : (outward.z < 0f ? 0 : 2);
-
         /// <summary>Darker forest floor in a square ring from <paramref name="inner"/> to <paramref name="outer"/> metres out.</summary>
         private void BuildForestFloor(Vector3 origin, Vector2 size, float inner, float outer)
         {
-            var tex = Speckle(256, new Color32(54, 88, 30, 255), new[] { "3e6a22", "2f5419", "5a4a2a", "466e26", "35602a", "4b3d22" }, 5000, 0.8f, 2.6f);
-            var mat = PipelineMaterials.CreateLit("ForestFloor", Color.white, tex);
+            var tex = Speckle(256, new Color32(52, 82, 32, 255), new[] { "3e6424", "2f501c", "54482c", "456a28", "355a2a", "4a3e26" }, 5000, 0.8f, 2.6f);
+            var mat = FoliageMat("ForestFloor", tex, Color.white);
             float y = origin.y - 0.006f; // between the lawn and the meadow
             Vector3 P(float x, float z) => new Vector3(origin.x + x, y, origin.z + z);
             var ins = new[] { P(-inner, -inner), P(size.x + inner, -inner), P(size.x + inner, size.y + inner), P(-inner, size.y + inner) };

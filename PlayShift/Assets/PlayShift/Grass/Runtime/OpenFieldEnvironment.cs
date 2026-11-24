@@ -5,13 +5,13 @@ using UnityEngine.Rendering;
 namespace PlayShift.Grass
 {
     /// <summary>
-    /// Open-field map around the lawn, built at runtime (no imported art): completely flat ground, the lawn shaded by
-    /// PlayShift/GrassGround (shows grown/cut grass from the cell data, so distant progress is visible without drawing
-    /// blades), a wooden privacy fence on all four sides closed in by a dense forest (see OpenFieldEnvironment.Forest;
-    /// models in Resources/OpenField), flowers and rocks under the trees, and a ring of distant mountains. No
-    /// buildings, roads or paths. Fence, rocks, flowers and mountains are merged into a handful of static meshes (one
-    /// per material and side of the field, so the sides behind the player are culled); trees and bushes are
-    /// instanced LODGroups.
+    /// Open-field map around the lawn, built at runtime: flat ground, the lawn shaded by PlayShift/GrassGround (shows
+    /// grown/cut grass from the cell data, so distant progress is visible without drawing blades), a wooden privacy
+    /// fence (posts, rails, boards, top cap) on all four sides, a natural forest beyond it (see
+    /// OpenFieldEnvironment.Forest; models in Resources/OpenField), bushes, rocks and flowers, rolling wooded hills
+    /// to the horizon, soft haze and sunlight. Small things are merged into a handful of static meshes (one per
+    /// material and direction, so the ones behind the camera are culled), trees and bushes included (full models near,
+    /// light models far, no runtime LOD switching). Scenery uses the matte PlayShift/Foliage shader.
     /// </summary>
     public sealed partial class OpenFieldEnvironment : MonoBehaviour
     {
@@ -30,10 +30,30 @@ namespace PlayShift.Grass
         [SerializeField] private float treeSpacing = 4.6f;
         [Tooltip("Average distance between bushes in the row right behind the fence (m).")]
         [SerializeField] private float bushSpacing = 1.9f;
-        [SerializeField] private int rockCount = 18;
-        [SerializeField] private int flowerClusters = 48;
-        [SerializeField] private int mountainCount = 18;
-        [SerializeField] private float mountainDistance = 780f;
+        [SerializeField] private int rockCount = 44;
+        [SerializeField] private int flowerClusters = 60;
+
+        [Header("Fence detail")]
+        [Tooltip("Distance between fence posts (m). Each side gets a whole number of equal bays.")]
+        [SerializeField] private float postSpacing = 2.4f;
+
+        [Header("Hills and sky")]
+        [Tooltip("How far the rolling hills reach (m from the yard centre).")]
+        [SerializeField] private float hillsRadius = 950f;
+        [SerializeField] private Color hillGrass = new Color(0.36f, 0.5f, 0.22f);
+        [SerializeField] private Color hillForest = new Color(0.15f, 0.29f, 0.12f);
+        [Tooltip("Colour far hills fade to (aerial haze); also the fog colour.")]
+        [SerializeField] private Color hazeColour = new Color(0.68f, 0.78f, 0.88f);
+        [Tooltip("Linear fog: starts and ends (m from the camera). Light, so the yard stays crisp.")]
+        [SerializeField] private float fogStart = 70f;
+        [SerializeField] private float fogEnd = 1150f;
+
+        [Header("Sunlight")]
+        [SerializeField] private bool applyLighting = true;
+        [SerializeField] private Color sunColour = new Color(1f, 0.965f, 0.9f);
+        [SerializeField] private float sunIntensity = 1.25f;
+        [Tooltip("Shadow darkness (lower = softer, more light in the shade).")]
+        [SerializeField, Range(0f, 1f)] private float shadowStrength = 0.78f;
 
         private System.Random _rng;
         private float R() => (float)_rng.NextDouble();
@@ -58,8 +78,9 @@ namespace PlayShift.Grass
             BuildFlowers(origin, size);
             BuildForest(origin, size);
             BuildRocks(origin, size);
-            BuildMountains(origin + new Vector3(size.x * 0.5f, 0f, size.y * 0.5f));
+            BuildHills(origin, size);
             FlushBuckets();
+            ApplyAtmosphere();
         }
 
         // ------------------------------------------------------------------ pieces
@@ -67,7 +88,8 @@ namespace PlayShift.Grass
         private void BuildGround(Vector3 origin, Vector2 size)
         {
             var lawnTex = Speckle(512, new Color32(54, 112, 30, 255), new[] { "4a9426", "3a7a1e", "55a02c", "2f6619", "5fa834", "44861f" }, 16000, 0.6f, 2.2f);
-            var meadowTex = Speckle(512, new Color32(86, 130, 40, 255), new[] { "6b9a34", "5a8a2c", "78a83c", "4d7a26", "86b444" }, 12000, 0.7f, 2.4f);
+            // Ground outside the lawn (the strip by the fence, under the hedge): the same turf greens as the lawn.
+            var meadowTex = Speckle(512, new Color32(56, 106, 32, 255), new[] { "4a8a26", "3a721e", "52962c", "2f6019", "5a9c32" }, 12000, 0.7f, 2.4f);
 
             // The lawn: GrassGround reads the cell buffer (grown vs cut) set globally by GrassFieldRenderer.
             var groundShader = Shader.Find("PlayShift/GrassGround");
@@ -120,18 +142,16 @@ namespace PlayShift.Grass
         }
 
         /// <summary>
-        /// Wooden privacy fence all around the lawn. Each panel is a thin box (12 triangles) showing a picture of the
-        /// full-detail fence model (Resources/OpenField/Fence_Front, rendered from it), stretched slightly so each side
-        /// has a whole number of panels; one merged mesh per side.
+        /// Wooden privacy fence all around the lawn, built from modular pieces with world-continuous wood UVs (no seams):
+        /// square posts at equal bays (one at every corner), a continuous wall of boards on the outer side of the posts,
+        /// two horizontal rails on the yard side, and a top cap over everything. Corners overlap so they close. One
+        /// mesh per side, sharing one wood material. Height is the same everywhere.
         /// </summary>
         private void BuildFence(Vector3 origin, Vector2 size)
         {
-            var mat = TexturedMat("Fence", "Fence_Front");
-            var tex = mat.mainTexture;
-            float aspect = tex != null ? tex.width / (float)tex.height : 1.16f; // the panel picture's width / height
-            float panel = fenceHeight * aspect;
-            var mesh = FencePanelMesh(0.06f / fenceHeight);
-            float o = fenceOffset;
+            var mat = FoliageMat("Fence", WoodTexture(256), Color.white);
+            float o = fenceOffset, H = fenceHeight;
+            Vector3 centre = origin + new Vector3(size.x * 0.5f, 0f, size.y * 0.5f);
             var corners = new[]
             {
                 origin + new Vector3(-o, 0f, -o), origin + new Vector3(size.x + o, 0f, -o),
@@ -140,56 +160,89 @@ namespace PlayShift.Grass
             for (int side = 0; side < 4; side++)
             {
                 Vector3 a = corners[side], c = corners[(side + 1) % 4];
-                Vector3 dir = (c - a).normalized;
+                Vector3 dir = (c - a).normalized, inward = Vector3.Cross(Vector3.up, dir);
+                if (Vector3.Dot(inward, centre - a) < 0f) inward = -inward;
                 float len = Vector3.Distance(a, c);
-                int count = Mathf.Max(1, Mathf.CeilToInt(len / panel));
-                float seg = len / count;
-                var rot = Quaternion.LookRotation(Vector3.Cross(dir, Vector3.up), Vector3.up); // local x along the side, upright
-                var scale = new Vector3(seg, fenceHeight, fenceHeight);
-                for (int i = 0; i < count; i++)
-                    Add(mat, mesh, a + dir * (seg * (i + 0.5f)), rot, scale, side);
+                int bays = Mathf.Max(1, Mathf.CeilToInt(len / Mathf.Max(0.5f, postSpacing)));
+                float bay = len / bays;
+                var mb = new BoxBuilder(a, dir, inward, H);
+                // Boards: one continuous wall just outside the post line, a little longer than the side so corners close.
+                mb.Box(len * 0.5f, 0.03f + (H - 0.03f) * 0.5f, -0.05f, len * 0.5f + 0.07f, (H - 0.03f) * 0.5f, 0.012f);
+                // Posts at every bay end that starts this side (the next side adds the far corner post).
+                for (int i = 0; i < bays; i++)
+                    mb.Box(bay * i, (H + 0.08f) * 0.5f, 0f, 0.06f, (H + 0.08f) * 0.5f, 0.06f);
+                // Two rails on the yard side of the boards, and the top cap.
+                mb.Box(len * 0.5f, 0.32f, -0.018f, len * 0.5f, 0.045f, 0.02f);
+                mb.Box(len * 0.5f, H - 0.26f, -0.018f, len * 0.5f, 0.045f, 0.02f);
+                mb.Box(len * 0.5f, H + 0.095f, -0.02f, len * 0.5f + 0.09f, 0.015f, 0.085f);
+                var go = new GameObject("Fence " + side);
+                go.transform.SetParent(transform, false);
+                go.AddComponent<MeshFilter>().sharedMesh = mb.ToMesh("Fence " + side);
+                var mr = go.AddComponent<MeshRenderer>();
+                mr.sharedMaterial = mat;
+                mr.shadowCastingMode = ShadowCastingMode.On;
+                mr.lightProbeUsage = LightProbeUsage.Off;
+                mr.reflectionProbeUsage = ReflectionProbeUsage.Off;
             }
         }
 
         /// <summary>
-        /// Unit fence panel: 1 wide (x, centred), 1 tall (y, base at 0), <paramref name="depth"/> thick (z, centred).
-        /// Front and back show the whole picture; the top and ends take a thin strip of it (wood colour).
+        /// Boxes along one fence side, in that side's frame (x along the side from its start, y up, z towards the yard),
+        /// with wood UVs continuous across pieces: board faces map 0.6 m of length and the fence height to the texture.
         /// </summary>
-        private static Mesh FencePanelMesh(float depth)
+        private sealed class BoxBuilder
         {
-            float x = 0.5f, z = depth * 0.5f;
-            var v = new List<Vector3>();
-            var n = new List<Vector3>();
-            var uv = new List<Vector2>();
-            var t = new List<int>();
-            void Quad(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, Vector3 normal, Vector2 u0, Vector2 u1, Vector2 u2, Vector2 u3)
+            private readonly Vector3 _a, _x, _z;
+            private readonly float _h;
+            private readonly List<Vector3> _v = new List<Vector3>();
+            private readonly List<Vector3> _n = new List<Vector3>();
+            private readonly List<Vector2> _uv = new List<Vector2>();
+            private readonly List<int> _t = new List<int>();
+            private const float PlankRepeat = 0.6f; // metres of fence per texture width (4 boards)
+
+            public BoxBuilder(Vector3 start, Vector3 along, Vector3 inward, float height) { _a = start; _x = along; _z = inward; _h = height; }
+
+            public void Box(float cx, float cy, float cz, float hx, float hy, float hz)
             {
-                int i = v.Count;
-                v.Add(p0); v.Add(p1); v.Add(p2); v.Add(p3);
-                n.Add(normal); n.Add(normal); n.Add(normal); n.Add(normal);
-                uv.Add(u0); uv.Add(u1); uv.Add(u2); uv.Add(u3);
-                t.Add(i); t.Add(i + 1); t.Add(i + 2); t.Add(i); t.Add(i + 2); t.Add(i + 3);
+                Vector3 P(float x, float y, float z) => _a + _x * x + Vector3.up * y + _z * z;
+                float x0 = cx - hx, x1 = cx + hx, y0 = cy - hy, y1 = cy + hy, z0 = cz - hz, z1 = cz + hz;
+                // Yard side / outer side (boards): u along the side, v up the fence.
+                Face(P(x0, y0, z1), P(x0, y1, z1), P(x1, y1, z1), P(x1, y0, z1), _z, x0, x1, y0, y1, true);
+                Face(P(x1, y0, z0), P(x1, y1, z0), P(x0, y1, z0), P(x0, y0, z0), -_z, x1, x0, y0, y1, true);
+                // Top / bottom: u along, v across (thin grain strip).
+                Face(P(x0, y1, z1), P(x0, y1, z0), P(x1, y1, z0), P(x1, y1, z1), Vector3.up, x0, x1, z1, z0, false);
+                Face(P(x0, y0, z0), P(x0, y0, z1), P(x1, y0, z1), P(x1, y0, z0), Vector3.down, x0, x1, z0, z1, false);
+                // Ends: u across, v up.
+                Face(P(x0, y0, z0), P(x0, y1, z0), P(x0, y1, z1), P(x0, y0, z1), -_x, z0, z1, y0, y1, true);
+                Face(P(x1, y0, z1), P(x1, y1, z1), P(x1, y1, z0), P(x1, y0, z0), _x, z1, z0, y0, y1, true);
             }
-            // Front (-z) and back (+z), both reading left-to-right from their own side.
-            Quad(new Vector3(-x, 0, -z), new Vector3(-x, 1, -z), new Vector3(x, 1, -z), new Vector3(x, 0, -z), Vector3.back,
-                 new Vector2(0, 0), new Vector2(0, 1), new Vector2(1, 1), new Vector2(1, 0));
-            Quad(new Vector3(x, 0, z), new Vector3(x, 1, z), new Vector3(-x, 1, z), new Vector3(-x, 0, z), Vector3.forward,
-                 new Vector2(0, 0), new Vector2(0, 1), new Vector2(1, 1), new Vector2(1, 0));
-            // Top and the two ends: a strip just inside the picture's top edge.
-            Vector2 s0 = new Vector2(0.02f, 0.985f), s1 = new Vector2(0.98f, 0.995f);
-            Quad(new Vector3(-x, 1, -z), new Vector3(-x, 1, z), new Vector3(x, 1, z), new Vector3(x, 1, -z), Vector3.up,
-                 new Vector2(s0.x, s0.y), new Vector2(s0.x, s1.y), new Vector2(s1.x, s1.y), new Vector2(s1.x, s0.y));
-            Quad(new Vector3(-x, 0, z), new Vector3(-x, 1, z), new Vector3(-x, 1, -z), new Vector3(-x, 0, -z), Vector3.left,
-                 new Vector2(0.01f, 0), new Vector2(0.01f, 1), new Vector2(0.03f, 1), new Vector2(0.03f, 0));
-            Quad(new Vector3(x, 0, -z), new Vector3(x, 1, -z), new Vector3(x, 1, z), new Vector3(x, 0, z), Vector3.right,
-                 new Vector2(0.97f, 0), new Vector2(0.97f, 1), new Vector2(0.99f, 1), new Vector2(0.99f, 0));
-            var m = new Mesh { name = "FencePanel" };
-            m.SetVertices(v);
-            m.SetNormals(n);
-            m.SetUVs(0, uv);
-            m.SetTriangles(t, 0);
-            m.RecalculateBounds();
-            return m;
+
+            private void Face(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, Vector3 normal, float u0, float u1, float v0, float v1, bool upright)
+            {
+                int i = _v.Count;
+                _v.Add(p0); _v.Add(p1); _v.Add(p2); _v.Add(p3);
+                for (int k = 0; k < 4; k++) _n.Add(normal);
+                float su = 1f / PlankRepeat, sv = upright ? 1f / _h : su;
+                _uv.Add(new Vector2(u0 * su, v0 * sv)); _uv.Add(new Vector2(u0 * su, v1 * sv));
+                _uv.Add(new Vector2(u1 * su, v1 * sv)); _uv.Add(new Vector2(u1 * su, v0 * sv));
+                // Front face = the side the normal points to (Unity's face normal is Cross(b - a, c - a)).
+                if (Vector3.Dot(Vector3.Cross(p1 - p0, p2 - p0), normal) >= 0f)
+                { _t.Add(i); _t.Add(i + 1); _t.Add(i + 2); _t.Add(i); _t.Add(i + 2); _t.Add(i + 3); }
+                else
+                { _t.Add(i); _t.Add(i + 2); _t.Add(i + 1); _t.Add(i); _t.Add(i + 3); _t.Add(i + 2); }
+            }
+
+            public Mesh ToMesh(string name)
+            {
+                var m = new Mesh { name = name };
+                m.SetVertices(_v);
+                m.SetNormals(_n);
+                m.SetUVs(0, _uv);
+                m.SetTriangles(_t, 0);
+                m.RecalculateBounds();
+                m.RecalculateTangents();
+                return m;
+            }
         }
 
         private void BuildFlowers(Vector3 origin, Vector2 size)
@@ -215,33 +268,161 @@ namespace PlayShift.Grass
 
         private void BuildRocks(Vector3 origin, Vector2 size)
         {
-            var rock = new[] { Mat("RockA", new Color(0.55f, 0.55f, 0.53f)), Mat("RockB", new Color(0.45f, 0.46f, 0.45f)) };
+            var rock = new[] { FoliageMat("RockA", null, new Color(0.55f, 0.55f, 0.52f)), FoliageMat("RockB", null, new Color(0.46f, 0.47f, 0.45f)) };
             for (int k = 0; k < rockCount; k++)
             {
-                Vector3 p = PerimeterPoint(origin, size, fenceOffset + R(2.5f, 18f));
-                float s = R(0.35f, 1.1f);
-                AddBlob(rock[_rng.Next(rock.Length)], p + Vector3.up * s * 0.25f, new Vector3(s * R(1f, 1.6f), s * 0.6f, s * R(1f, 1.5f)));
+                if (!BandPoint(size, fenceOffset + 1.2f, fenceOffset + 22f, out float x, out float z)) continue;
+                Vector3 p = origin + new Vector3(x, 0f, z);
+                float s = R(0.3f, 1.2f);
+                AddBlob(rock[_rng.Next(rock.Length)], p + Vector3.up * s * 0.22f, new Vector3(s * R(1f, 1.6f), s * R(0.5f, 0.75f), s * R(1f, 1.5f)));
             }
         }
 
-        private void BuildMountains(Vector3 centre)
+        /// <summary>
+        /// Rolling hills from just past the forest out to the horizon: one ring mesh (a few thousand triangles) with
+        /// smooth heights, darker wooded patches (the forest continues up the near slopes) and aerial haze baked into the
+        /// vertex colours. Replaces the old cone mountains. Receives shadows, casts none.
+        /// </summary>
+        private void BuildHills(Vector3 origin, Vector2 size)
         {
-            var body = Mat("Mountain", new Color(0.42f, 0.5f, 0.62f));
-            var bodyFar = Mat("MountainFar", new Color(0.55f, 0.63f, 0.74f));
-            var snow = Mat("Snow", new Color(0.94f, 0.96f, 1f));
-            for (int k = 0; k < mountainCount; k++)
+            Vector3 centre = origin + new Vector3(size.x * 0.5f, 0f, size.y * 0.5f);
+            float r0 = Mathf.Max(size.x, size.y) * 0.5f * 1.41f + fenceOffset + forestDepth + 4f, r1 = hillsRadius;
+            const int seg = 180, rings = 34;
+            var v = new List<Vector3>(seg * rings);
+            var col = new List<Color>(seg * rings);
+            var uv = new List<Vector2>(seg * rings);
+            float ph1 = R(0f, 6.28f), ph2 = R(0f, 6.28f), ph3 = R(0f, 6.28f);
+            for (int j = 0; j < rings; j++)
             {
-                float ang = (k + R(-0.3f, 0.3f)) / mountainCount * Mathf.PI * 2f;
-                bool far = k % 2 == 1;
-                float dist = mountainDistance * (far ? R(1.15f, 1.35f) : R(0.9f, 1.05f));
-                Vector3 p = centre + new Vector3(Mathf.Cos(ang) * dist, -2f, Mathf.Sin(ang) * dist);
-                float h = R(140f, 300f) * (far ? 1.25f : 1f), r = h * R(1.1f, 1.6f);
-                var rot = Quaternion.Euler(0f, R(0f, 360f), 0f);
-                Add(far ? bodyFar : body, _cone9, p, rot, new Vector3(r, h, r));
-                // Snow cap: same apex, smaller cone.
-                float capH = h * 0.24f;
-                Add(snow, _cone9, p + Vector3.up * (h - capH + 0.5f), rot, new Vector3(r * 0.24f * 1.04f, capH, r * 0.24f * 1.04f));
+                float t = j / (float)(rings - 1), r = r0 + (r1 - r0) * t * t;
+                for (int i = 0; i < seg; i++)
+                {
+                    float a = i / (float)seg * Mathf.PI * 2f;
+                    float n1 = 0.5f + 0.22f * Mathf.Sin(3f * a + ph1 + r * 0.004f) + 0.15f * Mathf.Sin(7f * a + ph2 - r * 0.006f)
+                               + 0.08f * Mathf.Sin(13f * a + ph3 + r * 0.011f) + 0.05f * Mathf.Sin(23f * a + r * 0.02f);
+                    float n2 = 0.5f + 0.3f * Mathf.Sin(2f * a + ph2 + 1.7f) + 0.2f * Mathf.Sin(5f * a + ph1 + r * 0.002f);
+                    float n3 = 0.5f + 0.3f * Mathf.Sin(9f * a + ph3 + r * 0.017f) + 0.2f * Mathf.Sin(17f * a - r * 0.009f);
+                    float rise = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(r0, r0 + 110f, r));
+                    float far = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(r0 + 200f, r1, r));
+                    float h = rise * (5f + 24f * n1) + far * (30f + 110f * n2);
+                    v.Add(centre + new Vector3(Mathf.Cos(a) * r, h - 0.4f, Mathf.Sin(a) * r));
+                    float wooded = Mathf.Max(Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.42f, 0.6f, n3)), 1f - Mathf.InverseLerp(r0, r0 + 80f, r));
+                    Color c = Color.Lerp(hillGrass, hillForest, wooded);
+                    float haze = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(r0 + 60f, r1, r)) * 0.82f;
+                    col.Add(Color.Lerp(c, hazeColour, haze));
+                    uv.Add(new Vector2(a, r * 0.01f));
+                }
             }
+            var tri = new List<int>(seg * (rings - 1) * 6);
+            for (int j = 0; j < rings - 1; j++)
+                for (int i = 0; i < seg; i++)
+                {
+                    int a0 = j * seg + i, a1 = j * seg + (i + 1) % seg, b0 = a0 + seg, b1 = a1 + seg;
+                    // Rings grow outwards and angles anticlockwise seen from above: this winding faces up.
+                    tri.Add(a0); tri.Add(a1); tri.Add(b0);
+                    tri.Add(a1); tri.Add(b1); tri.Add(b0);
+                }
+            var mesh = new Mesh { name = "Hills", indexFormat = IndexFormat.UInt32 };
+            mesh.SetVertices(v);
+            mesh.SetColors(col);
+            mesh.SetUVs(0, uv);
+            mesh.SetTriangles(tri, 0);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            var mat = FoliageMat("Hills", null, Color.white);
+            mat.SetFloat("_VertexColor", 1f);
+            mat.SetFloat("_Wrap", 0.55f);
+            var go = new GameObject("Hills");
+            go.transform.SetParent(transform, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var mr = go.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = mat;
+            mr.shadowCastingMode = ShadowCastingMode.Off;
+            mr.lightProbeUsage = LightProbeUsage.Off;
+            mr.reflectionProbeUsage = ReflectionProbeUsage.Off;
+        }
+
+        /// <summary>Soft natural sunlight and a light distance haze (scene-wide; set once at start).</summary>
+        private void ApplyAtmosphere()
+        {
+            RenderSettings.fog = true;
+            RenderSettings.fogMode = FogMode.Linear;
+            RenderSettings.fogColor = hazeColour;
+            RenderSettings.fogStartDistance = fogStart;
+            RenderSettings.fogEndDistance = fogEnd;
+            if (!applyLighting) return;
+            Light sun = RenderSettings.sun;
+            if (sun == null)
+                foreach (var l in FindObjectsByType<Light>(FindObjectsSortMode.None))
+                    if (l.type == LightType.Directional) { sun = l; break; }
+            if (sun == null) return;
+            sun.color = sunColour;
+            sun.intensity = sunIntensity;
+            sun.shadowStrength = shadowStrength;
+        }
+
+        /// <summary>Matte scenery material (PlayShift/Foliage: instanced, LOD cross-fade, fog). Falls back to the
+        /// pipeline's lit material when the shader is missing.</summary>
+        private Material FoliageMat(string name, Texture tex, Color tint)
+        {
+            if (_mats.TryGetValue(name, out var m)) return m;
+            var sh = Shader.Find("PlayShift/Foliage");
+            if (sh != null)
+            {
+                m = new Material(sh) { name = name, enableInstancing = true };
+                if (tex != null) m.mainTexture = tex;
+                m.color = tint;
+            }
+            else
+            {
+                m = PipelineMaterials.CreateLit(name, tint, tex as Texture2D);
+                m.enableInstancing = true;
+            }
+            _mats[name] = m;
+            return m;
+        }
+
+        /// <summary>Weathered wood planks: four vertical boards with thin dark gaps, per-board colour, long grain and
+        /// a few knots. Tiles seamlessly.</summary>
+        private Texture2D WoodTexture(int size)
+        {
+            var px = new Color32[size * size];
+            int planks = 4, pw = size / planks;
+            var tones = new Color[planks];
+            for (int k = 0; k < planks; k++)
+            {
+                float v = R(-0.035f, 0.035f);
+                tones[k] = new Color(0.47f + v, 0.36f + v * 0.9f, 0.25f + v * 0.7f); // warm brown, slightly weathered
+            }
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    int k = x / pw, lx = x - k * pw;
+                    float g = 0.06f * Mathf.Sin(lx * 0.9f + 3f * Mathf.Sin(y * 0.045f + k * 1.7f)) + 0.035f * Mathf.Sin(lx * 2.3f + y * 0.02f + k);
+                    Color c = tones[k] * (1f + g);
+                    if (lx < 2 || lx >= pw - 1) c = new Color(0.16f, 0.11f, 0.07f); // gap between boards
+                    else if (lx < 4 || lx >= pw - 3) c *= 0.86f;                     // board edge
+                    px[y * size + x] = c;
+                }
+            // Knots.
+            for (int n = 0; n < 6; n++)
+            {
+                float cx = R(0f, size), cy = R(0f, size), rx = R(2f, 4f), ry = rx * R(1.6f, 2.4f);
+                for (int y = Mathf.FloorToInt(cy - ry); y <= cy + ry; y++)
+                    for (int x = Mathf.FloorToInt(cx - rx); x <= cx + rx; x++)
+                    {
+                        float dx = (x - cx) / rx, dy = (y - cy) / ry, d = dx * dx + dy * dy;
+                        if (d > 1f) continue;
+                        int ix = (x % size + size) % size, iy = (y % size + size) % size;
+                        if ((ix % pw) < 3 || (ix % pw) >= pw - 2) continue;
+                        Color c = px[iy * size + ix];
+                        px[iy * size + ix] = Color.Lerp(c, c * 0.55f, 1f - d);
+                    }
+            }
+            var t = new Texture2D(size, size, TextureFormat.RGBA32, true) { name = "FenceWood", wrapMode = TextureWrapMode.Repeat, anisoLevel = 8 };
+            t.SetPixels32(px);
+            t.Apply(true, true);
+            return t;
         }
 
         // ------------------------------------------------------------------ helpers
@@ -296,7 +477,7 @@ namespace PlayShift.Grass
                 var mr = go.AddComponent<MeshRenderer>();
                 mr.sharedMaterial = mat;
                 // Mountains are far beyond the shadow distance; small things don't need to cast.
-                bool casts = mat.name == "Fence" || mat.name == "TreesAndBushes";
+                bool casts = mat.name == "Fence" || mat.name == "ForestNear";
                 mr.shadowCastingMode = casts ? ShadowCastingMode.On : ShadowCastingMode.Off;
             }
             _buckets.Clear();
