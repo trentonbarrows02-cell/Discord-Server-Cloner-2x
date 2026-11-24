@@ -28,6 +28,7 @@ namespace PlayShift.Grass.Dev
         private static int Width = 1080, Height = 1920;
         private const int ClipFps = 30;
         private const float ClipSeconds = 10f;
+        private const uint ClipBitRate = 40_000_000; // bits per second
         private static int ClipWidth => Width;   // full res: downscaling thin grass blades makes the clip look soft
         private static int ClipHeight => Height;
 
@@ -176,13 +177,21 @@ namespace PlayShift.Grass.Dev
             int maxTiles = 0;
             float maxGrassCpu = 0f, sumGrassCpu = 0f;
             Time.captureFramerate = ClipFps;
-            var attrs = new VideoTrackAttributes
+            // H.264 High profile at a fixed high bit rate: dense grass is almost all fine detail, and the generic
+            // "High" preset (~11 Mbps at 1080p) smeared it into blocks. 40 Mbps keeps the blades sharp.
+            var attrs = new VideoTrackEncoderAttributes(new H264EncoderAttributes
+            {
+                gopSize = ClipFps,
+                numConsecutiveBFrames = 2,
+                profile = VideoEncodingProfile.H264High
+            })
             {
                 frameRate = new MediaRational(ClipFps),
                 width = (uint)ClipWidth,
                 height = (uint)ClipHeight,
                 includeAlpha = false,
-                bitRateMode = VideoBitrateMode.High
+                bitRateMode = VideoBitrateMode.High,
+                targetBitRate = ClipBitRate
             };
             var vm = FindAnyObjectByType<TrimmerViewmodel>();
             var clipPs = FindAnyObjectByType<GrassClippings>()?.GetComponent<ParticleSystem>();
