@@ -22,7 +22,7 @@ namespace PlayShift.Grass
         [SerializeField] private float eyeHeight = 1.7f;
         [SerializeField] private float walkSpeed = 5.5f; // = sprint speed: normal movement at the sprint pace
         [SerializeField] private float sprintSpeed = 5.5f;
-        [SerializeField] private float acceleration = 14f;
+        [SerializeField] private float acceleration = 70f;
         [SerializeField] private float mouseSensitivity = 0.12f;
         [SerializeField] private bool invertY;
         [SerializeField] private float minPitch = -75f;

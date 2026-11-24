@@ -3073,7 +3073,7 @@ MonoBehaviour:
   eyeHeight: 1.7
   walkSpeed: 5.5
   sprintSpeed: 5.5
-  acceleration: 14
+  acceleration: 70
   mouseSensitivity: 0.12
   invertY: 0
   minPitch: -75

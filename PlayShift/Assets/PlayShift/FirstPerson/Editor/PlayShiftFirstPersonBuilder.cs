@@ -129,8 +129,8 @@ namespace PlayShift.FirstPerson.Editor
             // Movement: smooth but responsive (about 0.2 s to full speed), unlimited sprint (the controller has no stamina).
             Num("walkSpeed", WalkSpeed);
             Num("sprintSpeed", SprintSpeed);
-            Num("groundAcceleration", 18f);
-            Num("groundDeceleration", 24f);
+            Num("groundAcceleration", 70f);
+            Num("groundDeceleration", 80f);
             // Unused mechanics neutralised: no jump height, crouch/slide do nothing visible and keep walking speed.
             Num("jumpSpeed", 0f);
             Num("crouchSpeed", WalkSpeed);

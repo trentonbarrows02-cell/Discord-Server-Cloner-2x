@@ -1062,6 +1062,39 @@ namespace PlayShift.Grass.Dev
                 yield return Frames(5);
             }
 
+            // Movement response at 60 fps: after switching direction, frames until the player moves the new way at 95%
+            // of full speed.
+            {
+                Time.captureFramerate = 60;
+                yield return Go(c + new Vector3(-20f, 0f, 0f), 0f);
+                var pl = vm.transform;
+                foreach (var (label, a, b) in new[] { ("forward -> back", new Vector2(0f, 1f), new Vector2(0f, -1f)),
+                                                      ("right -> left", new Vector2(1f, 0f), new Vector2(-1f, 0f)),
+                                                      ("forward -> right", new Vector2(0f, 1f), new Vector2(1f, 0f)),
+                                                      ("forward -> stop", new Vector2(0f, 1f), Vector2.zero) })
+                {
+                    for (int i = 0; i < 40; i++) { _input.Move = a; yield return null; }
+                    Vector3 dirA = (pl.right * a.x + pl.forward * a.y).normalized;
+                    Vector3 dirB = b == Vector2.zero ? -dirA : (pl.right * b.x + pl.forward * b.y).normalized;
+                    Vector3 last = pl.position;
+                    float top = 0f;
+                    for (int i = 0; i < 3; i++) { _input.Move = a; yield return null; top = Vector3.Dot(pl.position - last, dirA) / Time.deltaTime; last = pl.position; }
+                    int frames = -1;
+                    for (int i = 0; i < 90 && frames < 0; i++)
+                    {
+                        _input.Move = b;
+                        yield return null;
+                        Vector3 step = (pl.position - last) / Time.deltaTime;
+                        last = pl.position;
+                        bool done = b == Vector2.zero ? step.magnitude <= 0.05f * top : Vector3.Dot(step, dirB) >= 0.95f * top;
+                        if (done) frames = i + 1;
+                    }
+                    _report.AppendLine($"  movement {label}: done after {frames} frames ({frames * 1000f / 60f:F0} ms) at {top:F1} m/s");
+                }
+                _input.Move = Vector2.zero;
+                yield return Frames(10);
+            }
+
             // Counter: text rebuilds per second while cutting at 30-240 FPS (should be ~20, not one per frame), and the
             // shown value equals the exact count after release and after gifts.
             {

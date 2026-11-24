@@ -211,8 +211,8 @@ MonoBehaviour:
   slideSpeed: 5.5
   mouseSensitivity: 2
   strafeTiltAmount: 0
-  groundAcceleration: 18
-  groundDeceleration: 24
+  groundAcceleration: 70
+  groundDeceleration: 80
   currentVelocity: {x: 0, y: 0, z: 0}
   enableSmoothCrouch: 1
   crouchTransitionSpeed: 10
