@@ -41,11 +41,11 @@ Material:
     - _WindSpeed: 1.5
     - _WindStrength: 0.12
     m_Colors:
-    - _ColDarkGreen: {r: 0.15, g: 0.31, b: 0.1, a: 1}
-    - _ColDry: {r: 0.5, g: 0.56, b: 0.24, a: 1}
-    - _ColFreshGreen: {r: 0.25, g: 0.47, b: 0.14, a: 1}
-    - _ColGoldenGreen: {r: 0.41, g: 0.56, b: 0.19, a: 1}
-    - _ColYellowGreen: {r: 0.33, g: 0.53, b: 0.16, a: 1}
+    - _ColDarkGreen: {r: 0.1, g: 0.24, b: 0.07, a: 1}
+    - _ColDry: {r: 0.36, g: 0.4, b: 0.17, a: 1}
+    - _ColFreshGreen: {r: 0.16, g: 0.34, b: 0.1, a: 1}
+    - _ColGoldenGreen: {r: 0.25, g: 0.4, b: 0.13, a: 1}
+    - _ColYellowGreen: {r: 0.2, g: 0.38, b: 0.12, a: 1}
     - _StubbleColor: {r: 0.17, g: 0.42, b: 0.07, a: 1}
     - _StubbleTipColor: {r: 0.5, g: 0.74, b: 0.24, a: 1}
     - _WindDirection: {r: 0.86, g: 0, b: 0.5, a: 0}

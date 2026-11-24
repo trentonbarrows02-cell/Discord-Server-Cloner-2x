@@ -14,7 +14,7 @@ The Unity project is `PlayShift/` (Unity 6000.6.10f1, Built-in render pipeline).
   stays at the cutting height (3 cm blade clearance) over the ground at every camera angle. The camera's up/down
   look never moves the tool, the cutting height or the cutting radius. (The lift code was removed on purpose;
   do not reintroduce it.)
-- **Camera:** default pitch -29 deg = the lowest allowed look (the player can never look below it, never at the
+- **Camera:** default pitch -24 deg = the lowest allowed look (the player can never look below it, never at the
   ground under the trimmer); look up to -14 deg; unrestricted 360 deg left/right; eye height 2.28 m; FOV from the
   game settings (default 62). The whole cutting head stays on screen across the range. No head bob, sway or roll.
 - **Trimmer pose:** rear grip at the waist (`hipGrip` 0.82, 1.1, 0.45), shaft angled down to the head, head
@@ -28,5 +28,8 @@ The Unity project is `PlayShift/` (Unity 6000.6.10f1, Built-in render pipeline).
   actually cut. No square/quad cards.
 - **Blade spin look:** drawn at a steady 3.6 rev/s (max 26 deg per frame) with the blur disc showing speed; real
   9.5 rev/s drives cutting/sound. Do not let the drawn step approach 45 deg (wagon-wheel stalling).
+- **Cut vs uncut contrast:** uncut grass is a dark, rich green (blade palette in InstancedGrass.mat, ground under it
+  follows the blades' average); the mown lawn has its own light colour (`_CutColor` on PlayShift/GrassGround, about
+  #79B744 on screen), driven by the cut mask. Keep the two clearly different at every distance.
 - **Title screen:** its own shell-grass lawn (`MenuLawn`), no gameplay blades, untouched-lawn look, saves
   untouched, 60 FPS cap.
