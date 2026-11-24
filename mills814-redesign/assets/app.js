@@ -55,14 +55,15 @@
   /* ── product card ────────────────────────────────────────────────── */
   function cardHTML(p, i = 0) {
     const [a, b] = p.img;
-    const sale = onSale(p) && Math.max(...p.v.map(discount));
+    const offs = [...new Set(p.v.filter((v) => v.a).map(discount))];
+    const sale = onSale(p) && (offs.length === 1 ? `−${offs[0]}%` : "Sale");
     const soldOut = !available(p);
     const multi = p.v.length > 1;
     return `
       <article class="card" data-h="${esc(p.h)}" style="--i:${i}">
         <div class="card__media${b ? " has-alt" : ""}">
           <div class="tags">
-            ${soldOut ? '<span class="tag tag--out">Sold out</span>' : sale ? `<span class="tag tag--sale">−${sale}%</span>` : ""}
+            ${soldOut ? '<span class="tag tag--out">Sold out</span>' : sale ? `<span class="tag tag--sale">${sale}</span>` : ""}
           </div>
           ${a ? `<img class="main" src="${attr(a, 600)}" alt="" loading="lazy" decoding="async" />` : ""}
           ${b ? `<img class="alt" src="${attr(b, 600)}" alt="" loading="lazy" decoding="async" />` : ""}
@@ -472,7 +473,7 @@
     const cv = $("#beads"), hero = $(".hero");
     if (!cv || !cv.getContext) return;
     const ctx = cv.getContext("2d");
-    const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent-rgb").trim().split(/\s+/).join(",") || "124,156,255";
+    const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent-rgb").trim().split(/\s+/).join(",") || "255,106,26";
     const sprites = new Map();
     let W = 0, H = 0, dpr = 1, drops = [], trails = [], raf = 0, visible = true, lastT = 0, nextSlide = 0, wiped = false;
     const rand = (a, b) => a + Math.random() * (b - a);
@@ -490,9 +491,9 @@
       g.fillStyle = "rgba(0,0,0,.38)";                         // contact shadow
       g.beginPath(); g.ellipse(x + R * 0.16, y + R * 0.3, R * 0.95, R * 0.88, 0, 0, Math.PI * 2); g.fill();
       const body = g.createRadialGradient(x - R * 0.3, y - R * 0.35, R * 0.05, x, y, R);
-      body.addColorStop(0, "rgba(225,233,255,.16)");
+      body.addColorStop(0, "rgba(255,248,240,.14)");
       body.addColorStop(0.65, `rgba(${accent},.07)`);
-      body.addColorStop(1, "rgba(200,214,255,.42)");
+      body.addColorStop(1, "rgba(235,228,218,.4)");
       g.fillStyle = body;
       g.beginPath(); g.arc(x, y, R, 0, Math.PI * 2); g.fill();
       g.strokeStyle = `rgba(${accent},.65)`;                    // light focused through the bead
@@ -576,7 +577,7 @@
       ctx.lineCap = "round";
       for (const tr of trails) {
         if (tr.pts.length < 2) continue;
-        ctx.strokeStyle = `rgba(190,205,255,${0.07 * tr.life})`;
+        ctx.strokeStyle = `rgba(230,222,212,${0.07 * tr.life})`;
         ctx.lineWidth = tr.w;
         ctx.beginPath(); ctx.moveTo(tr.pts[0][0], tr.pts[0][1]);
         for (const [x, y] of tr.pts) ctx.lineTo(x, y);
@@ -589,7 +590,7 @@
         const p = ((t % period) / period) * (span + 600) - 300;
         const g = ctx.createLinearGradient(p - 220, 0, p + 220, H * 0.45);
         g.addColorStop(0, "rgba(255,255,255,0)");
-        g.addColorStop(0.5, "rgba(210,222,255,.07)");
+        g.addColorStop(0.5, "rgba(255,236,215,.07)");
         g.addColorStop(1, "rgba(255,255,255,0)");
         ctx.globalCompositeOperation = "lighter";
         ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);

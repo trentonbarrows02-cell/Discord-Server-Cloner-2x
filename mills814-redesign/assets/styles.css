@@ -4,26 +4,26 @@
    near-black surfaces, hairline borders.
    ========================================================================== */
 :root {
-  /* Cobalt: blue-black surfaces, one electric-blue accent, cool product tiles */
-  --bg: #080b12;
-  --bg-rgb: 8 11 18;
-  --bg-2: #0c111b;
-  --surface: #111725;
-  --surface-2: #182030;
-  --line: rgb(170 190 255 / 0.09);
-  --line-2: rgb(170 190 255 / 0.17);
-  --text: #e8edf7;
-  --muted: #8a93a8;
-  --dim: #586178;
-  --unlit: #222a3b;           /* manifesto words before they light up */
-  --accent: #7c9cff;          /* Cobalt */
-  --accent-rgb: 124 156 255;
-  --accent-ink: #060a18;
+  /* Graphite & Ember: tire-rubber blacks, tool-steel greys, one burnt-orange accent */
+  --bg: #0b0b0a;
+  --bg-rgb: 11 11 10;
+  --bg-2: #10100f;
+  --surface: #161614;
+  --surface-2: #1e1e1b;
+  --line: rgb(255 240 225 / 0.08);
+  --line-2: rgb(255 240 225 / 0.15);
+  --text: #f2eee8;
+  --muted: #9b958c;
+  --dim: #645f58;
+  --unlit: #2a2825;           /* manifesto words before they light up */
+  --accent: #ff6a1a;          /* Ember */
+  --accent-rgb: 255 106 26;
+  --accent-ink: #160800;
   --accent-glow: rgb(var(--accent-rgb) / 0.4);
-  --ink: #0a0e17;             /* tags + quick-add on light tiles */
-  --tile: #e8ebf1;            /* product image backdrop */
-  --sale: #ff7d5c;
-  --light: #e6ecff;          /* LED tube */
+  --ink: #0e0e0d;             /* tags + quick-add on light tiles */
+  --tile: #e8e6e2;            /* product image backdrop */
+  --sale: #ff6a1a;
+  --light: #fff2e2;           /* LED tube */
 
   --font: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -199,7 +199,7 @@ svg { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 1
 .hero__glow {
   position: absolute; width: 60vmax; height: 60vmax; left: 50%; top: 40%;
   translate: -50% -50%;
-  background: radial-gradient(circle, rgb(var(--accent-rgb) / .22), rgb(90 70 255 / .06) 38%, transparent 65%);
+  background: radial-gradient(circle, rgb(var(--accent-rgb) / .22), rgb(255 60 0 / .05) 38%, transparent 65%);
   filter: blur(20px);
   transition: translate 1.2s var(--ease);
 }
@@ -319,7 +319,7 @@ svg { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 1
 .card:hover .card__media::after { opacity: 1; }
 .tags { position: absolute; top: 12px; left: 12px; display: flex; gap: 6px; z-index: 2; }
 .tag { font: 500 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; padding: 6px 8px; border-radius: 6px; background: var(--ink); color: var(--text); }
-.tag--sale { background: var(--sale); color: #1a0700; }
+.tag--sale { background: var(--sale); color: var(--accent-ink); }
 .tag--out { background: rgb(var(--bg-rgb) / .72); color: var(--muted); }
 .quick {
   position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 2;
@@ -360,7 +360,7 @@ svg { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 1
 .search input::placeholder { color: var(--dim); }
 .search input::-webkit-search-cancel-button { display: none; }
 .search kbd { font-size: 11px; padding: 3px 7px; border-radius: 6px; border: 1px solid var(--line-2); color: var(--dim); }
-.select select { appearance: none; height: 48px; padding: 0 40px 0 18px; border-radius: 999px; background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a93a8' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 14px center / 16px; border: 1px solid var(--line); font-size: 14px; cursor: pointer; outline: 0; }
+.select select { appearance: none; height: 48px; padding: 0 40px 0 18px; border-radius: 999px; background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239b958c' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 14px center / 16px; border: 1px solid var(--line); font-size: 14px; cursor: pointer; outline: 0; }
 .select select:focus-visible { border-color: var(--accent); }
 
 .chips { display: flex; gap: 8px; flex-wrap: wrap; min-height: 36px; margin-bottom: 36px; }
