@@ -18,7 +18,7 @@ The Unity project is `PlayShift/` (Unity 6000.6.10f1, Built-in render pipeline).
   ground under the trimmer); look up to -14 deg; unrestricted 360 deg left/right; eye height 2.28 m; FOV from the
   game settings (default 62). The whole cutting head stays on screen across the range. No head bob, sway or roll.
 - **Trimmer pose:** rear grip at the waist (`hipGrip` 0.82, 1.1, 0.45), shaft angled down to the head, head
-  placed on the ground under screen point (0.56, 0.39) at the default pitch. Blades flat and level, rotate rigidly
+  placed on the ground under screen point (0.56, 0.32) at the default pitch (2.6 m ahead). Blades flat and level, rotate rigidly
   about the hub; release = immediate stop.
 - **No sprint.** One movement speed: walk 7.2 m/s (sprint speed is forced equal to it); acceleration 70 /
   deceleration 80 m/s2.
