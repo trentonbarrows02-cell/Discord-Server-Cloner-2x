@@ -191,8 +191,9 @@ svg { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 1
 .hero__title {
   margin: 0;
   font-weight: 600;
-  font-size: clamp(52px, 11vw, 168px);
-  line-height: .92; letter-spacing: -0.045em;
+  font-size: clamp(42px, 9.2vw, 144px);
+  line-height: .95; letter-spacing: -0.03em;
+  text-transform: uppercase;
 }
 .hero__title .line { display: block; overflow: hidden; padding-bottom: .06em; }
 .hero__title .line > span { display: inline-block; transform: translateY(105%); transition: transform 1.2s var(--ease); }
