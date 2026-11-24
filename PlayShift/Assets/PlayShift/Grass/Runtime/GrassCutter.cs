@@ -33,6 +33,9 @@ namespace PlayShift.Grass
         [SerializeField] private float teleportDistance = 8f;
         [Tooltip("Only cut while the head is within this height above the lawn (metres). 0 = always.")]
         [SerializeField] private float maxHeightAboveLawn = 0.6f;
+        [Tooltip("The blades cut only while their lowest point is within this distance of the lawn (metres): a lifted " +
+                 "trimmer (looking up) cuts nothing.")]
+        [SerializeField] private float bladeContactTolerance = 0.05f;
 
         private static readonly List<CutterHeadState> s_heads = new List<CutterHeadState>();
         private static int s_headsFrame = -1;
@@ -82,7 +85,10 @@ namespace PlayShift.Grass
 
         private void OnEnable() => _hasLast.Clear();
 
-        private void Update()
+        // LateUpdate, after TrimmerViewmodel (execution order -60 < -50) has placed the heads for this frame: the grass
+        // is cut exactly where the blades are drawn this frame, not where they were last frame (which made the cut
+        // trail the blades when turning or sprinting).
+        private void LateUpdate()
         {
             var m = Manager;
             if (heads.Count == 0) heads.Add(transform);
@@ -118,9 +124,9 @@ namespace PlayShift.Grass
                 Vector3 world = h.position;
                 Vector3 local = m.FieldTransform.InverseTransformPoint(world);
                 var now = new Vector2(local.x, local.z);
-                // Blades must actually reach into the grass (a lifted head cuts nothing).
+                // Blades must be down at the lawn (a lifted head cuts nothing).
                 bool onLawn = (maxHeightAboveLawn <= 0f || local.y <= maxHeightAboveLawn) &&
-                              local.y - HeadClearance <= Mathf.Max(0.05f, grassHeightM);
+                              local.y - HeadClearance <= bladeContactTolerance;
 
                 long cut = 0;
                 if (cutting && onLawn)

@@ -172,7 +172,8 @@ namespace PlayShift.Grass
 
             HeightBonusCm = 0f;
             for (int i = 0; i < n; i++) _heightsCm[i] = SampleHeightCm(i % _layout.CellsX, i / _layout.CellsX);
-            for (int i = 0; i < n; i++) _cutTime[i] = -1f;
+            // Renderers treat a negative cut time as grown grass, so a cell that starts empty is stamped "cut at 0".
+            for (int i = 0; i < n; i++) _cutTime[i] = _units[i] == 0 ? 0f : -1f;
 
             InitialUnits = level.StartingUnits;
             Remaining = level.StartingUnits;
@@ -477,7 +478,9 @@ namespace PlayShift.Grass
                 }
 
                 Array.Copy(units, _units, n);
-                for (int c = 0; c < n; c++) _cutTime[c] = _units[c] == 0 ? -1000f : -1f; // cut long ago: no animation
+                // Cut long ago. Must not be negative: the grass shaders read a negative cut time as "grown", which drew
+                // every restored cut cell as standing grass that the trimmer could no longer cut.
+                for (int c = 0; c < n; c++) _cutTime[c] = _units[c] == 0 ? 0f : -1f;
                 RecountTiles();
                 InitialUnits = initial;
                 Remaining = total;

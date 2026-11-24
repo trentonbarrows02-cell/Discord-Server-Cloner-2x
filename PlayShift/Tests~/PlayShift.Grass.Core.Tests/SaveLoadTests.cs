@@ -42,6 +42,41 @@ namespace PlayShift.Grass.Tests
             Assert.Equal(b.Field.TileCount, b.Field.DirtyTileCount); // renderer re-uploads everything
         }
 
+        /// <summary>
+        /// The renderers draw a cell as grown when its cut time is negative. After loading, every cut cell must render
+        /// as cut and every grown cell as grown, otherwise restored cut grass shows up as standing grass that the
+        /// trimmer cannot cut (the bug seen in play).
+        /// </summary>
+        [Fact]
+        public void RoundTrip_RendersExactlyTheCutCellsAsCut()
+        {
+            PlayedLevel(out var save);
+            var b = ProgressionTests.NewCampaign();
+            b.StartLevel(0);
+            Assert.True(b.Field.TryReadState(new MemoryStream(save)));
+            var render = new float[b.Field.CellCount * 2];
+            b.Field.CopyRenderCells(render, 0, b.Field.CellCount);
+            int cut = 0;
+            for (int i = 0; i < b.Field.CellCount; i++)
+            {
+                bool drawnCut = render[2 * i + 1] >= 0f;
+                Assert.Equal(b.Field.IsCellCut(i), drawnCut);
+                if (drawnCut) cut++;
+            }
+            Assert.True(cut > 0);
+        }
+
+        [Fact]
+        public void LevelWithFewerUnitsThanCells_EmptyCellsRenderAsCut()
+        {
+            var level = new GrassLevelDefinition("Sparse", 15, 25, 1000);
+            var f = new GrassField(new GrassFieldLayout());
+            f.Reset(level, 3);
+            var render = new float[f.CellCount * 2];
+            f.CopyRenderCells(render, 0, f.CellCount);
+            for (int i = 0; i < f.CellCount; i++) Assert.Equal(f.IsCellCut(i), render[2 * i + 1] >= 0f);
+        }
+
         [Fact]
         public void TypicalSave_IsSmall()
         {

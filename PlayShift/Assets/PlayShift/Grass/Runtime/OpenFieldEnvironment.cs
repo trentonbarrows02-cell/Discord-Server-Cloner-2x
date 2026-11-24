@@ -89,11 +89,15 @@ namespace PlayShift.Grass
             floor.transform.position = origin + new Vector3(size.x * 0.5f, -0.5f, size.y * 0.5f);
             floor.AddComponent<BoxCollider>().size = new Vector3(extent, 1f, extent);
 
-            // Keep the player inside the hedge.
-            AddWall(origin + new Vector3(size.x * 0.5f, 1f, -hedgeOffset), new Vector3(size.x + 2f * hedgeOffset, 2f, 0.6f));
-            AddWall(origin + new Vector3(size.x * 0.5f, 1f, size.y + hedgeOffset), new Vector3(size.x + 2f * hedgeOffset, 2f, 0.6f));
-            AddWall(origin + new Vector3(-hedgeOffset, 1f, size.y * 0.5f), new Vector3(0.6f, 2f, size.y + 2f * hedgeOffset));
-            AddWall(origin + new Vector3(size.x + hedgeOffset, 1f, size.y * 0.5f), new Vector3(0.6f, 2f, size.y + 2f * hedgeOffset));
+            // Keep the player out of the hedge: the walls' inner faces sit 0.6 m outside the lawn, at the front of the
+            // foliage (they used to be in the middle of it, so the camera could walk 1.5 m into the leaves). The
+            // trimmer is stopped by these walls too, and from 0.6 m out its blades still reach every edge cell.
+            const float wallFace = 0.6f, wallThick = 0.6f;
+            float w = wallFace + wallThick * 0.5f, span = 2f * hedgeOffset;
+            AddWall(origin + new Vector3(size.x * 0.5f, 1f, -w), new Vector3(size.x + span, 2f, wallThick));
+            AddWall(origin + new Vector3(size.x * 0.5f, 1f, size.y + w), new Vector3(size.x + span, 2f, wallThick));
+            AddWall(origin + new Vector3(-w, 1f, size.y * 0.5f), new Vector3(wallThick, 2f, size.y + span));
+            AddWall(origin + new Vector3(size.x + w, 1f, size.y * 0.5f), new Vector3(wallThick, 2f, size.y + span));
         }
 
         private void BuildHedge(Vector3 origin, Vector2 size)

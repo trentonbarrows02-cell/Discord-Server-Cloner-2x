@@ -54,9 +54,12 @@ namespace PlayShift.Grass
         [Tooltip("Head offset to the right of the view centre (tangent units; 0 = centred).")]
         [SerializeField] private float headScreenRight = 0.06f;
         [Tooltip("Closest / furthest the head goes from the player on the ground (metres).")]
-        [SerializeField] private float minReach = 1.0f, maxReach = 2.4f;
-        [Tooltip("Grip point in camera space when the player has no rig ToolAnchor.")]
-        [SerializeField] private Vector3 fallbackGrip = new Vector3(0.42f, -0.5f, 0.55f);
+        [SerializeField] private float minReach = 1.0f, maxReach = 1.7f;
+        [Tooltip("Highest the head is lifted above the lawn when looking up (metres).")]
+        [SerializeField] private float maxLift = 0.6f;
+        [Tooltip("Where the trimmer is held, relative to the player's feet (x right, y up, z forward): the right hip. The " +
+                 "shaft always runs back towards it, out of the bottom-right of the view.")]
+        [SerializeField] private Vector3 hipGrip = new Vector3(0.45f, 0.8f, 0.1f);
         [Tooltip("Keeps the head out of walls/hedges (everything but the player's Ignore Raycast layer).")]
         [SerializeField] private LayerMask obstacleMask = ~(1 << 2);
         [Tooltip("Cut radius = the measured blade tips (so grass only goes where the blades reach).")]
@@ -85,7 +88,6 @@ namespace PlayShift.Grass
         private Vector3 _prevHead;
         private float _headLift; // distance from the head pivot down to the lowest blade/head vertex
         private float _bladeRadius; // horizontal reach of the blade tips from the head centre (measured)
-        private Transform _grip;
 
         /// <summary>World position of the main cutting head (on the ground).</summary>
         public Vector3 HeadPosition => _mainHeadRoot != null ? _mainHeadRoot.position : transform.position;
@@ -141,8 +143,6 @@ namespace PlayShift.Grass
                 cutter.BaseRadius = _bladeRadius;
                 Debug.Log($"[PlayShift Grass] Cut radius set to the blade tips: {_bladeRadius:F2} m.", this);
             }
-            var rig = controller != null ? controller.Rig : null;
-            _grip = rig != null ? rig.ToolAnchor : null;
         }
 
         /// <summary>
@@ -274,15 +274,15 @@ namespace PlayShift.Grass
             var ct = cam.transform;
             Vector3 camPos = ct.position;
             float baseY = (m != null ? m.FieldTransform.position.y : transform.position.y) + clearance;
-            float down = Mathf.Max(5f, cam.fieldOfView * 0.5f - headScreenMargin) * Mathf.Deg2Rad;
-            Vector3 dir = ct.TransformDirection(new Vector3(headScreenRight, -Mathf.Tan(down), 1f)).normalized;
-            Vector3 flat = new Vector3(dir.x, 0f, dir.z);
-            float flatLen = flat.magnitude;
-            Vector3 flatDir = flatLen > 1e-4f ? flat / flatLen : _rig.forward;
-            Vector3 right = Vector3.Cross(Vector3.up, flatDir);
-
+            // Always straight ahead of the player (yaw), never sideways: the distance comes from how far down the line
+            // of sight to the head's screen spot points. (Projecting that line onto the ground flipped it backwards
+            // when looking steeply down on tall screens, which swung the head out to the side.)
+            Vector3 flatDir = _rig.forward;
+            Vector3 right = _rig.right;
+            float pitch = -Mathf.DeltaAngle(0f, ct.eulerAngles.x); // negative = looking down
+            float below = -pitch + Mathf.Max(5f, cam.fieldOfView * 0.5f - headScreenMargin); // degrees below the horizon
             float h = camPos.y - baseY;
-            float reach = dir.y < -1e-4f && flatLen > 1e-4f ? h * flatLen / -dir.y : float.PositiveInfinity;
+            float reach = below >= 89f ? 0f : below > 0.5f ? h / Mathf.Tan(below * Mathf.Deg2Rad) : float.PositiveInfinity;
             Vector3 head;
             if (reach <= maxReach)
             {
@@ -291,10 +291,12 @@ namespace PlayShift.Grass
             }
             else
             {
-                // Looking up: full reach along the view, lifted off the lawn.
-                head = camPos + dir * (maxReach / Mathf.Max(flatLen, 1e-3f)) - flatDir * pullBack;
-                if (head.y < baseY) head.y = baseY;
+                // Looking up: held at full reach and lifted along the line of sight (visible, not cutting), at most
+                // maxLift above the lawn: look further up and it stays down there like a real trimmer.
+                float y = camPos.y - maxReach * Mathf.Tan(below * Mathf.Deg2Rad);
+                head = new Vector3(camPos.x, Mathf.Clamp(y, baseY, baseY + maxLift), camPos.z) + flatDir * (maxReach - pullBack);
             }
+            head += right * (reach <= maxReach ? reach : maxReach) * headScreenRight;
 
             // Keep the blades out of hedges and walls: pull the head back to just before the first obstacle.
             var from = new Vector3(camPos.x, head.y + 0.3f, camPos.z);
@@ -311,14 +313,17 @@ namespace PlayShift.Grass
             var headRot = Quaternion.LookRotation(flatDir, Vector3.up);
             _mainHeadRoot.SetPositionAndRotation(head, headRot);
 
-            // Shaft: the classic shallow rise (shaftPitch) from the head, swung towards the grip at the bottom-right of
-            // the view, so it runs out of the bottom-right corner like a trimmer held at the hip.
-            Vector3 grip = _grip != null ? _grip.position : ct.TransformPoint(fallbackGrip);
-            Vector3 toGrip = grip - head;
-            toGrip.y = 0f;
-            float swing = toGrip.sqrMagnitude > 1e-4f ? -Vector3.SignedAngle(-flatDir, toGrip, Vector3.up) : handleSwing;
+            // Shaft: held at the right hip. It runs from the head back towards the hip grip (off-screen, bottom-right),
+            // with the classic shallow rise (shaftPitch) while the head is on the lawn; when the head is lifted it
+            // slopes down to the hip instead, so the shaft never ends in mid-air.
+            Vector3 hip = transform.TransformPoint(hipGrip);
+            Vector3 toHip = hip - head;
+            Vector3 toHipFlat = new Vector3(toHip.x, 0f, toHip.z);
+            float swing = toHipFlat.sqrMagnitude > 1e-4f ? -Vector3.SignedAngle(-flatDir, toHipFlat, Vector3.up) : handleSwing;
             swing = Mathf.Clamp(Mathf.Max(swing, handleSwing), 12f, 55f);
-            _bodyPivot.SetPositionAndRotation(head, headRot * Quaternion.Euler(shaftPitch, -swing, 0f));
+            float riseToHip = Mathf.Atan2(toHip.y, Mathf.Max(0.05f, toHipFlat.magnitude)) * Mathf.Rad2Deg;
+            float rise = Mathf.Min(shaftPitch, riseToHip);
+            _bodyPivot.SetPositionAndRotation(head, headRot * Quaternion.Euler(rise, -swing, 0f));
 
             for (int i = 0; i < _extraRoots.Count; i++)
             {

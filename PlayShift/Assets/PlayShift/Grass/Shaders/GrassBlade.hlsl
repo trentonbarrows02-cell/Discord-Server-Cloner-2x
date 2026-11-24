@@ -140,8 +140,11 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
         float2 away = root.xz - _Cutters[c].xz;
         float dist = length(away);
         float2 n = dist > 1e-3 ? away / dist : bdir;
-        float infl = active * (1.0 - smoothstep(_Cutters[c].w * 0.7, _Cutters[c].w * 2.3, dist));
-        push += n * infl * (0.35 + 0.55 * _Spin) * (0.6 + 0.9 * tall);
+        // Only a slight lean right at the blade tips (it used to flatten grass up to 2.3x the radius, which looked
+        // like trampled grass well outside the blades), and none while the head is lifted off the lawn.
+        float lifted = saturate((_Cutters[c].y - root.y - 0.12) / 0.25);
+        float infl = active * (1.0 - lifted) * (1.0 - smoothstep(_Cutters[c].w * 0.9, _Cutters[c].w * 1.35, dist));
+        push += n * infl * (0.2 + 0.3 * _Spin) * (0.6 + 0.9 * tall);
         if (active > 0.5 && dist < nearest) { nearest = dist; kickDir = n; }
     }
     push *= 1.0 - ease;
