@@ -87,6 +87,8 @@ namespace PlayShift.Grass
         [SerializeField] private bool useGrassCards = true;
         [Tooltip("Cards per generated blade (each card is a strip of dozens of blades).")]
         [Range(0.01f, 0.2f)] [SerializeField] private float cardsPerBlade = 0.12f;
+        [Tooltip("Extra cards for short grass (up to this factor at about 20 cm; tall grass gets none).")]
+        [Range(1f, 4f)] [SerializeField] private float shortGrassBoost = 2.5f;
         [Tooltip("Card width as a multiple of the grass height.")]
         [Range(0.5f, 4f)] [SerializeField] private float cardAspect = 2.1f;
         private bool _cardsReady;
@@ -433,7 +435,13 @@ namespace PlayShift.Grass
             Matrix4x4 m = transform.localToWorldMatrix;
             float tallest = _field.CurrentMaxHeightCm * 0.01f * 1.3f + 0.1f;
             float density = Mathf.Clamp(_field.Level.BladeDensity, 0.05f, 1f);
-            if (_cardsReady) density *= cardsPerBlade; // each card is a strip of many blades
+            if (_cardsReady)
+            {
+                // Each card is a strip of many blades. Cards are as wide as the grass is tall, so short grass needs
+                // more of them for the same cover: up to Short Grass Boost x at level 1, 1x for tall grass.
+                float avgH = 0.005f * (_field.CurrentMinHeightCm + _field.CurrentMaxHeightCm);
+                density *= cardsPerBlade * Mathf.Clamp(0.5f / Mathf.Max(0.05f, avgH), 1f, shortGrassBoost);
+            }
             Vector3 camPos = Vector3.zero;
             bool cull = cam != null;
             if (cull)
