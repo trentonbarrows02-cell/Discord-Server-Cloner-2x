@@ -87,6 +87,20 @@ namespace PlayShift.FirstPerson
 
         /// <summary>Horizontal velocity (m/s) the character controller moved with last frame.</summary>
         public Vector3 Velocity { get; private set; }
+
+        [Header("Walking feel")]
+        [Tooltip("Camera bob while walking (m, up/down per step). 0 = off. Eases out when standing still.")]
+        [SerializeField] private float walkBobHeight = 0.025f;
+        [Tooltip("Side-to-side camera sway while walking (m, once per stride).")]
+        [SerializeField] private float walkBobSide = 0.012f;
+        [Tooltip("Footsteps per second at full walking speed.")]
+        [SerializeField] private float stepsPerSecond = 2.6f;
+        private Vector3 _camBaseLocal, _lastPos;
+        private bool _bobInit;
+        private float _bobPhase, _bobAmp;
+        /// <summary>This frame's walking bob of the camera (world). Tools placed from the camera's view subtract it, so
+        /// the trimmer head does not bounce on the ground.</summary>
+        public Vector3 BobOffsetWorld { get; private set; }
         public float Speed { get; private set; }
 
         /// <summary>Look pitch in degrees, negative = looking down. Setting it also turns the camera immediately.</summary>
@@ -237,6 +251,28 @@ namespace PlayShift.FirstPerson
             else _pitch += ReadMouseY() * 0.05f * verticalSensitivity * MouseSensitivityScale;
             _pitch = Mathf.Clamp(_pitch, -maxLookDown, maxLookUp);
             playerCamera.transform.localRotation = Quaternion.Euler(-_pitch, 0f, 0f);
+            WalkBob();
+        }
+
+        /// <summary>Gentle walking bob: two dips per stride up/down, one sway side to side, scaled by speed, eased in
+        /// and out (no snap when stopping). Measured from this object's own movement, so it works in every mode.</summary>
+        private void WalkBob()
+        {
+            var cam = playerCamera.transform;
+            float dt = Time.deltaTime;
+            Vector3 pos = transform.position;
+            if (!_bobInit) { _camBaseLocal = cam.localPosition; _lastPos = pos; _bobInit = true; }
+            float spd = dt > 1e-5f ? new Vector2(pos.x - _lastPos.x, pos.z - _lastPos.z).magnitude / dt : 0f;
+            _lastPos = pos;
+            if (spd > 20f) spd = 0f; // teleport / respawn
+            float target = Suspended && InputBlocked != null && InputBlocked() ? 0f : Mathf.Clamp01(spd / 4f);
+            _bobAmp = Mathf.MoveTowards(_bobAmp, target, dt * 3f);
+            _bobPhase = Mathf.Repeat(_bobPhase + dt * stepsPerSecond * Mathf.PI * Mathf.Lerp(0.6f, 1f, _bobAmp), Mathf.PI * 2f);
+            float y = -walkBobHeight * _bobAmp * Mathf.Abs(Mathf.Sin(_bobPhase)) + walkBobHeight * _bobAmp * 0.5f;
+            float x = walkBobSide * _bobAmp * Mathf.Sin(_bobPhase * 0.5f);
+            var off = new Vector3(x, y, 0f);
+            cam.localPosition = _camBaseLocal + off;
+            BobOffsetWorld = cam.parent != null ? cam.parent.TransformVector(off) : off;
         }
 
         /// <summary>This frame's vertical mouse movement in pixels (up = positive), same source the controller uses.</summary>

@@ -67,6 +67,7 @@ Owner's non-negotiables (from their brief):
 These are owner decisions; keep them (details in the repo-root `CLAUDE.md`):
 - The trimmer never lifts off the ground; camera pitch never moves the tool, the cutting height or the radius.
 - Camera: default -24 deg, down to -34, up to -16, 360 deg yaw, vertical mouse speed 1.1 (horizontal 2), eye 2.28 m.
+- Gentle camera walk bob (no roll); trimmer sweeps left-right ±0.2 m on the ground while cutting (never lifts).
 - Cut lawn clearly lighter (own colour) than the dark, rich uncut grass at every distance.
 - No sprint; walk 7.2 m/s.
 - Grass bends only under solid steel (hub, shaft, stopped blades); no circular "force field".

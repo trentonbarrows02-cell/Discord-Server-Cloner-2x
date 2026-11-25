@@ -68,6 +68,13 @@ namespace PlayShift.Grass
                  "with it, at the cutting height: looking up never lifts it and looking down never pushes it in.")]
         [SerializeField, Range(0f, 1f)] private float pitchFollow = 0f;
 
+        [Header("Cutting sweep")]
+        [Tooltip("While the trimmer runs, the head sweeps left and right by this much (m), like working a real trimmer. " +
+                 "The cut follows the head; the blades stay level.")]
+        [SerializeField, Range(0f, 0.6f)] private float cutSweep = 0.2f;
+        [Tooltip("Sweeps per second (left-right-left).")]
+        [SerializeField, Range(0.2f, 2f)] private float cutSweepHz = 0.7f;
+        private float _cutSweepAmt, _cutSweepPhase;
         [Tooltip("Nearest and furthest the head works on the ground (metres ahead of the player).")]
         [SerializeField] private float minReach = 1.2f;
         [SerializeField] private float maxReach = 8f;
@@ -345,6 +352,8 @@ namespace PlayShift.Grass
             if (placeFromView && cam != null)
             {
                 Ray ray = cam.ViewportPointToRay(new Vector3(headViewport.x, headViewport.y, 0f));
+                // Without the camera's walking bob: the head stays on its spot on the ground while the view bobs.
+                if (controller != null && controller.Rig != null) ray.origin -= controller.Rig.BobOffsetWorld;
                 float planeY = feet.y + clearance;
                 // The same screen point seen at the default camera angle (the ray turned about the camera's right axis
                 // by the difference), and at the current angle; the head works between the two (Pitch Follow).
@@ -357,6 +366,13 @@ namespace PlayShift.Grass
                 fwd = Mathf.Clamp(Mathf.Lerp(fDef, fCur, pitchFollow), minReach, maxReach);
                 sideOff = Mathf.Lerp(sDef, sCur, pitchFollow);
             }
+            // Cutting sweep: eased in while the trimmer runs, out when it stops.
+            float sweepTarget = blades != null && blades.On ? 1f : 0f;
+            _cutSweepAmt = Mathf.MoveTowards(_cutSweepAmt, sweepTarget, dt * 2.5f);
+            _cutSweepPhase = Mathf.Repeat(_cutSweepPhase + dt * cutSweepHz * Mathf.PI * 2f, Mathf.PI * 2f);
+            float sweep = cutSweep * Mathf.SmoothStep(0f, 1f, _cutSweepAmt) * Mathf.Sin(_cutSweepPhase);
+            sideOff += sweep;
+            fwd -= sweep * sweep * 0.5f / Mathf.Max(1f, fwd); // a slight arc, like swinging from the hips
             Vector3 head = feet + flatDir * (fwd - pullBack) + right * sideOff;
 
             // Keep the blades out of fences and walls: pull the head back to just before the first obstacle. Cast at

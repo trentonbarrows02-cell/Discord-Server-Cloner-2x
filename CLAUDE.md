@@ -17,7 +17,10 @@ The Unity project is `PlayShift/` (Unity 6000.6.10f1, Built-in render pipeline).
 - **Camera:** default pitch -24 deg; look down to -34 (10 deg below default), up to -16 (8 deg above default; -10 and +11 were too high; +11
   was "way too high"); unrestricted 360 deg left/right; vertical mouse speed 1.1 (horizontal 2; 2 was too fast); eye height 2.28 m;
   FOV from the game settings (default 62). The whole trimmer stays on screen across the range. It never lifts or
-  moves with the look. No bob/sway/roll.
+  moves with the look. Gentle walk bob only (2.5 cm up/down, 1.2 cm side, eases out when standing; no roll);
+  the trimmer head ignores the bob and stays on the ground.
+- **Cutting sweep:** while the blades run, the head sweeps left-right ±0.2 m at 0.7 Hz on the ground (eased in/out,
+  slight arc). It never lifts; the cut follows the head.
 - **Trimmer pose:** the handle is anchored just past the bottom-right corner of the view (`gripFollowsView` 1,
   `viewGrip` 0.85, -0.75, 0.5 in camera space), so the yellow body always runs out of frame as if held below/right
   of the camera (no hands, never a floating end cap). The cutting head stays on the ground under screen point
