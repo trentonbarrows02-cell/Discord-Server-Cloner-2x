@@ -183,6 +183,18 @@ namespace PlayShift.Grass
             // Runs before the cutters (DefaultExecutionOrder -100): cut cells get stamped with this clock and
             // the grass shader animates them shortening from that moment.
             Progression.Field.Clock = Time.time;
+#if (UNITY_EDITOR || DEVELOPMENT_BUILD) && ENABLE_INPUT_SYSTEM
+            // Testing shortcut (editor / development builds only): Ctrl + 1-5 jumps straight to that level.
+            var kb = UnityEngine.InputSystem.Keyboard.current;
+            if (kb != null && (kb.leftCtrlKey.isPressed || kb.rightCtrlKey.isPressed))
+            {
+                if (kb.digit1Key.wasPressedThisFrame) StartLevel(1);
+                else if (kb.digit2Key.wasPressedThisFrame) StartLevel(2);
+                else if (kb.digit3Key.wasPressedThisFrame) StartLevel(3);
+                else if (kb.digit4Key.wasPressedThisFrame) StartLevel(4);
+                else if (kb.digit5Key.wasPressedThisFrame) StartLevel(5);
+            }
+#endif
             float dt = HoldTimer ? 0f : Time.deltaTime;
             Progression.Tick(dt);
             Modifiers.Tick(dt);
