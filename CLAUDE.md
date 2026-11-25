@@ -14,10 +14,10 @@ The Unity project is `PlayShift/` (Unity 6000.6.10f1, Built-in render pipeline).
   stays at the cutting height (3 cm blade clearance) over the ground at every camera angle. The camera's up/down
   look never moves the tool, the cutting height or the cutting radius. (The lift code was removed on purpose;
   do not reintroduce it.)
-- **Camera:** default pitch -24 deg; look down to -34 (10 deg below default), up to +11 (35 deg above default);
-  unrestricted 360 deg left/right; vertical mouse speed = horizontal (2); eye height 2.28 m; FOV from the game
-  settings (default 62). The trimmer stays on screen from -34 to about -10 deg; looking higher it leaves the bottom
-  of the screen (owner's choice: freedom to look around). It never lifts or moves with the look. No bob/sway/roll.
+- **Camera:** default pitch -24 deg; look down to -34 (10 deg below default), up to -10 (14 deg above default; +11
+  was "way too high"); unrestricted 360 deg left/right; vertical mouse speed = horizontal (2); eye height 2.28 m;
+  FOV from the game settings (default 62). The whole trimmer stays on screen across the range. It never lifts or
+  moves with the look. No bob/sway/roll.
 - **Trimmer pose:** rear grip at the waist (`hipGrip` 0.82, 1.1, 0.45), shaft angled down to the head, head
   placed on the ground under screen point (0.56, 0.32) at the default pitch (2.6 m ahead). Blades flat and level, rotate rigidly
   about the hub; release = immediate stop.
