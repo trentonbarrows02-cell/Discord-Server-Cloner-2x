@@ -10,3 +10,6 @@ node_modules
 
 # Local model processing (source downloads, Blender scripts, previews)
 /ModelWork/
+
+# Local play-test builds
+/Builds/
