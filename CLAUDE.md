@@ -18,9 +18,11 @@ The Unity project is `PlayShift/` (Unity 6000.6.10f1, Built-in render pipeline).
   was "way too high"); unrestricted 360 deg left/right; vertical mouse speed = horizontal (2); eye height 2.28 m;
   FOV from the game settings (default 62). The whole trimmer stays on screen across the range. It never lifts or
   moves with the look. No bob/sway/roll.
-- **Trimmer pose:** rear grip at the waist (`hipGrip` 0.82, 1.1, 0.45), shaft angled down to the head, head
-  placed on the ground under screen point (0.56, 0.32) at the default pitch (2.6 m ahead). Blades flat and level, rotate rigidly
-  about the hub; release = immediate stop.
+- **Trimmer pose:** the handle is anchored just past the bottom-right corner of the view (`gripFollowsView` 1,
+  `viewGrip` 0.85, -0.75, 0.5 in camera space), so the yellow body always runs out of frame as if held below/right
+  of the camera (no hands, never a floating end cap). The cutting head stays on the ground under screen point
+  (0.56, 0.32) at the default pitch (2.6 m ahead, 3 cm clearance); only the shaft angle follows the look. Blades
+  flat and level, rotate rigidly about the hub; release = immediate stop.
 - **No sprint.** One movement speed: walk 7.2 m/s (sprint speed is forced equal to it); acceleration 70 /
   deceleration 80 m/s2.
 - **Grass interaction:** grass only bends where solid steel is (hub/plate, shaft, and the four blade strips while

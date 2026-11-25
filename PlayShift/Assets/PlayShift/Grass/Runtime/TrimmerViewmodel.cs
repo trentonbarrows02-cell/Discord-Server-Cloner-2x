@@ -73,9 +73,9 @@ namespace PlayShift.Grass
         [SerializeField] private float maxReach = 8f;
         [Tooltip("How much the handle end follows the view (0 = held at the hip, 1 = fixed just off the bottom-right " +
                  "corner of the view). Keeps the shaft entering from the bottom-right corner.")]
-        [SerializeField, Range(0f, 1f)] private float gripFollowsView = 0f;
+        [SerializeField, Range(0f, 1f)] private float gripFollowsView = 1f;
         [Tooltip("Handle end in camera space (x right, y up, z forward), just outside the bottom-right of the view.")]
-        [SerializeField] private Vector3 viewGrip = new Vector3(0.55f, -0.7f, 0.35f);
+        [SerializeField] private Vector3 viewGrip = new Vector3(0.85f, -0.75f, 0.5f);
 
         [Header("Walking motion")]
         [Tooltip("Gentle up/down of the handle end while walking (metres at walking speed). The cutting head itself stays " +
