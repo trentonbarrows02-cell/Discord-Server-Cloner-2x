@@ -13,3 +13,7 @@ node_modules
 
 # Local play-test builds
 /Builds/
+
+# Third-party grass asset (realtime-grass): stays on this PC, not in the public repo
+/PlayShift/Assets/PlayShift/ThirdParty/
+/PlayShift/Assets/PlayShift/ThirdParty.meta

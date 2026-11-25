@@ -52,6 +52,8 @@ Shader "PlayShift/GrassGround"
             float4 _UnderColor, _FarYellow, _FarGolden, _FarDark, _CutTint, _CutColor;
             float _FarStart, _CutFine, _EdgeShade, _CutDetail, _UnderShade, _GrassMatch, _CutBright, _CutSaturation;
             float4 _PsGrassDry;       // global: rgb = dry colour, a = dry amount
+            sampler2D _PsGrassTop;    // global: realtime-grass top texture (when the cards are in use)
+            float _PsGrassTopOn;
             float4 _PsLodDist;        // global: full, mid, max draw, fade start (m)
             float4 _PsChunk;          // global: chunk size (m), tallest blade (m)
             float4x4 _WorldToField;   // global
@@ -180,6 +182,13 @@ Shader "PlayShift/GrassGround"
                         // Under standing blades a little shade (they cover it); none where the blades have faded out.
                         float bladesHere = _GrassFade.y > 0.0 ? 1.0 - smoothstep(_GrassFade.x, _GrassFade.y, d3) : 0.0;
                         grass *= lerp(1.0, _UnderShade, bladesHere);
+                        if (_PsGrassTopOn > 0.5)
+                        {
+                            // The realtime-grass ground texture's light and dark (its own olive hue left out, so
+                            // the colour stays the game's palette).
+                            float3 top = tex2D(_PsGrassTop, i.worldPos.xz / 1.6).rgb;
+                            grass *= saturate(dot(top, float3(0.3, 0.59, 0.11)) / 0.22) * 0.95 + 0.1;
+                        }
                         col = lerp(grass * _GrassMatch, col, edge);
                     }
                 }

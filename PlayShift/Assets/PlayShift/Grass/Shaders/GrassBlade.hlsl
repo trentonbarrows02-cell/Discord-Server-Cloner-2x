@@ -49,6 +49,13 @@ float4 _SuperChunk;
 float4 _PsChunkGrid;                // chunk size (m), chunks x, chunks z, blade seed
 float4 _PsChunkGrid2;               // field size x, z (m), blades per m2, level density
 float _GrassDebug;                  // global, diagnostics only (GrassFieldRenderer.DebugView)
+// Grass cards (realtime-grass textures, when present): each instance is a textured strip of many blades instead of
+// one blade; every pixel is clipped against the cut mask, so cut edges stay exactly round.
+float _CardMode;
+float _CardAspect;                  // card width / height
+float4x4 _PsWorldToField;           // global
+Texture2D _CardTex0, _CardTex1, _CardTex2;
+SamplerState sampler_CardTex0;
 float4 _PsGrassAvg;                 // global: average blade colour (the ground's uncut colour uses the same)
 float _GrassShowUncut;              // global: 1 on the title screen (every blade standing; saved cuts untouched)
 float4 _GrassFade;                  // global: x = blade fade start, y = blade draw end (m from camera); the ground
@@ -76,7 +83,31 @@ struct GrassBlade
     float3 color;
     float t;        // 0 at root, 1 at tip
     float cut;      // 0 grown .. 1 fully cut
+    float3 card;    // card mode: u, v, texture index
 };
+
+// Card texture (one of three) with explicit gradients (the index is constant per card).
+float4 PsCardTex(float3 card, float2 dx, float2 dy)
+{
+    float2 uv = float2(card.x, clamp(card.y, 0.01, 0.985));
+    if (card.z < 0.5) return _CardTex0.SampleGrad(sampler_CardTex0, uv, dx, dy);
+    if (card.z < 1.5) return _CardTex1.SampleGrad(sampler_CardTex0, uv, dx, dy);
+    return _CardTex2.SampleGrad(sampler_CardTex0, uv, dx, dy);
+}
+
+// Card pixel coverage (negative = discard): the texture's alpha (cut-off eased with distance so far cards don't
+// thin out as the alpha mips soften), and nothing over cut lawn (per pixel, exact round cut edges).
+float PsCardCoverage(float3 worldPos, float4 tex)
+{
+    float cutoff = lerp(0.42, 0.22, saturate(distance(worldPos, _WorldSpaceCameraPos) / 40.0));
+    float a = tex.a - cutoff;
+    if (_CutMaskParams.z > 0.5 && _GrassShowUncut < 0.5)
+    {
+        float2 f = mul(_PsWorldToField, float4(worldPos, 1.0)).xz;
+        if (_CutMask.SampleLevel(sampler_CutMask, f * _CutMaskParams.xy, 0).r > 0.5) a = -1.0;
+    }
+    return a;
+}
 
 float PsHash(float p) { p = frac(p * 0.1031); p *= p + 33.33; p *= p + p; return frac(p); }
 
@@ -176,7 +207,7 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
     if (lodKeep <= 0.0)
     {
         // Not kept at this distance: a zero-area blade, skipping the rest of the work.
-        o.positionWS = root; o.normalWS = float3(0, 1, 0); o.color = 0; o.t = uv.y; o.cut = 1.0;
+        o.positionWS = root; o.normalWS = float3(0, 1, 0); o.color = 0; o.t = uv.y; o.cut = 1.0; o.card = 0;
         return o;
     }
     float2 jit = float2(PsHash(blade.w * 1000.0 + 81.3), PsHash(blade.w * 1000.0 + 97.9)) - 0.5;
@@ -204,6 +235,8 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
     float cutAge = cell.y < 0.0 ? -1.0 : _GrassTime - cell.y;
     float k = cutAge < 0.0 ? 0.0 : saturate(cutAge / max(_CutAnim, 1e-3));
     float ease = 1.0 - pow(1.0 - k, 3.0);
+    // Cards are cut per pixel in the fragment shader (round edges); the card itself never collapses.
+    if (_CardMode > 0.5) { ease = 0.0; k = 0.0; }
     float stub = _StubbleHeight * (0.65 + 0.7 * r5);
     float h = lerp(full, stub, ease) * lodKeep;
     // Distance fade: blades sink smoothly into the ground (which has their average colour) before the draw distance.
@@ -307,7 +340,7 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
     float up = theta < 1e-3 ? h * t : h * sin(a) / theta;
     float along = theta < 1e-3 ? 0.0 : h * (1.0 - cos(a)) / theta;
     // Tips curl over a little more than the base (natural blades bend most near the tip).
-    float droop = _TipDroop * (0.4 + 1.2 * r5) * t * t * t * h;
+    float droop = _TipDroop * (0.4 + 1.2 * r5) * t * t * t * h * (_CardMode > 0.5 ? 0.0 : 1.0);
     along += droop;
     up -= droop * 0.35;
 
@@ -315,7 +348,10 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
     float w = _BladeWidth * (0.55 + 0.9 * r4)
             * (1.0 + _WidthGrowth * (sqrt(max(full, 0.05) / 0.2) - 1.0))
             * lerp(1.0, 1.35, ease) * min(8.0, rsqrt(lodF));
-    w *= 1.0 - pow(t, 1.25) * 0.97; // natural taper to a fine (not needle-sharp) tip
+    if (_CardMode > 0.5)
+        w = 0.5 * full * _CardAspect * (0.8 + 0.4 * r4) * min(2.5, rsqrt(lodF)); // a whole strip of blades, no taper
+    else
+        w *= 1.0 - pow(t, 1.25) * 0.97; // natural taper to a fine (not needle-sharp) tip
     // With no stubble (_StubbleHeight 0) a cut blade collapses completely: no sliver, no shadow, just lawn.
     w *= lerp(1.0, step(1e-4, _StubbleHeight), ease);
     w *= step(1e-4, lodKeep);
@@ -327,6 +363,7 @@ GrassBlade BuildBlade(uint instanceID, float2 uv)
     o.normalWS = normalize(lerp(n0, float3(0, 1, 0), 0.3));
     o.t = t;
     o.cut = ease;
+    o.card = float3(uv.x, t, floor(r6 * 2.999));
 
     // Colour variety with dry golden patches.
     float dryPatch = PsNoise(root.xz * 0.35 + 3.1);

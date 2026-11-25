@@ -81,6 +81,17 @@ namespace PlayShift.Grass
         [Tooltip("Mask texels across the lawn (4096 on a 100 m lawn = 2.4 cm). 16 MB of GPU memory at 4096, 4 MB at 2048.")]
         [SerializeField] private int cutMaskResolution = 4096;
 
+        [Header("Grass cards (realtime-grass)")]
+        [Tooltip("Use the realtime-grass strip textures (Resources/RealtimeGrass, kept out of the public repo) instead of " +
+                 "single generated blades, when they are present. Cutting, counting and LOD are unchanged.")]
+        [SerializeField] private bool useGrassCards = true;
+        [Tooltip("Cards per generated blade (each card is a strip of dozens of blades).")]
+        [Range(0.01f, 0.2f)] [SerializeField] private float cardsPerBlade = 0.12f;
+        [Tooltip("Card width as a multiple of the grass height.")]
+        [Range(0.5f, 4f)] [SerializeField] private float cardAspect = 2.1f;
+        private bool _cardsReady;
+        private Texture2D _groundTop;
+
         [Header("Title screen")]
         [Tooltip("The title screen shows an untouched lawn (no cut paths). Only the look: saved progress is not touched.")]
         [SerializeField] private bool untouchedLawnOnTitle = true;
@@ -380,6 +391,11 @@ namespace PlayShift.Grass
             var q = Q;
             Shader.SetGlobalFloat(GrassTimeId, _field.Clock);
             Shader.SetGlobalMatrix(WorldToFieldId, transform.worldToLocalMatrix);
+            Shader.SetGlobalMatrix("_PsWorldToField", transform.worldToLocalMatrix);
+            EnsureCards();
+            grassMaterial.SetFloat("_CardMode", _cardsReady ? 1f : 0f);
+            grassMaterial.SetFloat("_CardAspect", cardAspect);
+            Shader.SetGlobalFloat("_PsGrassTopOn", _groundTop != null && _cardsReady ? 1f : 0f);
             Shader.SetGlobalVector(GrassFadeId, new Vector4(q.maxDrawDistance * 0.72f, q.maxDrawDistance, 0f, 0f));
             // The ground's uncut grass uses the blades' average colour, so near blades, the ground under them and the
             // field beyond the draw distance are one colour. Weights = the blade shader's palette mix; 0.9 = roots.
@@ -417,6 +433,7 @@ namespace PlayShift.Grass
             Matrix4x4 m = transform.localToWorldMatrix;
             float tallest = _field.CurrentMaxHeightCm * 0.01f * 1.3f + 0.1f;
             float density = Mathf.Clamp(_field.Level.BladeDensity, 0.05f, 1f);
+            if (_cardsReady) density *= cardsPerBlade; // each card is a strip of many blades
             Vector3 camPos = Vector3.zero;
             bool cull = cam != null;
             if (cull)
@@ -533,6 +550,25 @@ namespace PlayShift.Grass
         }
 
         /// <summary>Fraction of blades kept at a distance (same curve as the shader's per-blade falloff).</summary>
+/// <summary>Loads the card textures once (if present); without them the generated blades are used.</summary>
+        private void EnsureCards()
+        {
+            if (_cardsReady || !useGrassCards || _cardsTried) return;
+            _cardsTried = true;
+            var t0 = Resources.Load<Texture2D>("RealtimeGrass/Plate1");
+            var t1 = Resources.Load<Texture2D>("RealtimeGrass/Plate2");
+            var t2 = Resources.Load<Texture2D>("RealtimeGrass/Plate3");
+            if (t0 == null || t1 == null || t2 == null) return;
+            foreach (var t in new[] { t0, t1, t2 }) { t.wrapMode = TextureWrapMode.Clamp; t.anisoLevel = 4; }
+            grassMaterial.SetTexture("_CardTex0", t0);
+            grassMaterial.SetTexture("_CardTex1", t1);
+            grassMaterial.SetTexture("_CardTex2", t2);
+            _groundTop = Resources.Load<Texture2D>("RealtimeGrass/TopSeamless");
+            if (_groundTop != null) { _groundTop.wrapMode = TextureWrapMode.Repeat; Shader.SetGlobalTexture("_PsGrassTop", _groundTop); }
+            _cardsReady = true;
+        }
+        private bool _cardsTried;
+
         private float LodFraction(QualityPreset q, float d)
         {
             if (d <= q.fullDetailDistance) return 1f;

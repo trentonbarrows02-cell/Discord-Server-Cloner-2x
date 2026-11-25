@@ -71,6 +71,7 @@ Shader "PlayShift/InstancedGrass"
                 float2 tc : TEXCOORD3;
                 float4 shadowCoord : TEXCOORD4;
                 UNITY_FOG_COORDS(5)
+                float3 card : TEXCOORD6;
             };
 
             v2f vert(appdata v)
@@ -82,6 +83,7 @@ Shader "PlayShift/InstancedGrass"
                 o.normalWS = b.normalWS;
                 o.color = b.color;
                 o.tc = float2(b.t, b.cut);
+                o.card = b.card;
                 o.shadowCoord = ComputeScreenPos(o.pos);
                 UNITY_TRANSFER_FOG(o, o.pos);
                 return o;
@@ -89,6 +91,17 @@ Shader "PlayShift/InstancedGrass"
 
             fixed4 frag(v2f i, fixed facing : VFACE) : SV_Target
             {
+                float3 albedo = i.color;
+                float2 cdx = ddx(i.card.xy), cdy = ddy(i.card.xy);
+                if (_CardMode > 0.5)
+                {
+                    float4 tex = PsCardTex(i.card, cdx, cdy);
+                    clip(PsCardCoverage(i.worldPos, tex));
+                    // The strip's own blade shading, recoloured to the game's grass palette (keeps the cut/uncut
+                    // contrast), with a little of its original hue for variety.
+                    float lum = dot(tex.rgb, float3(0.3, 0.59, 0.11));
+                    albedo = lerp(i.color * saturate(lum / 0.32) * 1.1, tex.rgb * 0.9, 0.15);
+                }
                 float3 n = normalize(i.normalWS) * (facing > 0 ? 1.0 : -1.0);
                 n = normalize(lerp(n, float3(0, 1, 0), 0.25));
                 float3 l = normalize(_WorldSpaceLightPos0.xyz);
@@ -100,7 +113,7 @@ Shader "PlayShift/InstancedGrass"
                 float3 viewDir = normalize(_WorldSpaceCameraPos - i.worldPos);
                 float back = GrassTranslucency(viewDir, l, i.tc.x, i.tc.y) * _Translucency;
                 float3 ambient = ShadeSH9(float4(n, 1));
-                float3 col = i.color * (ambient + _LightColor0.rgb * shadow * (wrap + back));
+                float3 col = albedo * (ambient + _LightColor0.rgb * shadow * (wrap + back));
                 UNITY_APPLY_FOG(i.fogCoord, col);
                 return fixed4(col, 1);
             }
@@ -118,12 +131,25 @@ Shader "PlayShift/InstancedGrass"
             #pragma fragment frag
             #pragma multi_compile_shadowcaster
             struct appdata { float4 vertex : POSITION; float2 uv : TEXCOORD0; uint instanceID : SV_InstanceID; };
-            float4 vert(appdata v) : SV_POSITION
+            struct v2s { float4 pos : SV_POSITION; float3 worldPos : TEXCOORD0; float3 card : TEXCOORD1; };
+            v2s vert(appdata v)
             {
                 GrassBlade b = BuildBlade(v.instanceID, v.uv);
-                return UnityApplyLinearShadowBias(UnityWorldToClipPos(b.positionWS));
+                v2s o;
+                o.pos = UnityApplyLinearShadowBias(UnityWorldToClipPos(b.positionWS));
+                o.worldPos = b.positionWS;
+                o.card = b.card;
+                return o;
             }
-            fixed4 frag() : SV_Target { return 0; }
+            fixed4 frag(v2s i) : SV_Target
+            {
+                if (_CardMode > 0.5)
+                {
+                    float4 tex = PsCardTex(i.card, ddx(i.card.xy), ddy(i.card.xy));
+                    clip(PsCardCoverage(i.worldPos, tex));
+                }
+                return 0;
+            }
             ENDCG
         }
     }
